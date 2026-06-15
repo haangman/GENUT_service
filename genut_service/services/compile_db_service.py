@@ -25,7 +25,8 @@ def load_compile_db(root: Path, compile_db_rel: str) -> tuple[set[str], set[str]
         return rels, bases
 
     try:
-        data = json.loads(db_path.read_text(encoding="utf-8"))
+        # utf-8-sig: BOM이 있어도(예: Windows 툴 생성) 정상 파싱한다
+        data = json.loads(db_path.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return rels, bases
 

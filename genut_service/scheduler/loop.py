@@ -40,20 +40,25 @@ class Scheduler:
 
     async def _loop(self) -> None:
         assert self._stop is not None
+        running: set[asyncio.Task] = set()
         while not self._stop.is_set():
             try:
+                # 매 tick마다 idle 워커만큼 배정하고, 완료를 기다리지 않고 즉시 디스패치한다.
+                # (배치 전체 완료를 기다리지 않으므로 워커가 비는 즉시 다음 job을 잡아 롤링 병렬)
                 with self._session_factory() as session:
                     assignments = claim_jobs(session)
-                if assignments:
-                    await asyncio.gather(
-                        *[asyncio.to_thread(self._run_one, job_id) for job_id, _ in assignments]
-                    )
+                for job_id, _ in assignments:
+                    task = asyncio.create_task(asyncio.to_thread(self._run_one, job_id))
+                    running.add(task)
+                    task.add_done_callback(running.discard)
             except Exception:  # noqa: BLE001 - 루프는 어떤 오류에도 죽지 않는다
                 pass
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self._interval)
             except asyncio.TimeoutError:
                 pass
+        if running:
+            await asyncio.gather(*running, return_exceptions=True)
 
     async def start(self) -> None:
         # 시작 시 이전 실행에서 남은 stale 락을 정리한다

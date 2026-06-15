@@ -29,7 +29,7 @@ def find_scenario(file_list: list[str]) -> dict:
             candidate = directory / "GENUT_SCENARIO.json"
             if candidate.is_file():
                 try:
-                    return json.loads(candidate.read_text(encoding="utf-8"))
+                    return json.loads(candidate.read_text(encoding="utf-8-sig"))
                 except (json.JSONDecodeError, OSError):
                     return {}
             if directory.parent == directory:
@@ -42,7 +42,7 @@ def read_env(cwd: str) -> dict:
     env: dict[str, str] = {}
     path = Path(cwd) / ".env"
     if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue

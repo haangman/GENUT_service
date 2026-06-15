@@ -51,6 +51,16 @@ def test_list_dir_rejects_bad_paths(tmp_path: Path) -> None:
         filetree_service.list_dir(root, "nope")
 
 
+def test_split_inclusion_handles_bom_compdb(tmp_path: Path) -> None:
+    # Windows 툴이 생성한 compile_commands.json은 BOM이 붙을 수 있다
+    root = _build_checkout(tmp_path)
+    db = root / "build" / "compile_commands.json"
+    db.write_text("﻿" + db.read_text(encoding="utf-8"), encoding="utf-8")
+    included, excluded = compile_db_service.split_inclusion(root, "build", ["src/a.cpp"])
+    assert included == ["src/a.cpp"]
+    assert excluded == []
+
+
 def test_split_inclusion_partial_compdb(tmp_path: Path) -> None:
     root = _build_checkout(tmp_path)
     included, excluded = compile_db_service.split_inclusion(
