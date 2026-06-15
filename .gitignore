@@ -1,0 +1,45 @@
+# === 환경 변수 / 비밀 ===
+.env
+.env.*
+!.env.example
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === 에디터 / IDE ===
+.idea/
+.vscode/
+*.swp
+*~
+
+# === 로그 / 임시 ===
+*.log
+logs/
+tmp/
+temp/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Node.js ===
+node_modules/
+dist/
+build/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# === 테스트 / 커버리지 산출물 ===
+coverage/
+.coverage
+htmlcov/
