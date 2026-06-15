@@ -24,9 +24,11 @@ def create_app() -> FastAPI:
         """헬스 체크."""
         return {"status": "ok"}
 
+    from genut_service.api.files import router as files_router
     from genut_service.api.products import router as products_router
 
     app.include_router(products_router)
+    app.include_router(files_router)
 
     return app
 

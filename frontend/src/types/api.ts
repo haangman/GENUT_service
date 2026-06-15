@@ -38,6 +38,19 @@ export interface Product {
   patches: Patch[]
 }
 
+export type TreeEntryType = 'file' | 'dir'
+
+export interface TreeEntry {
+  name: string
+  path: string
+  type: TreeEntryType
+}
+
+export interface CompileCheckResult {
+  included: string[]
+  excluded: string[]
+}
+
 export interface ProductCreate {
   name: string
   product_code: string
