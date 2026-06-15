@@ -38,6 +38,30 @@ export interface Product {
   patches: Patch[]
 }
 
+export interface Genut {
+  id: number
+  name: string
+  repo_url: string
+  repo_ref: string
+  ds_assist_send_system_name: string
+  max_attempts: number
+  run_command: string
+  enabled: boolean
+  worker_status: string
+  current_job_id: number | null
+}
+
+export interface GenutCreate {
+  name: string
+  repo_url: string
+  repo_ref: string
+  ds_assist_credential_key: string
+  ds_assist_send_system_name: string
+  max_attempts: number
+  run_command: string
+  enabled: boolean
+}
+
 export interface Job {
   id: number
   product_id: number
