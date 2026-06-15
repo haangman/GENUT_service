@@ -1,0 +1,22 @@
+"""GENUT CLI 실행기(executor) 추상화.
+
+genut_runner는 워크스페이스를 호스트에 준비한 뒤, 실제 CLI 실행을 executor에 위임한다.
+executor는 (1) 호스트 경로를 실행 환경 경로로 변환(to_exec_path)하고
+(2) argv를 실행(run)한다. 호스트 실행과 Docker 실행을 동일 인터페이스로 다룬다.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from genut_service.runner import subprocess_util
+
+
+class HostExecutor:
+    """호스트에서 직접 실행. 경로 변환은 항등(절대경로 문자열)."""
+
+    def to_exec_path(self, host_path: Path | str) -> str:
+        return str(Path(host_path).resolve())
+
+    def run(self, argv: list[str], cwd_host: Path, timeout: int) -> dict:
+        return subprocess_util.run(argv, cwd=str(cwd_host), timeout=timeout)

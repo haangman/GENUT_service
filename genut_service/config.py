@@ -37,7 +37,8 @@ class Settings(BaseSettings):
     # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
     scheduler_autostart: bool = True
 
-    # Docker 실행 설정 (M8에서 사용)
+    # Docker 실행 설정
+    use_docker: bool = False  # True면 GENUT CLI를 컨테이너에서 실행
     docker_image: str = "genut-runner:latest"
     docker_cpus: float = 2.0
     docker_memory: str = "2g"

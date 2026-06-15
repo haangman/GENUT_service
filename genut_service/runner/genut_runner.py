@@ -1,19 +1,23 @@
 """job 1건을 실행하는 오케스트레이션.
 
 워크스페이스 준비(product clone + patch, GENUT clone) → .env 조립 →
-file-list(절대경로) 작성 → 상대→절대 변환 → GENUT CLI 실행 → 결과 수집.
+file-list 작성 → 경로를 실행 환경(executor) 기준으로 변환 → GENUT CLI 실행 → 결과 수집.
+
+CLI 실행은 executor에 위임한다(호스트=HostExecutor, 컨테이너=DockerExecutor).
 """
 
 from __future__ import annotations
 
 import json
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from genut_service.db.models import GenutInstance, Job, Product
 from genut_service.paths import normalize_rel_path
-from genut_service.runner import env_builder, git_ops, subprocess_util
+from genut_service.runner import env_builder, git_ops
+from genut_service.runner.executors import HostExecutor
 
 
 @dataclass
@@ -37,6 +41,7 @@ def run(
     enable_assure: bool = False,
     genut_timeout: int = 1800,
     git_timeout: int = 300,
+    make_executor: Callable[[Path], object] | None = None,
 ) -> RunResult:
     job_root = Path(workspace_root) / f"job_{job.id}"
     product_dir = job_root / "product"
@@ -54,24 +59,29 @@ def run(
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
     env_builder.write_env_file(genut_dir / ".env", env_builder.build_env(product, genut))
 
-    # 4) 상대→절대 변환
+    # 4) 실행기 선택 (호스트=항등 경로, Docker=컨테이너 경로)
+    executor = (make_executor or (lambda _root: HostExecutor()))(job_root)
+
+    # 5) 호스트 절대경로 계산 후 실행 환경 경로로 변환
     compile_db_abs = (product_dir / normalize_rel_path(product.compile_db_rel)).resolve()
     out_abs = (product_dir / normalize_rel_path(product.out_tests_rel)).resolve()
     out_abs.mkdir(parents=True, exist_ok=True)
 
-    # 5) file-list (included 절대경로만)
     filelist_path = job_root / "filelist.txt"
-    abs_files = [str((product_dir / normalize_rel_path(f)).resolve()) for f in job.file_list]
+    exec_files = [
+        executor.to_exec_path((product_dir / normalize_rel_path(f)).resolve())
+        for f in job.file_list
+    ]
     filelist_path.write_text(
-        "\n".join(abs_files) + ("\n" if abs_files else ""), encoding="utf-8"
+        "\n".join(exec_files) + ("\n" if exec_files else ""), encoding="utf-8"
     )
 
     # 6) GENUT CLI argv (run_command + 표준 플래그)
     argv = [
         *shlex.split(genut.run_command),
-        "--file-list", str(filelist_path),
-        "--compile-db-path", str(compile_db_abs),
-        "--out-test-folder-path", str(out_abs),
+        "--file-list", executor.to_exec_path(filelist_path),
+        "--compile-db-path", executor.to_exec_path(compile_db_abs),
+        "--out-test-folder-path", executor.to_exec_path(out_abs),
         "--max-attempts", str(genut.max_attempts),
     ]
     if debug:
@@ -81,10 +91,10 @@ def run(
     if job.function_name:
         argv += ["--function-name", job.function_name]
 
-    # 7) 실행
-    proc = subprocess_util.run(argv, cwd=str(genut_dir), timeout=genut_timeout)
+    # 7) 실행 (호스트 또는 컨테이너)
+    proc = executor.run(argv, genut_dir, genut_timeout)
 
-    # 8) 결과 수집
+    # 8) 결과 수집 (산출물은 호스트 out_abs에 존재; 컨테이너는 bind-mount로 공유)
     generated: list[str] = []
     summary: str | None = None
     success = proc["success"]

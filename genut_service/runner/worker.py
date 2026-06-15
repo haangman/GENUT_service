@@ -41,6 +41,19 @@ def process_job(
         return
 
     settings = get_settings()
+
+    make_executor = None
+    if settings.use_docker:
+        from genut_service.docker.client import DockerExecutor
+
+        def make_executor(job_root):  # noqa: ANN001
+            return DockerExecutor(
+                settings.docker_image,
+                job_root,
+                cpus=settings.docker_cpus,
+                memory=settings.docker_memory,
+            )
+
     try:
         result = runner_run(
             job,
@@ -51,6 +64,7 @@ def process_job(
             enable_assure=enable_assure,
             genut_timeout=settings.genut_run_timeout,
             git_timeout=settings.git_timeout,
+            make_executor=make_executor,
         )
     except git_ops.PatchError as exc:
         _event(session, job_id, "error", JobPhase.PATCH, f"patch 실패: {exc}")
