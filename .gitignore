@@ -53,7 +53,7 @@ _workspaces/
 
 # === 브라우저 테스트 산출물 ===
 .playwright-mcp/
-page-*.png
+/*.png
 
 # === 빌드 캐시 ===
 *.tsbuildinfo
