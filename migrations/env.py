@@ -14,11 +14,8 @@ from alembic import context
 from genut_service.config import get_settings
 from genut_service.db.base import Base
 
-# M1에서 models 추가 후 주석 해제: import genut_service.db.models  # noqa: F401
-try:  # 모델 모듈이 생기면 메타데이터에 자동 등록된다
-    import genut_service.db.models  # noqa: F401
-except ModuleNotFoundError:
-    pass
+# 모델을 import 하여 Base.metadata에 등록한다(autogenerate 대상)
+import genut_service.db.models  # noqa: F401,E402
 
 config = context.config
 
