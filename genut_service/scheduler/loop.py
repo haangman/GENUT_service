@@ -56,6 +56,14 @@ class Scheduler:
                 pass
 
     async def start(self) -> None:
+        # 시작 시 이전 실행에서 남은 stale 락을 정리한다
+        try:
+            from genut_service.scheduler.janitor import release_stale_locks
+
+            with self._session_factory() as session:
+                release_stale_locks(session)
+        except Exception:  # noqa: BLE001
+            pass
         self._stop = asyncio.Event()
         self._task = asyncio.create_task(self._loop())
 

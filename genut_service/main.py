@@ -42,11 +42,13 @@ def create_app() -> FastAPI:
     from genut_service.api.genuts import router as genuts_router
     from genut_service.api.jobs import router as jobs_router
     from genut_service.api.products import router as products_router
+    from genut_service.api.workers import router as workers_router
 
     app.include_router(products_router)
     app.include_router(files_router)
     app.include_router(jobs_router)
     app.include_router(genuts_router)
+    app.include_router(workers_router)
 
     return app
 

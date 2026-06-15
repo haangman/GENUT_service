@@ -62,6 +62,21 @@ export interface GenutCreate {
   enabled: boolean
 }
 
+export interface Worker {
+  id: number
+  name: string
+  worker_status: string
+  current_job_id: number | null
+  enabled: boolean
+}
+
+export interface QueueItem {
+  job_id: number
+  product_id: number
+  submitted_at: string
+  waiting_on_product: boolean
+}
+
 export interface Job {
   id: number
   product_id: number
