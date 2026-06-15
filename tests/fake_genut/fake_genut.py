@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 EXT = {"c": ".c", "cpp": ".cpp", "kunit": ".c"}
@@ -91,6 +92,9 @@ def main(argv: list[str] | None = None) -> None:
     if outcome == "crash":
         sys.stderr.write("simulated crash\n")
         sys.exit(int(scenario.get("exit_code", 3)))
+
+    # 시나리오로 실행 시간을 조절(병렬 실행 관측용). 기본 0.
+    time.sleep(float(scenario.get("sleep_seconds", 0)))
 
     functions: list[str] = []
     generated: list[str] = []
