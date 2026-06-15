@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -50,7 +53,26 @@ def create_app() -> FastAPI:
     app.include_router(genuts_router)
     app.include_router(workers_router)
 
+    # 빌드된 프론트엔드가 있으면 정적 서빙(SPA fallback). API 라우터 등록 이후에 한다.
+    mount_frontend(app, Path(__file__).resolve().parent.parent / "frontend" / "dist")
+
     return app
+
+
+def mount_frontend(app: FastAPI, dist_dir: Path) -> None:
+    """frontend 빌드 산출물을 정적 서빙하고, 비-API 경로는 index.html로 폴백한다."""
+    if not dist_dir.is_dir():
+        return
+    index_file = dist_dir / "index.html"
+    assets_dir = dist_dir / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):  # noqa: ANN202
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404)
+        return FileResponse(str(index_file))
 
 
 app = create_app()

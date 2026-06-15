@@ -2,84 +2,92 @@
 
 이 파일은 [Claude Code](https://claude.com/claude-code)가 이 저장소에서 작업할 때 참고하는 가이드다.
 
-> ℹ️ **이 프로젝트는 점진적으로 만들어 나간다.** 기능을 조금씩 추가하며 진행하므로,
-> 새로운 구조/스택/명령이 정해질 때마다 이 문서의 해당 항목(`<!-- TODO -->`)을 채워 최신 상태로 유지한다.
-
----
-
 ## 프로젝트 개요
 
-`GENUT_service`는 **GENUT를 병렬로 실행하는 서비스**다.
+`GENUT_service`는 **GENUT(테스트 자동생성 CLI 도구)를 여러 워커로 병렬 실행**하여, 다수의 대상 프로덕트(C/C++/kunit)에 단위 테스트를 생성하는 서비스다.
 
-- **핵심 목표**: 약 **200개**의 대상 프로젝트에 대해 GENUT 기반 테스트 생성을 **병렬로** 수행한다.
-- **GENUT 정의**: 여기서 말하는 GENUT는 로컬의 `GENUT`(C/C++ → GTest 자동 생성 파이프라인)와 **다르다**.
-  정확한 명세는 추후 사용자가 제공한다. <!-- TODO: GENUT 명세를 받으면 여기에 정리한다. -->
-- **개발 방식**: 한 번에 전부가 아니라 **기능 단위로 조금씩** 구현하며 진행한다.
+- **GENUT**: 서비스에 repo로 등록되어 매 실행 시 최신 코드로 clone 후 CLI로 호출된다. CLI 옵션 `--file-list`(절대경로 txt)·`--compile-db-path`·`--out-test-folder-path`·`--max-attempts`·`--debug`·`--enable-assure`·`--function-name`. 함수당 positive:negative 50:50 테스트 생성. `.env`로 `TEST_GENERATION_MODE`(c|cpp|kunit)·`DS_ASSIST_CREDENTIAL_KEY`·`DS_ASSIST_SEND_SYSTEM_NAME`·`CMAKE_CONFIGURE_CMD`·`CMAKE_BUILD_CMD`·`TEST_RUN_CMD`를 받는다.
+- **동시성**: 등록된 GENUT 1개 = 워커 1개. 한 프로덕트는 동시에 1개 job만(`product_locks` PK 배타). N개 GENUT → 서로 다른 N개 프로덕트 동시 실행. 동일 프로덕트 동시 요청은 1개만 실행, 나머지 대기.
+- **실행 격리**: job마다 Docker 컨테이너(`use_docker=true`). 기본은 호스트 실행.
 
 ## 기술 스택
 
-<!-- TODO: 확정되는 대로 채운다. 예시 형식:
-- 언어/런타임:
-- 프레임워크:
-- 패키지 매니저:
-- 병렬 실행 방식(프로세스/스레드/워커큐/컨테이너 등):
-- 데이터 저장소:
--->
+- **백엔드**: Python 3.12, FastAPI, SQLAlchemy 2.0(SQLite→Postgres), Alembic, pydantic-settings, Typer
+- **프론트엔드**(`frontend/`): React 18 + Vite + TypeScript, React Router, TanStack Query, Zustand, React Hook Form + Zod, Tailwind, Vitest + RTL + MSW
+- **인프라**: 자체 인앱 스케줄러(외부 브로커 없음) + Docker(컨테이너-per-job)
 
 ## 개발 환경 설정
 
-<!-- TODO: 최초 셋업 절차.
-1. 의존성 설치: ...
-2. 환경 변수 설정: `.env.example` → `.env` 복사 후 값 채우기
-3. 로컬 실행 전제 조건:
--->
+```bash
+python -m venv .venv
+. .venv/Scripts/activate            # Windows bash. PowerShell: .venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+cp .env.example .env                # 필요 시 값 수정
+npm --prefix ./frontend install
+```
 
 ## 주요 명령어
 
-> 자리표시자다. 빌드/실행 체계가 정해지면 실제 명령으로 교체한다.
-
 | 용도 | 명령어 |
 |------|--------|
-| 의존성 설치 | <!-- TODO --> |
-| 서비스 실행 | <!-- TODO --> |
-| 빌드 | <!-- TODO --> |
-| 전체 테스트 | <!-- TODO --> |
-| 단일 테스트 실행 | <!-- TODO --> |
-| 린트 / 포맷 | <!-- TODO --> |
+| 백엔드 테스트 | `pytest` (기본 `-m "not docker and not slow"`) |
+| 도커 포함 테스트 | `pytest -m docker` (Docker 필요, 없으면 자동 skip) |
+| DB 마이그레이션 | `alembic upgrade head` (스키마 변경 시 `alembic revision --autogenerate -m "..."`) |
+| 백엔드 서버 | `genut-service serve` (http://127.0.0.1:8000) |
+| 프론트 개발 서버 | `npm --prefix ./frontend run dev` (Vite, `/api`→127.0.0.1:8000 프록시) |
+| 프론트 테스트 | `npm --prefix ./frontend test` |
+| 프론트 빌드 | `npm --prefix ./frontend run build` → `frontend/dist` |
+
+운영 시 `genut-service serve`가 `frontend/dist`를 정적 서빙(SPA fallback)하고 백그라운드 스케줄러를 돌린다.
 
 ## 프로젝트 구조
 
-<!-- TODO: 디렉터리가 생기면 핵심 경로와 역할을 기술한다. -->
+```
+genut_service/
+├── main.py              # FastAPI 앱 팩토리, lifespan(스케줄러), 정적 서빙
+├── config.py            # .env → Settings
+├── db/{base,models}.py  # 엔진/세션, ORM 모델
+├── schemas/             # Pydantic 입출력
+├── api/                 # 라우터 (products, files, jobs, genuts, workers)
+├── services/            # 비즈니스 로직 (FastAPI 비의존)
+├── scheduler/           # engine(claim/finish), lock, janitor, loop
+├── runner/              # genut_runner, worker, git_ops, env_builder, executors, subprocess_util
+└── docker/              # client(DockerExecutor), images/Dockerfile.runner
+frontend/src/{lib,api,types,components,features/{request,products,genuts,workers}}
+tests/                   # unit/api/scheduler/runner/e2e + fake_genut/ (가상 GENUT)
+```
 
 ## 아키텍처 메모
 
-코드만 봐서는 알기 어려운 설계 결정·데이터 흐름·경계를 적는다.
+- 계층: **api → services → db**. `scheduler`/`runner`는 FastAPI 비의존(HTTP 없이 단위테스트 가능).
+- 스케줄러: 단일 writer가 `claim_jobs`(idle 워커↔queued job 배정, 프로덕트당 1개)와 `finish_job`(락 해제·워커 idle)을 수행. `product_locks.product_id` PK가 배타성을 보장.
+- runner: 호스트에 워크스페이스 준비(product clone+patch, GENUT clone, `.env`, file-list) 후 CLI 실행을 executor(Host/Docker)에 위임. 상대→절대 경로 변환은 executor 경로 공간에서 수행.
+- 테스트: fake GENUT(`tests/fake_genut`)와 가상 프로덕트(로컬 git repo) 픽스처로 E2E 검증. Docker 경로는 마커로 분리(자동 skip).
 
-- **병렬 처리**: ~200개 대상 프로젝트를 동시에 처리하므로, 동시성 모델·작업 분배·리소스 격리·실패 격리(한 프로젝트 실패가 전체를 막지 않도록)를 핵심 설계 포인트로 다룬다. <!-- TODO: 확정된 방식 기술 -->
-- <!-- TODO: GENUT 호출 인터페이스, 결과 수집/집계 방식 등 -->
+## Postgres 이식
+
+코드는 DB 비의존(표준 SQLAlchemy, JSON 타입, String enum, unique 제약)이다. 전환:
+```bash
+pip install -e ".[postgres]"
+export DB_URL=postgresql+psycopg://user:pass@host:5432/genut
+alembic upgrade head
+```
+SQLite 전용 코드는 `db/base.py`의 PRAGMA(여기서 `sqlite` URL일 때만 적용)뿐이다.
 
 ---
 
 ## 개발 규칙 (반드시 준수)
 
 ### 1. 코드 수정 시 테스트 필수
-- 코드를 수정하면 **반드시 관련 테스트를 생성하거나 갱신**한다.
-- 수정 후 **전체 테스트를 실행**하여 문제가 없는지 확인한다.
-- 모든 테스트가 통과하는 것을 확인한 뒤에 다음 단계로 진행한다.
+- 수정 시 **관련 테스트를 생성/갱신**하고, **전체 테스트를 실행**해 통과를 확인한 뒤 진행한다.
 
 ### 2. Git 커밋 필수 (커밋 메시지는 영어)
-- 수정과 테스트 확인이 끝나면 **매번 git에 커밋**한다.
-- **커밋 메시지는 영어로** 작성하고, 변경 내용을 명확하게 설명한다.
-- 원격 저장소: GitHub `haangman/GENUT_service` (public).
+- 수정+테스트 확인 후 **매번 커밋**한다. **커밋 메시지는 영어로** 작성한다.
+- 원격: GitHub `haangman/GENUT_service` (public).
 
 ### 3. 점진적 개발
-- 기능을 작은 단위로 나누어 구현하고, 각 단위마다 위 1~2 규칙(테스트 → 커밋)을 적용한다.
+- 기능을 작은 단위로 나눠 구현하고, 각 단위마다 (테스트 → 전체 테스트 → 영어 커밋)을 적용한다.
 
-### 코딩 컨벤션
-- 기존 코드의 스타일(네이밍, 들여쓰기, 주석 밀도, 관용구)을 따른다.
-- <!-- TODO: 프로젝트 고유 규칙(포맷터, import 정렬, 에러 처리 패턴 등) -->
-
-### 언어
-- 사용자와의 의사소통과 코드 주석은 **한국어**를 기본으로 한다.
-- **커밋 메시지는 영어**로 작성한다. (위 규칙 2)
-- 기술 용어와 코드 식별자는 원문(영문)을 유지한다.
+### 코딩 컨벤션 / 언어
+- 기존 코드 스타일(네이밍, 들여쓰기, 주석)을 따른다.
+- 사용자와의 의사소통·코드 주석은 **한국어**, **커밋 메시지는 영어**, 기술 용어·식별자는 원문 유지.
