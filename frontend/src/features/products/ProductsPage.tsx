@@ -2,27 +2,43 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { ProductForm } from './ProductForm'
-import { createProduct, deleteProduct, listProducts } from '../../api/products'
+import { createProduct, deleteProduct, listProducts, updateProduct } from '../../api/products'
 import type { ProductFormValues } from './productSchema'
+import type { Product, ProductCreate } from '../../types/api'
+
+function toFormValues(product: Product): Partial<ProductFormValues> {
+  return {
+    name: product.name,
+    product_code: product.product_code,
+    git_url: product.git_url,
+    git_ref: product.git_ref,
+    compile_db_rel: product.compile_db_rel,
+    out_tests_rel: product.out_tests_rel,
+    cmake_configure_cmd: product.cmake_configure_cmd,
+    cmake_build_cmd: product.cmake_build_cmd,
+    test_run_cmd: product.test_run_cmd,
+    test_generation_mode: product.test_generation_mode,
+    patches: product.patches.map((patch) => ({ name: patch.name, content: patch.content })),
+  }
+}
 
 export function ProductsPage() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Product | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['products'],
     queryFn: () => listProducts(),
   })
 
-  const createMut = useMutation({
-    mutationFn: (values: ProductFormValues) =>
-      createProduct({
-        ...values,
-        patches: values.patches.map((patch, index) => ({ ...patch, order_index: index })),
-      }),
+  const saveMut = useMutation({
+    mutationFn: ({ id, data }: { id: number | null; data: ProductCreate }) =>
+      id == null ? createProduct(data) : updateProduct(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       setShowForm(false)
+      setEditing(null)
     },
   })
 
@@ -31,23 +47,52 @@ export function ProductsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
 
+  const handleSubmit = (values: ProductFormValues) => {
+    const data: ProductCreate = {
+      ...values,
+      patches: values.patches.map((patch, index) => ({ ...patch, order_index: index })),
+    }
+    saveMut.mutate({ id: editing?.id ?? null, data })
+  }
+
+  const openCreate = () => {
+    setEditing(null)
+    setShowForm(true)
+  }
+  const openEdit = (product: Product) => {
+    setEditing(product)
+    setShowForm(true)
+  }
+  const closeForm = () => {
+    setShowForm(false)
+    setEditing(null)
+  }
+
   return (
     <div>
       <PageHeader title="프로덕트" description="테스트 생성 대상 프로덕트를 등록/관리한다." />
 
       <button
         className="mb-4 rounded border px-3 py-1.5 text-sm font-medium"
-        onClick={() => setShowForm((value) => !value)}
+        onClick={showForm ? closeForm : openCreate}
       >
         {showForm ? '닫기' : '새 프로덕트'}
       </button>
 
       {showForm ? (
         <div className="mb-4">
-          <ProductForm onSubmit={(v) => createMut.mutate(v)} submitting={createMut.isPending} />
-          {createMut.isError ? (
+          <h3 className="mb-2 text-sm font-semibold">
+            {editing ? `수정: ${editing.name}` : '새 프로덕트'}
+          </h3>
+          <ProductForm
+            key={editing?.id ?? 'new'}
+            defaultValues={editing ? toFormValues(editing) : undefined}
+            onSubmit={handleSubmit}
+            submitting={saveMut.isPending}
+          />
+          {saveMut.isError ? (
             <p role="alert" className="mt-2 text-sm text-red-600">
-              생성에 실패했습니다.
+              저장에 실패했습니다.
             </p>
           ) : null}
         </div>
@@ -77,11 +122,11 @@ export function ProductsPage() {
               <td>{product.product_code}</td>
               <td>{product.test_generation_mode}</td>
               <td className="text-gray-500">{product.git_url}</td>
-              <td>
-                <button
-                  className="text-xs text-red-600"
-                  onClick={() => deleteMut.mutate(product.id)}
-                >
+              <td className="space-x-2 whitespace-nowrap">
+                <button className="text-xs text-blue-600" onClick={() => openEdit(product)}>
+                  수정
+                </button>
+                <button className="text-xs text-red-600" onClick={() => deleteMut.mutate(product.id)}>
                   삭제
                 </button>
               </td>

@@ -1,6 +1,11 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { EMPTY_GENUT_FORM, genutFormSchema, type GenutFormValues } from './genutSchema'
+import {
+  EMPTY_GENUT_FORM,
+  genutEditSchema,
+  genutFormSchema,
+  type GenutFormValues,
+} from './genutSchema'
 
 const inputClass = 'mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm'
 
@@ -8,15 +13,16 @@ interface GenutFormProps {
   onSubmit: (values: GenutFormValues) => void
   submitting?: boolean
   defaultValues?: Partial<GenutFormValues>
+  mode?: 'create' | 'edit'
 }
 
-export function GenutForm({ onSubmit, submitting, defaultValues }: GenutFormProps) {
+export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create' }: GenutFormProps) {
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<GenutFormValues>({
-    resolver: zodResolver(genutFormSchema),
+    resolver: zodResolver(mode === 'edit' ? genutEditSchema : genutFormSchema),
     defaultValues: { ...EMPTY_GENUT_FORM, ...defaultValues },
   })
 
@@ -61,6 +67,7 @@ export function GenutForm({ onSubmit, submitting, defaultValues }: GenutFormProp
           id="ds_assist_credential_key"
           type="password"
           className={inputClass}
+          placeholder={mode === 'edit' ? '변경 시에만 입력 (비우면 기존 값 유지)' : ''}
           {...register('ds_assist_credential_key')}
         />
         {errors.ds_assist_credential_key ? (

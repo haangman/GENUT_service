@@ -10,6 +10,11 @@ export const genutFormSchema = z.object({
   run_command: z.string().min(1, '실행 명령을 입력하세요'),
 })
 
+// 수정용: credential key를 비워둘 수 있다(비우면 기존 값 유지).
+export const genutEditSchema = genutFormSchema.extend({
+  ds_assist_credential_key: z.string(),
+})
+
 export type GenutFormValues = z.infer<typeof genutFormSchema>
 
 export const EMPTY_GENUT_FORM: GenutFormValues = {

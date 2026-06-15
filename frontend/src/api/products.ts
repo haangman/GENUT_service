@@ -13,6 +13,10 @@ export function createProduct(data: ProductCreate): Promise<Product> {
   return apiFetch<Product>('/products', { method: 'POST', body: data })
 }
 
+export function updateProduct(id: number, data: ProductCreate): Promise<Product> {
+  return apiFetch<Product>(`/products/${id}`, { method: 'PUT', body: data })
+}
+
 export function deleteProduct(id: number): Promise<void> {
   return apiFetch<void>(`/products/${id}`, { method: 'DELETE' })
 }
