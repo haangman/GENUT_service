@@ -1,0 +1,14 @@
+# GENUT_service 런타임 의존성
+# (pyproject.toml [project.dependencies]와 동기화. 정식 설치는 `pip install -e .` 권장)
+
+fastapi>=0.110
+uvicorn[standard]>=0.27
+sqlalchemy>=2.0
+alembic>=1.13
+pydantic>=2.6
+pydantic-settings>=2.2
+python-dotenv>=1.0
+typer>=0.12
+
+# Postgres를 사용할 경우 주석 해제 (기본 DB는 SQLite)
+# psycopg[binary]>=3.1

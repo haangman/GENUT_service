@@ -8,15 +8,38 @@ GENUT(테스트 자동생성 도구)를 여러 워커로 **병렬 실행**하여
 
 자세한 개발 규칙은 [CLAUDE.md](./CLAUDE.md), 설계/로드맵은 계획 문서를 참고한다.
 
-## 개발 환경 (백엔드)
+## 실행 방법 (백엔드, .venv)
 
-```bash
+PowerShell 기준 (Windows). bash면 활성화 줄만 `. .venv/Scripts/activate`로 바꾼다.
+
+```powershell
+# 1) 가상환경 생성·활성화
 python -m venv .venv
-. .venv/Scripts/activate        # Windows (bash). PowerShell: .venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
+
+# 2) 의존성 설치 (둘 중 하나)
+pip install -r requirements.txt          # 런타임만 (실행용)
+#   또는
+pip install -r requirements-dev.txt      # 런타임 + 테스트 도구
+#   또는 (권장) editable 설치 — `genut-service` 콘솔 명령까지 생성
 pip install -e ".[dev]"
-pytest                          # 전체 테스트
-genut-service serve             # 개발 서버 (http://127.0.0.1:8000)
+
+# 3) DB 마이그레이션 (테이블 생성; 기본 SQLite ./genut_service.db)
+alembic upgrade head
+
+# 4) (선택) 프론트엔드 빌드 — 서버가 frontend/dist 를 SPA로 함께 서빙
+npm --prefix ./frontend install
+npm --prefix ./frontend run build
+
+# 5) 서버 실행 → http://127.0.0.1:8000
+python -m genut_service serve --host 127.0.0.1 --port 8000
+#   editable(`pip install -e .`) 설치 시: genut-service serve
+
+# 테스트
+pytest                                   # 또는: python -m pytest
 ```
+
+> `pip install -r requirements.txt`는 의존성만 설치하므로, 패키지가 보이도록 **프로젝트 루트에서** `python -m genut_service ...`로 실행한다. 어디서든 `genut-service` 명령을 쓰려면 `pip install -e .`로 설치한다.
 
 ## 마일스톤
 
