@@ -12,21 +12,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import genut_service.db.models  # noqa: F401  (모델을 메타데이터에 등록)
-from genut_service.db.base import Base
+from genut_service.db.base import Base, get_session
 from genut_service.main import create_app
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """FastAPI TestClient. 매 테스트마다 새 앱 인스턴스를 만든다."""
-    app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-@pytest.fixture
-def db_session() -> Iterator[Session]:
-    """격리된 인메모리 SQLite 세션. FK 강제(PRAGMA foreign_keys=ON) 활성."""
+def db_engine() -> Iterator[Engine]:
+    """격리된 인메모리 SQLite 엔진. FK 강제(PRAGMA foreign_keys=ON) 활성."""
     engine: Engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -41,8 +33,29 @@ def db_session() -> Iterator[Session]:
         cursor.close()
 
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
-    with session_factory() as session:
-        yield session
+    yield engine
     Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine: Engine) -> Iterator[Session]:
+    """테스트 DB 세션 (db_engine 공유)."""
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False, future=True)
+    with session_factory() as session:
+        yield session
+
+
+@pytest.fixture
+def client(db_engine: Engine) -> Iterator[TestClient]:
+    """get_session을 테스트 DB로 오버라이드한 FastAPI TestClient."""
+    app = create_app()
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False, future=True)
+
+    def _override_get_session() -> Iterator[Session]:
+        with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _override_get_session
+    with TestClient(app) as test_client:
+        yield test_client
