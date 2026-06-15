@@ -38,6 +38,38 @@ export interface Product {
   patches: Patch[]
 }
 
+export interface Job {
+  id: number
+  product_id: number
+  genut_instance_id: number | null
+  status: string
+  function_name: string | null
+  file_list: string[]
+  excluded_files: string[]
+  attempt: number
+  submitted_at: string
+  started_at: string | null
+  finished_at: string | null
+  result_summary: string | null
+  error: string | null
+}
+
+export interface JobEvent {
+  id: number
+  job_id: number
+  ts: string
+  level: string
+  phase: string | null
+  message: string
+  payload: unknown
+}
+
+export interface JobCreate {
+  product_id: number
+  files: string[]
+  function_name?: string
+}
+
 export type TreeEntryType = 'file' | 'dir'
 
 export interface TreeEntry {

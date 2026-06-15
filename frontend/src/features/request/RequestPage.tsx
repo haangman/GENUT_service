@@ -1,6 +1,7 @@
 import { PageHeader } from '../../components/PageHeader'
 import { FileTreePanel } from './FileTree'
 import { ProductPicker } from './ProductPicker'
+import { RequestActions } from './RequestActions'
 import { SelectedFilesPanel } from './SelectedFilesPanel'
 import { useRequestBuilder } from './store'
 
@@ -15,10 +16,13 @@ export function RequestPage() {
       />
       <ProductPicker />
       {productId ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FileTreePanel productId={productId} />
-          <SelectedFilesPanel />
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FileTreePanel productId={productId} />
+            <SelectedFilesPanel />
+          </div>
+          <RequestActions />
+        </>
       ) : (
         <p className="mt-4 text-sm text-gray-500">프로덕트를 선택하세요.</p>
       )}
