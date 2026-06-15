@@ -43,3 +43,8 @@ yarn-error.log*
 coverage/
 .coverage
 htmlcov/
+
+# === 런타임 산출물 ===
+*.db
+*.sqlite3
+_workspaces/
