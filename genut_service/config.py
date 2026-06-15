@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # 스케줄러 tick 간격(초)
     scheduler_interval: float = 1.0
 
+    # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
+    scheduler_autostart: bool = True
+
     # Docker 실행 설정 (M8에서 사용)
     docker_image: str = "genut-runner:latest"
     docker_cpus: float = 2.0
