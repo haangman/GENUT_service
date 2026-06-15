@@ -1,0 +1,29 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: GENUT_service
+      - navigation [ref=e7]:
+        - link "테스트 요청" [ref=e8] [cursor=pointer]:
+          - /url: /request
+        - link "프로덕트" [ref=e9] [cursor=pointer]:
+          - /url: /products
+        - link "GENUT" [ref=e10] [cursor=pointer]:
+          - /url: /genuts
+        - link "모니터링" [ref=e11] [cursor=pointer]:
+          - /url: /monitoring
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - heading "GENUT" [level=1] [ref=e15]
+        - paragraph [ref=e16]: GENUT 인스턴스(=워커)를 등록/관리한다.
+      - button "새 GENUT" [ref=e17] [cursor=pointer]
+      - table [ref=e18]:
+        - rowgroup [ref=e19]:
+          - row "이름 repo 시스템 max 상태" [ref=e20]:
+            - columnheader "이름" [ref=e21]
+            - columnheader "repo" [ref=e22]
+            - columnheader "시스템" [ref=e23]
+            - columnheader "max" [ref=e24]
+            - columnheader "상태" [ref=e25]
+            - columnheader [ref=e26]
+        - rowgroup

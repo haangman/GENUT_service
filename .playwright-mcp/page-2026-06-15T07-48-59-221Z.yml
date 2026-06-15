@@ -1,0 +1,42 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: GENUT_service
+      - navigation [ref=e7]:
+        - link "테스트 요청" [ref=e8] [cursor=pointer]:
+          - /url: /request
+        - link "프로덕트" [ref=e9] [cursor=pointer]:
+          - /url: /products
+        - link "GENUT" [ref=e10] [cursor=pointer]:
+          - /url: /genuts
+        - link "모니터링" [ref=e11] [cursor=pointer]:
+          - /url: /monitoring
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - heading "모니터링" [level=1] [ref=e15]
+        - paragraph [ref=e16]: 워커 상태, 요청 큐, job 이력/로그를 본다.
+      - generic [ref=e17]:
+        - heading "워커" [level=2] [ref=e18]
+        - generic [ref=e32]:
+          - generic [ref=e33]: fake-genut
+          - generic [ref=e34]: "상태: idle"
+      - generic [ref=e19]:
+        - heading "요청 큐" [level=2] [ref=e20]
+        - paragraph [ref=e21]: 대기 중인 요청이 없습니다.
+      - generic [ref=e22]:
+        - heading "Job 이력" [level=2] [ref=e23]
+        - table [ref=e24]:
+          - rowgroup [ref=e25]:
+            - row "# product 상태 결과" [ref=e26]:
+              - columnheader "#" [ref=e27]
+              - columnheader "product" [ref=e28]
+              - columnheader "상태" [ref=e29]
+              - columnheader "결과" [ref=e30]
+          - rowgroup [ref=e35]:
+            - row "1 1 done status=success total=4 pos=2 neg=2" [ref=e36] [cursor=pointer]:
+              - cell "1" [ref=e37]
+              - cell "1" [ref=e38]
+              - cell "done" [ref=e39]
+              - cell "status=success total=4 pos=2 neg=2" [ref=e40]
+        - generic [ref=e41]: "[run] {\"success\": true, \"status\": \"success\"}"

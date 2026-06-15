@@ -1,0 +1,66 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: GENUT_service
+      - navigation [ref=e7]:
+        - link "테스트 요청" [ref=e8] [cursor=pointer]:
+          - /url: /request
+        - link "프로덕트" [ref=e9] [cursor=pointer]:
+          - /url: /products
+        - link "GENUT" [ref=e10] [cursor=pointer]:
+          - /url: /genuts
+        - link "모니터링" [ref=e11] [cursor=pointer]:
+          - /url: /monitoring
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - heading "프로덕트" [level=1] [ref=e15]
+        - paragraph [ref=e16]: 테스트 생성 대상 프로덕트를 등록/관리한다.
+      - button "닫기" [active] [ref=e27] [cursor=pointer]
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - text: 이름
+          - textbox "이름" [ref=e31]
+        - generic [ref=e32]:
+          - text: 프로덕트 ID
+          - textbox "프로덕트 ID" [ref=e33]
+        - generic [ref=e34]:
+          - text: Git URL
+          - textbox "Git URL" [ref=e35]
+        - generic [ref=e36]:
+          - text: Git ref
+          - textbox "Git ref" [ref=e37]: main
+        - generic [ref=e38]:
+          - text: compile_commands.json 폴더(상대)
+          - textbox "compile_commands.json 폴더(상대)" [ref=e39]
+        - generic [ref=e40]:
+          - text: 테스트 출력 폴더(상대)
+          - textbox "테스트 출력 폴더(상대)" [ref=e41]
+        - generic [ref=e42]:
+          - text: CMAKE_CONFIGURE_CMD
+          - textbox "CMAKE_CONFIGURE_CMD" [ref=e43]
+        - generic [ref=e44]:
+          - text: CMAKE_BUILD_CMD
+          - textbox "CMAKE_BUILD_CMD" [ref=e45]
+        - generic [ref=e46]:
+          - text: TEST_RUN_CMD
+          - textbox "TEST_RUN_CMD" [ref=e47]
+        - generic [ref=e48]:
+          - text: 테스트 모드
+          - combobox "테스트 모드" [ref=e49]:
+            - option "c"
+            - option "cpp" [selected]
+            - option "kunit"
+        - group "패치 (순서대로 적용)" [ref=e50]:
+          - generic [ref=e51]: 패치 (순서대로 적용)
+          - button "패치 추가" [ref=e52] [cursor=pointer]
+        - button "저장" [ref=e53] [cursor=pointer]
+      - table [ref=e19]:
+        - rowgroup [ref=e20]:
+          - row "이름 프로덕트 ID 모드 repo" [ref=e21]:
+            - columnheader "이름" [ref=e22]
+            - columnheader "프로덕트 ID" [ref=e23]
+            - columnheader "모드" [ref=e24]
+            - columnheader "repo" [ref=e25]
+            - columnheader [ref=e26]
+        - rowgroup
