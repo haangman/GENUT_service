@@ -77,5 +77,9 @@ describe('JobLogs (증분 폴링)', () => {
     expect(screen.getByText(/cloning/)).toBeInTheDocument()
     // since가 0을 넘어 전진했음(증분)
     await waitFor(() => expect(Math.max(...sinceSeen)).toBeGreaterThanOrEqual(2))
+
+    // 로그 파일 다운로드 링크 제공
+    const link = screen.getByRole('link', { name: '로그 파일 다운로드' })
+    expect(link).toHaveAttribute('href', '/api/jobs/7/log/download')
   })
 })

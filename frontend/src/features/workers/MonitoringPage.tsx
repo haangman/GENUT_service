@@ -114,8 +114,17 @@ export function JobLogs({
 
   return (
     <div className="mt-2">
-      <div className="mb-1 text-xs text-gray-500">
-        job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
+      <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
+        <span>
+          job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
+        </span>
+        <a
+          href={`/api/jobs/${jobId}/log/download`}
+          download={`job_${jobId}.log`}
+          className="text-blue-600 underline"
+        >
+          로그 파일 다운로드
+        </a>
       </div>
       <pre
         ref={preRef}

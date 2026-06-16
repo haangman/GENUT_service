@@ -49,6 +49,7 @@ class JobPhase(StrEnum):
     SCHEDULE = "schedule"
     CLONE = "clone"
     PATCH = "patch"
+    PREPARE = "prepare"
     RUN = "run"
     COLLECT = "collect"
 

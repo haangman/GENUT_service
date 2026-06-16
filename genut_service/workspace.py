@@ -20,6 +20,11 @@ def product_checkout_root(product_id: int) -> Path:
     return Path(get_settings().workspace_root).resolve() / "products" / str(product_id)
 
 
+def job_log_path(job_id: int) -> Path:
+    """job별 전체 진행 로그 파일 경로 (genut_runner의 job_root와 동일 기준)."""
+    return Path(get_settings().workspace_root) / f"job_{job_id}" / "job.log"
+
+
 def ensure_product_checkout(product: Product) -> Path:
     """프로덕트 repo를 clone(없으면)하거나 최신으로 업데이트하고 경로를 반환한다.
 

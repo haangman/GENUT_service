@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
+from genut_service import workspace
 from genut_service.config import get_settings
 from genut_service.db.models import GenutInstance, Job, JobEvent, Product
 from genut_service.enums import JobPhase, JobStatus
@@ -36,13 +37,22 @@ def process_job(
         return
 
     settings = get_settings()
+    log_path = workspace.job_log_path(job_id)
 
-    # 실행 중 발생하는 단계/출력 이벤트를 즉시 기록 → 모니터링 로그가 실시간 갱신
+    # 실행 중 발생하는 단계/출력 이벤트를 즉시 기록한다.
+    # (1) DB JobEvent → 모니터링 로그 실시간 갱신, (2) job.log 파일 append → 진행 중 다운로드.
     def emit(phase: str, level: str, message: str) -> None:
-        session.add(
-            JobEvent(job_id=job_id, level=level, phase=phase, message=(message or "")[:4000])
-        )
+        text = message or ""
+        session.add(JobEvent(job_id=job_id, level=level, phase=phase, message=text[:8000]))
         session.commit()
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as handle:
+                handle.write(f"[{phase}] {text}\n")
+        except OSError:
+            pass
+
+    emit(JobPhase.SCHEDULE.value, "info", f"job 시작: product={product.name}, genut={genut.name}")
 
     make_executor = None
     if settings.use_docker:

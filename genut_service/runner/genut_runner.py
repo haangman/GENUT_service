@@ -20,6 +20,18 @@ from genut_service.runner import env_builder, git_ops
 from genut_service.runner.executors import HostExecutor
 
 
+# 로그에 노출하면 안 되는 .env 키 값(마스킹 대상)
+_SECRET_ENV_KEYS = {"DS_ASSIST_CREDENTIAL_KEY"}
+
+
+def _masked_env_text(env: dict[str, str]) -> str:
+    """.env 내용을 텍스트로. 비밀 키 값은 마스킹한다."""
+    return "\n".join(
+        f"{key}={'********' if key in _SECRET_ENV_KEYS else value}"
+        for key, value in env.items()
+    )
+
+
 @dataclass
 class RunResult:
     success: bool
@@ -68,7 +80,8 @@ def run(
     git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
 
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
-    env_builder.write_env_file(genut_dir / ".env", env_builder.build_env(product, genut))
+    env_dict = env_builder.build_env(product, genut)
+    env_builder.write_env_file(genut_dir / ".env", env_dict)
 
     # 4) 실행기 선택 (호스트=항등 경로, Docker=컨테이너 경로)
     executor = (make_executor or (lambda _root: HostExecutor()))(job_root)
@@ -86,6 +99,13 @@ def run(
     filelist_path.write_text(
         "\n".join(exec_files) + ("\n" if exec_files else ""), encoding="utf-8"
     )
+
+    # 준비 내용 로그 (실행 전 점검용)
+    _ev("prepare", "info", f"workspace: {job_root}")
+    _ev("prepare", "info", f"compile-db-path: {executor.to_exec_path(compile_db_abs)}")
+    _ev("prepare", "info", f"out-test-folder: {executor.to_exec_path(out_abs)}")
+    _ev("prepare", "info", f"file-list ({len(exec_files)}개):\n" + "\n".join(exec_files))
+    _ev("prepare", "info", ".env (key 값 마스킹):\n" + _masked_env_text(env_dict))
 
     # 6) GENUT CLI argv (run_command + 표준 플래그)
     argv = [

@@ -123,6 +123,17 @@ def test_runner_hard_fail(db_session, make_virtual_product, fake_genut_repo, tmp
     assert "failed" in result.result_summary
 
 
+def test_masked_env_text_masks_secret() -> None:
+    from genut_service.runner.genut_runner import _masked_env_text
+
+    text = _masked_env_text(
+        {"TEST_GENERATION_MODE": "cpp", "DS_ASSIST_CREDENTIAL_KEY": "super-secret"}
+    )
+    assert "TEST_GENERATION_MODE=cpp" in text
+    assert "DS_ASSIST_CREDENTIAL_KEY=********" in text
+    assert "super-secret" not in text
+
+
 def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     vp = make_virtual_product("stream", sources={"src/a.cpp": "// @genut-fn: foo\n"})
     product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])

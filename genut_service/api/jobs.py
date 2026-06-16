@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
+from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobCreate, JobEventRead, JobRead
@@ -58,3 +60,23 @@ def get_job_logs(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
     events = job_service.list_events(session, job_id, since)
     return [JobEventRead.model_validate(event) for event in events]
+
+
+@router.get("/{job_id}/log/download")
+def download_job_log(job_id: int, session: Session = Depends(get_session)):
+    """job 전체 진행 로그 파일을 다운로드한다. 실행 중에는 그 시점까지의 내용을 반환한다."""
+    job = job_service.get_job(session, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
+    filename = f"job_{job_id}.log"
+    path = workspace.job_log_path(job_id)
+    if path.is_file():
+        return FileResponse(str(path), media_type="text/plain", filename=filename)
+    # 파일이 아직 없으면(시작 전/워크스페이스 정리됨) DB 이벤트로 구성
+    events = job_service.list_events(session, job_id, 0)
+    text = "\n".join(f"[{event.phase or '-'}] {event.message}" for event in events)
+    return PlainTextResponse(
+        text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

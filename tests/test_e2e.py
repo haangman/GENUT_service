@@ -104,3 +104,30 @@ def test_failure_does_not_block_other_products(
     assert db_session.get(Job, bad_job.id).status == JobStatus.FAILED.value
     # 두 락 모두 해제됨
     assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
+
+
+def test_job_log_download_full_and_masked(
+    client, db_session, make_virtual_product, fake_genut_repo, workspace
+):
+    product = _make_product(
+        db_session, make_virtual_product("logdl", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    )
+    _make_genut(db_session, "w-log", fake_genut_repo)  # credential key = "k"
+    job = job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+    run_pending(db_session)
+    db_session.expire_all()
+    assert db_session.get(Job, job.id).status == JobStatus.DONE.value
+
+    resp = client.get(f"/api/jobs/{job.id}/log/download")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "[schedule] job 시작" in body  # 시작부터
+    assert "file-list" in body  # 소스 리스트 내용
+    assert "[run] $" in body  # 실제 실행 명령
+    assert "DS_ASSIST_CREDENTIAL_KEY=********" in body  # 키 값 마스킹
+    assert "DS_ASSIST_CREDENTIAL_KEY=k" not in body  # 실제 키 값 비노출
+    assert "[collect]" in body  # 끝까지
+
+
+def test_job_log_download_missing_job_404(client) -> None:
+    assert client.get("/api/jobs/999999/log/download").status_code == 404
