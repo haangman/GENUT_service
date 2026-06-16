@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -93,7 +95,11 @@ def fake_genut_repo(tmp_path_factory: pytest.TempPathFactory) -> dict:
     repo = tmp_path_factory.mktemp("genut_repo")
     shutil.copy(source, repo / "fake_genut.py")
     _git_init_commit(repo)
-    return {"repo_url": str(repo), "run_command": "python fake_genut.py"}
+    # 현재 인터프리터로 실행 → Windows(python)·Linux/WSL(python3) 모두 이식 가능
+    return {
+        "repo_url": str(repo),
+        "run_command": f"{shlex.quote(sys.executable)} fake_genut.py",
+    }
 
 
 @pytest.fixture
