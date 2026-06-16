@@ -123,6 +123,24 @@ def test_runner_hard_fail(db_session, make_virtual_product, fake_genut_repo, tmp
     assert "failed" in result.result_summary
 
 
+def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
+    vp = make_virtual_product("stream", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    events: list[tuple[str, str]] = []
+    genut_runner.run(
+        job,
+        product,
+        genut,
+        workspace_root=str(tmp_path),
+        on_event=lambda phase, level, msg: events.append((phase, msg)),
+    )
+    phases = {phase for phase, _ in events}
+    assert "clone" in phases  # 단계 이벤트
+    assert "run" in phases  # 실행 출력 스트리밍
+    # GENUT의 stdout(최종 JSON 등)이 run 이벤트로 들어옴
+    assert any("success" in msg for phase, msg in events if phase == "run")
+
+
 def test_runner_crash_has_no_result(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     vp = make_virtual_product(
         "crash", sources={"src/a.cpp": "// @genut-fn: foo\n"}, scenario={"outcome": "crash"}

@@ -93,8 +93,13 @@ def main(argv: list[str] | None = None) -> None:
         sys.stderr.write("simulated crash\n")
         sys.exit(int(scenario.get("exit_code", 3)))
 
-    # 시나리오로 실행 시간을 조절(병렬 실행 관측용). 기본 0.
-    time.sleep(float(scenario.get("sleep_seconds", 0)))
+    # 시나리오로 실행 시간을 조절(병렬 실행/실시간 로그 관측용). 기본 0.
+    total = float(scenario.get("sleep_seconds", 0))
+    if total > 0:
+        steps = max(1, int(round(total)))
+        for i in range(steps):
+            time.sleep(total / steps)
+            print(f"[genut] generating tests... {i + 1}/{steps}", flush=True)
 
     functions: list[str] = []
     generated: list[str] = []

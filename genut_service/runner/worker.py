@@ -13,11 +13,6 @@ from genut_service.runner import genut_runner, git_ops
 from genut_service.scheduler.engine import finish_job
 
 
-def _event(session: Session, job_id: int, level: str, phase: JobPhase, message: str) -> None:
-    session.add(JobEvent(job_id=job_id, level=level, phase=phase.value, message=message))
-    session.commit()
-
-
 def process_job(
     session: Session,
     job_id: int,
@@ -42,6 +37,13 @@ def process_job(
 
     settings = get_settings()
 
+    # 실행 중 발생하는 단계/출력 이벤트를 즉시 기록 → 모니터링 로그가 실시간 갱신
+    def emit(phase: str, level: str, message: str) -> None:
+        session.add(
+            JobEvent(job_id=job_id, level=level, phase=phase, message=(message or "")[:4000])
+        )
+        session.commit()
+
     make_executor = None
     if settings.use_docker:
         from genut_service.docker.client import DockerExecutor
@@ -65,27 +67,31 @@ def process_job(
             genut_timeout=settings.genut_run_timeout,
             git_timeout=settings.git_timeout,
             make_executor=make_executor,
+            on_event=emit,
         )
     except git_ops.PatchError as exc:
-        _event(session, job_id, "error", JobPhase.PATCH, f"patch 실패: {exc}")
+        emit(JobPhase.PATCH.value, "error", f"patch 실패: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {exc}")
         return
     except git_ops.GitError as exc:
-        _event(session, job_id, "error", JobPhase.CLONE, f"git 실패: {exc}")
+        emit(JobPhase.CLONE.value, "error", f"git 실패: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {exc}")
         return
     except Exception as exc:  # noqa: BLE001 - 어떤 예외든 job만 실패시키고 격리
+        emit(JobPhase.RUN.value, "error", f"실행 오류: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=str(exc))
         return
 
-    _event(session, job_id, "info", JobPhase.RUN, (result.stdout or "")[:2000])
     if result.success:
+        emit(JobPhase.COLLECT.value, "info", f"완료: {result.result_summary or 'ok'}")
         finish_job(session, job_id, JobStatus.DONE, result_summary=result.result_summary or "ok")
     else:
+        detail = (result.stderr or result.stdout or "GENUT 실행 실패")[-2000:]
+        emit(JobPhase.COLLECT.value, "error", f"실패: {detail[:500]}")
         finish_job(
             session,
             job_id,
             JobStatus.FAILED,
             result_summary=result.result_summary,
-            error=(result.stderr or "")[:2000] or "GENUT 실행 실패",
+            error=detail or "GENUT 실행 실패",
         )

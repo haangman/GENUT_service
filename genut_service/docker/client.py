@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from genut_service.runner import subprocess_util
@@ -38,7 +39,13 @@ class DockerExecutor:
         rel = Path(host_path).resolve().relative_to(self.job_root).as_posix()
         return self.container_root if rel == "." else f"{self.container_root}/{rel}"
 
-    def run(self, argv: list[str], cwd_host: Path, timeout: int) -> dict:
+    def run(
+        self,
+        argv: list[str],
+        cwd_host: Path,
+        timeout: int,
+        on_line: Callable[[str], None] | None = None,
+    ) -> dict:
         cmd = [
             self.docker_bin,
             "run",
@@ -53,4 +60,6 @@ class DockerExecutor:
         if self.memory:
             cmd += ["--memory", str(self.memory)]
         cmd += [self.image, *argv]
+        if on_line is not None:
+            return subprocess_util.run_streaming(cmd, timeout=timeout, on_line=on_line)
         return subprocess_util.run(cmd, timeout=timeout)

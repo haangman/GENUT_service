@@ -42,18 +42,29 @@ def run(
     genut_timeout: int = 1800,
     git_timeout: int = 300,
     make_executor: Callable[[Path], object] | None = None,
+    on_event: Callable[[str, str, str], None] | None = None,
 ) -> RunResult:
+    def _ev(phase: str, level: str, message: str) -> None:
+        if on_event is not None:
+            try:
+                on_event(phase, level, message)
+            except Exception:  # noqa: BLE001
+                pass
+
     job_root = Path(workspace_root) / f"job_{job.id}"
     product_dir = job_root / "product"
     genut_dir = job_root / "genut"
     job_root.mkdir(parents=True, exist_ok=True)
 
     # 1) 프로덕트 clone + 순서대로 patch 적용 (PatchError/GitError는 호출자가 처리)
+    _ev("clone", "info", f"프로덕트 clone: {product.git_url} ({product.git_ref})")
     git_ops.clone(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
     for patch in sorted(product.patches, key=lambda p: p.order_index):
+        _ev("patch", "info", f"patch 적용: {patch.name}")
         git_ops.apply_patch(str(product_dir), patch.content, timeout=git_timeout)
 
     # 2) GENUT repo 최신화(clone)
+    _ev("clone", "info", f"GENUT clone: {genut.repo_url} ({genut.repo_ref})")
     git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
 
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
@@ -91,8 +102,10 @@ def run(
     if job.function_name:
         argv += ["--function-name", job.function_name]
 
-    # 7) 실행 (호스트 또는 컨테이너)
-    proc = executor.run(argv, genut_dir, genut_timeout)
+    # 7) 실행 (호스트 또는 컨테이너) — on_event가 있으면 출력을 줄 단위로 스트리밍
+    _ev("run", "info", f"$ {' '.join(argv)}")
+    on_line = (lambda line: _ev("run", "info", line)) if on_event is not None else None
+    proc = executor.run(argv, genut_dir, genut_timeout, on_line=on_line)
 
     # 8) 결과 수집 (산출물은 호스트 out_abs에 존재; 컨테이너는 bind-mount로 공유)
     generated: list[str] = []

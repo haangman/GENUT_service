@@ -7,6 +7,7 @@ executor는 (1) 호스트 경로를 실행 환경 경로로 변환(to_exec_path)
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from genut_service.runner import subprocess_util
@@ -18,5 +19,15 @@ class HostExecutor:
     def to_exec_path(self, host_path: Path | str) -> str:
         return str(Path(host_path).resolve())
 
-    def run(self, argv: list[str], cwd_host: Path, timeout: int) -> dict:
+    def run(
+        self,
+        argv: list[str],
+        cwd_host: Path,
+        timeout: int,
+        on_line: Callable[[str], None] | None = None,
+    ) -> dict:
+        if on_line is not None:
+            return subprocess_util.run_streaming(
+                argv, cwd=str(cwd_host), timeout=timeout, on_line=on_line
+            )
         return subprocess_util.run(argv, cwd=str(cwd_host), timeout=timeout)
