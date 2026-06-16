@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listQueue, listWorkers } from '../../api/workers'
 import { getJobLogs, listJobs } from '../../api/jobs'
+import type { JobEvent } from '../../types/api'
+
+const TERMINAL = new Set(['done', 'failed'])
 
 function WorkerGrid() {
   const { data } = useQuery({
@@ -56,17 +59,72 @@ function QueuePanel() {
   )
 }
 
-function JobLogs({ jobId }: { jobId: number }) {
-  const { data } = useQuery({
-    queryKey: ['jobLogs', jobId],
-    queryFn: () => getJobLogs(jobId),
-    refetchInterval: 2000,
-  })
+// 증분 폴링: 마지막으로 받은 이벤트 id 이후(`?since=`)만 받아 누적한다.
+// 작업이 종료(done/failed)되면 마지막 한 번만 더 받아오고 폴링을 멈춘다.
+export function JobLogs({
+  jobId,
+  status,
+  pollMs = 1500,
+}: {
+  jobId: number
+  status: string
+  pollMs?: number
+}) {
+  const [events, setEvents] = useState<JobEvent[]>([])
+  const cursorRef = useRef(0)
+  const preRef = useRef<HTMLPreElement>(null)
+  const terminal = TERMINAL.has(status)
+
+  // 선택한 job이 바뀌면 누적 로그와 커서를 초기화
+  useEffect(() => {
+    setEvents([])
+    cursorRef.current = 0
+  }, [jobId])
+
+  // 폴링 루프 (terminal이 true가 되면 마지막 1회만 받고 재예약하지 않음)
+  useEffect(() => {
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      try {
+        const batch = await getJobLogs(jobId, cursorRef.current)
+        if (!active) return
+        if (batch.length > 0) {
+          cursorRef.current = batch[batch.length - 1].id
+          setEvents((prev) => [...prev, ...batch])
+        }
+      } catch {
+        /* 일시 오류는 무시하고 다음 tick에서 재시도 */
+      }
+      if (active && !terminal) {
+        timer = setTimeout(poll, pollMs)
+      }
+    }
+    poll()
+    return () => {
+      active = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [jobId, terminal, pollMs])
+
+  // 새 로그가 들어오면 맨 아래로 스크롤
+  useEffect(() => {
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight
+  }, [events])
+
   return (
-    <pre className="mt-2 max-h-64 overflow-auto rounded bg-gray-900 p-2 text-xs text-gray-100">
-      {(data ?? []).map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n') ||
-        '로그 없음'}
-    </pre>
+    <div className="mt-2">
+      <div className="mb-1 text-xs text-gray-500">
+        job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
+      </div>
+      <pre
+        ref={preRef}
+        className="max-h-64 overflow-auto rounded bg-gray-900 p-2 text-xs text-gray-100"
+      >
+        {events.map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n') ||
+          '로그 없음'}
+      </pre>
+    </div>
   )
 }
 
@@ -104,7 +162,12 @@ function JobHistory() {
           ))}
         </tbody>
       </table>
-      {selectedJobId ? <JobLogs jobId={selectedJobId} /> : null}
+      {selectedJobId ? (
+        <JobLogs
+          jobId={selectedJobId}
+          status={data?.items.find((job) => job.id === selectedJobId)?.status ?? 'running'}
+        />
+      ) : null}
     </section>
   )
 }
