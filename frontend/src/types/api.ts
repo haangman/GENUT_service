@@ -35,6 +35,7 @@ export interface Product {
   test_run_cmd: string
   test_generation_mode: TestGenerationMode
   active: boolean
+  code_path: string | null
   patches: Patch[]
 }
 
@@ -47,6 +48,7 @@ export interface Genut {
   max_attempts: number
   run_command: string
   enabled: boolean
+  code_path: string | null
   worker_status: string
   current_job_id: number | null
 }
@@ -60,6 +62,7 @@ export interface GenutCreate {
   max_attempts: number
   run_command: string
   enabled: boolean
+  code_path?: string
 }
 
 export interface Worker {
@@ -133,5 +136,6 @@ export interface ProductCreate {
   cmake_build_cmd: string
   test_run_cmd: string
   test_generation_mode: TestGenerationMode
+  code_path?: string
   patches: PatchIn[]
 }

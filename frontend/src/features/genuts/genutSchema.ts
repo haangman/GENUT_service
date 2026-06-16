@@ -8,6 +8,7 @@ export const genutFormSchema = z.object({
   ds_assist_send_system_name: z.string().min(1, '시스템 이름을 입력하세요'),
   max_attempts: z.coerce.number().int().min(1, '1 이상이어야 합니다'),
   run_command: z.string().min(1, '실행 명령을 입력하세요'),
+  code_path: z.string(),
 })
 
 // 수정용: credential key를 비워둘 수 있다(비우면 기존 값 유지).
@@ -25,4 +26,5 @@ export const EMPTY_GENUT_FORM: GenutFormValues = {
   ds_assist_send_system_name: '',
   max_attempts: 10,
   run_command: 'python -m genut',
+  code_path: '',
 }

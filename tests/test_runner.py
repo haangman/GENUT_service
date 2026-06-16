@@ -134,6 +134,35 @@ def test_masked_env_text_masks_secret() -> None:
     assert "super-secret" not in text
 
 
+def test_runner_persistent_code_path_preserves_generated(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    vp = make_virtual_product("persist", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    code_dir = tmp_path / "persist_checkout"
+    product.code_path = str(code_dir)
+    db_session.commit()
+
+    # 1차 실행: 영속 경로에 clone + 테스트 생성
+    r1 = genut_runner.run(job, product, genut, workspace_root=str(tmp_path))
+    assert r1.success
+    out = Path(r1.out_dir)
+    assert out == (code_dir / "tests" / "generated").resolve()  # 영속 경로 안
+    assert list(out.glob("test_*"))
+
+    # 이전 생성물 모사: untracked 더미 파일 추가
+    keep = out / "keepme_Test.cpp"
+    keep.write_text("// previously generated\n", encoding="utf-8")
+
+    # 2차 실행(같은 code_path) → 제자리 업데이트(fetch+reset, git clean 없음)
+    job2 = Job(product_id=product.id, genut_instance_id=genut.id, file_list=["src/a.cpp"])
+    db_session.add(job2)
+    db_session.commit()
+    r2 = genut_runner.run(job2, product, genut, workspace_root=str(tmp_path))
+    assert r2.success
+    assert keep.is_file()  # 생성된 테스트(untracked) 보존됨
+
+
 def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     vp = make_virtual_product("stream", sources={"src/a.cpp": "// @genut-fn: foo\n"})
     product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])

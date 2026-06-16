@@ -108,8 +108,8 @@ migrations/              # Alembic (env.py + versions/)
 ## 7. Runner / 실행
 
 `runner/genut_runner.run(job, product, genut, *, workspace_root, debug, enable_assure, ..., make_executor)`:
-1. product clone + 순서대로 patch 적용 (`git_ops`)
-2. GENUT repo clone(최신화)
+1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용** → `out_tests_rel` 아래 생성 테스트(untracked) 보존; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
+2. GENUT 코드 준비 — `code_path` 있으면 영속 경로 업데이트, 없으면 `job_<id>/genut`에 임시 clone
 3. `.env` 조립(`env_builder`: DS_ASSIST_*는 GENUT, CMAKE_*·TEST_RUN_CMD·MODE는 프로덕트)
 4. executor 선택(Host=항등 경로, **Docker=컨테이너 경로 매핑**)
 5. 상대→절대(executor 경로공간) 변환, included만 `filelist.txt`에 절대경로로 기록
@@ -125,10 +125,10 @@ migrations/              # Alembic (env.py + versions/)
 
 ## 8. API 표면 (`/api`, 목록은 `{items,total,page,page_size}`)
 
-- Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches)
+- Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches, +`code_path`: 코드 영속 경로 선택·절대/상대)
 - Files: `GET /products/{id}/tree?path=`, `POST /products/{id}/compile-check {files}` → `{included,excluded}`
 - Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹)
-- GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외)
+- GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`code_path` 선택)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
 - 정적: 비-API 경로는 `frontend/dist/index.html`로 SPA fallback
 

@@ -15,6 +15,7 @@ const VALID: ProductFormValues = {
   cmake_build_cmd: 'cmake --build build',
   test_run_cmd: 'ctest',
   test_generation_mode: 'cpp',
+  code_path: '',
   patches: [],
 }
 

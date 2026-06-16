@@ -18,6 +18,7 @@ function toFormValues(product: Product): Partial<ProductFormValues> {
     cmake_build_cmd: product.cmake_build_cmd,
     test_run_cmd: product.test_run_cmd,
     test_generation_mode: product.test_generation_mode,
+    code_path: product.code_path ?? '',
     patches: product.patches.map((patch) => ({ name: patch.name, content: patch.content })),
   }
 }
@@ -50,6 +51,7 @@ export function ProductsPage() {
   const handleSubmit = (values: ProductFormValues) => {
     const data: ProductCreate = {
       ...values,
+      code_path: values.code_path.trim() || undefined,
       patches: values.patches.map((patch, index) => ({ ...patch, order_index: index })),
     }
     saveMut.mutate({ id: editing?.id ?? null, data })

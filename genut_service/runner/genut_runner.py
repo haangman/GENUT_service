@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from genut_service import workspace
 from genut_service.db.models import GenutInstance, Job, Product
 from genut_service.paths import normalize_rel_path
 from genut_service.runner import env_builder, git_ops
@@ -64,20 +65,31 @@ def run(
                 pass
 
     job_root = Path(workspace_root) / f"job_{job.id}"
-    product_dir = job_root / "product"
-    genut_dir = job_root / "genut"
     job_root.mkdir(parents=True, exist_ok=True)
 
-    # 1) 프로덕트 clone + 순서대로 patch 적용 (PatchError/GitError는 호출자가 처리)
-    _ev("clone", "info", f"프로덕트 clone: {product.git_url} ({product.git_ref})")
-    git_ops.clone(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
+    # 1) 프로덕트 코드 확보 (code_path 있으면 영속 경로 제자리 업데이트, 없으면 임시 clone)
+    #    + 순서대로 patch 멱등 적용. (PatchError/GitError는 호출자가 처리)
+    if product.code_path:
+        product_dir = workspace.resolve_code_path(product.code_path)
+        _ev("clone", "info", f"프로덕트 업데이트(영속): {product_dir} ← {product.git_url} ({product.git_ref})")
+        git_ops.ensure_checkout(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
+    else:
+        product_dir = job_root / "product"
+        _ev("clone", "info", f"프로덕트 clone(임시): {product.git_url} ({product.git_ref})")
+        git_ops.clone(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
     for patch in sorted(product.patches, key=lambda p: p.order_index):
         _ev("patch", "info", f"patch 적용: {patch.name}")
         git_ops.apply_patch(str(product_dir), patch.content, timeout=git_timeout)
 
-    # 2) GENUT repo 최신화(clone)
-    _ev("clone", "info", f"GENUT clone: {genut.repo_url} ({genut.repo_ref})")
-    git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
+    # 2) GENUT 코드 확보 (code_path 있으면 영속 경로 제자리 업데이트, 없으면 임시 clone)
+    if genut.code_path:
+        genut_dir = workspace.resolve_code_path(genut.code_path)
+        _ev("clone", "info", f"GENUT 업데이트(영속): {genut_dir} ← {genut.repo_url} ({genut.repo_ref})")
+        git_ops.ensure_checkout(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
+    else:
+        genut_dir = job_root / "genut"
+        _ev("clone", "info", f"GENUT clone(임시): {genut.repo_url} ({genut.repo_ref})")
+        git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
 
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
     env_dict = env_builder.build_env(product, genut)

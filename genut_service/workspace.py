@@ -1,22 +1,23 @@
-"""프로덕트 repo의 로컬 체크아웃(캐시) 관리.
+"""프로덕트/GENUT repo의 로컬 체크아웃 관리.
 
-파일트리 탐색과 compile_commands.json 읽기에 사용한다. 실제 git clone/update를
-수행하며, 테스트에서는 ensure_product_checkout를 임시 디렉터리로 대체(monkeypatch)한다.
+- code_path가 지정되면 그 영속 경로를 코드 위치로 사용한다(절대/상대 모두 허용).
+- 요청 페이지(파일트리/compile-check)는 ensure_product_checkout로 코드를 읽되,
+  실행 중 작업과 충돌하지 않도록 **이미 받아진 경우 업데이트하지 않는다**(없을 때만 최초 clone).
+- 작업 실행 시의 제자리 업데이트는 runner가 git_ops.ensure_checkout로 수행한다.
+테스트에서는 ensure_product_checkout를 임시 디렉터리로 대체(monkeypatch)한다.
 """
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 
 from genut_service.config import get_settings
-from genut_service.db.models import Product
+from genut_service.db.models import GenutInstance, Product
 from genut_service.runner import git_ops
 
 
 def product_checkout_root(product_id: int) -> Path:
-    """프로덕트 체크아웃 캐시 경로."""
+    """code_path가 없을 때 쓰는 프로덕트 체크아웃 캐시 경로."""
     return Path(get_settings().workspace_root).resolve() / "products" / str(product_id)
 
 
@@ -25,27 +26,36 @@ def job_log_path(job_id: int) -> Path:
     return Path(get_settings().workspace_root) / f"job_{job_id}" / "job.log"
 
 
-def ensure_product_checkout(product: Product) -> Path:
-    """프로덕트 repo를 clone(없으면)하거나 최신으로 업데이트하고 경로를 반환한다.
+def resolve_code_path(code_path: str) -> Path:
+    """code_path 해석: 절대면 그대로, 상대면 WORKSPACE_ROOT 기준."""
+    path = Path(code_path)
+    if path.is_absolute():
+        return path
+    return Path(get_settings().workspace_root) / path
 
-    기본 브랜치 이름에 의존하지 않도록 git_ops.clone(브랜치 비의존 + 관용적 checkout)을
-    사용한다. 업데이트는 fetch + reset --hard로 시도하되 실패해도 캐시를 그대로 쓴다.
+
+def product_code_dir(product: Product) -> Path:
+    """프로덕트 코드 디렉터리: code_path 있으면 그 경로, 없으면 캐시 경로."""
+    if product.code_path:
+        return resolve_code_path(product.code_path)
+    return product_checkout_root(product.id)
+
+
+def genut_code_dir(genut: GenutInstance) -> Path | None:
+    """GENUT 코드 디렉터리: code_path 있으면 그 경로, 없으면 None(임시 clone 사용)."""
+    if genut.code_path:
+        return resolve_code_path(genut.code_path)
+    return None
+
+
+def ensure_product_checkout(product: Product) -> Path:
+    """요청 페이지용(읽기 전용) 프로덕트 코드 경로를 반환한다.
+
+    code_path가 있으면 그 경로, 없으면 캐시 경로를 사용한다. 이미 받아진(.git 존재)
+    경우에는 **업데이트하지 않는다**(실행 중 작업의 reset과 충돌 방지). 없을 때만 clone.
     """
-    root = product_checkout_root(product.id)
-    timeout = get_settings().git_timeout
+    root = product_code_dir(product)
     if (root / ".git").is_dir():
-        fetch = subprocess.run(
-            ["git", "-C", str(root), "fetch", "origin"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-        )
-        if fetch.returncode == 0:
-            subprocess.run(
-                ["git", "-C", str(root), "reset", "--hard", f"origin/{product.git_ref}"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-            )
         return root
-    # 깨진 캐시가 있으면 정리 후 새로 clone
-    if root.exists():
-        shutil.rmtree(root, ignore_errors=True)
-    git_ops.clone(product.git_url, product.git_ref, root, timeout=timeout)
+    git_ops.clone(product.git_url, product.git_ref, root, timeout=get_settings().git_timeout)
     return root

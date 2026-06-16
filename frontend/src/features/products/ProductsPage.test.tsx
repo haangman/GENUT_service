@@ -20,6 +20,7 @@ function product(id: number, name: string, mode = 'cpp') {
     test_run_cmd: 'r',
     test_generation_mode: mode,
     active: true,
+    code_path: null,
     patches: [],
   }
 }

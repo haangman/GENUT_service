@@ -16,6 +16,7 @@ function genut(id = 1, name = 'genut-a') {
     max_attempts: 10,
     run_command: 'python -m genut',
     enabled: true,
+    code_path: null,
     worker_status: 'idle',
     current_job_id: null,
   }

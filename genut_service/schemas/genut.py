@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from genut_service.paths import normalize_code_path
+
+
+def _norm_code_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = normalize_code_path(value)
+    return normalized or None
 
 
 class GenutBase(BaseModel):
@@ -13,6 +22,12 @@ class GenutBase(BaseModel):
     max_attempts: int = Field(default=10, ge=1)
     run_command: str = "python -m genut"
     enabled: bool = True
+    code_path: str | None = None
+
+    @field_validator("code_path")
+    @classmethod
+    def _normalize_code_path(cls, value: str | None) -> str | None:
+        return _norm_code_path(value)
 
 
 class GenutCreate(GenutBase):
@@ -29,6 +44,12 @@ class GenutUpdate(BaseModel):
     max_attempts: int | None = Field(default=None, ge=1)
     run_command: str | None = None
     enabled: bool | None = None
+    code_path: str | None = None
+
+    @field_validator("code_path")
+    @classmethod
+    def _normalize_code_path(cls, value: str | None) -> str | None:
+        return _norm_code_path(value)
 
 
 class GenutRead(GenutBase):

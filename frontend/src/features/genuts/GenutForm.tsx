@@ -112,6 +112,13 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
         <input id="run_command" className={inputClass} {...register('run_command')} />
       </div>
 
+      <div>
+        <label htmlFor="code_path" className="text-sm font-medium">
+          코드 저장 경로 (선택, 절대/상대)
+        </label>
+        <input id="code_path" className={inputClass} {...register('code_path')} />
+      </div>
+
       <button
         type="submit"
         disabled={submitting}

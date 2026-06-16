@@ -16,6 +16,7 @@ export const productFormSchema = z.object({
   cmake_build_cmd: z.string().min(1, 'build 명령을 입력하세요'),
   test_run_cmd: z.string().min(1, 'test 실행 명령을 입력하세요'),
   test_generation_mode: z.enum(['c', 'cpp', 'kunit']),
+  code_path: z.string(),
   patches: z.array(patchSchema),
 })
 
@@ -32,5 +33,6 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   cmake_build_cmd: '',
   test_run_cmd: '',
   test_generation_mode: 'cpp',
+  code_path: '',
   patches: [],
 }

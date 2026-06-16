@@ -55,6 +55,8 @@ class Product(TimestampMixin, Base):
 
     compile_db_rel: Mapped[str] = mapped_column(String(1024))
     out_tests_rel: Mapped[str] = mapped_column(String(1024))
+    # 영속 코드 체크아웃 경로(선택). 지정 시 매 작업마다 fresh clone 대신 제자리 업데이트.
+    code_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     cmake_configure_cmd: Mapped[str] = mapped_column(Text)
     cmake_build_cmd: Mapped[str] = mapped_column(Text)
     test_run_cmd: Mapped[str] = mapped_column(Text)
@@ -104,6 +106,8 @@ class GenutInstance(TimestampMixin, Base):
 
     max_attempts: Mapped[int] = mapped_column(Integer, default=10)
     run_command: Mapped[str] = mapped_column(String(1024), default="python -m genut")
+    # 영속 코드 체크아웃 경로(선택). 지정 시 매 작업마다 fresh clone 대신 제자리 업데이트.
+    code_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     worker_status: Mapped[str] = mapped_column(

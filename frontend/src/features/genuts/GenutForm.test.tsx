@@ -12,6 +12,7 @@ const VALID: GenutFormValues = {
   ds_assist_send_system_name: 'sys-A',
   max_attempts: 10,
   run_command: 'python -m genut',
+  code_path: '',
 }
 
 describe('GenutForm', () => {

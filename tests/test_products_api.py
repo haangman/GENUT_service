@@ -91,3 +91,19 @@ def test_delete_product(client: TestClient) -> None:
 
 def test_get_missing_returns_404(client: TestClient) -> None:
     assert client.get("/api/products/9999").status_code == 404
+
+
+def test_code_path_normalized_and_optional(client: TestClient) -> None:
+    # 절대경로(백슬래시) → 슬래시 정규화 후 그대로 유지
+    abs_body = client.post("/api/products", json=_payload("cp-abs", code_path="C:\\repos\\foo")).json()
+    assert abs_body["code_path"] == "C:/repos/foo"
+    # 상대경로 정규화
+    rel_body = client.post("/api/products", json=_payload("cp-rel", code_path="repos/./foo")).json()
+    assert rel_body["code_path"] == "repos/foo"
+    # 빈 값/미지정 → None
+    assert client.post("/api/products", json=_payload("cp-empty", code_path="")).json()["code_path"] is None
+    assert client.post("/api/products", json=_payload("cp-none")).json()["code_path"] is None
+
+
+def test_code_path_rejects_parent(client: TestClient) -> None:
+    assert client.post("/api/products", json=_payload("cp-bad", code_path="../etc")).status_code == 422

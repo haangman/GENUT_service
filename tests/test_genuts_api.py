@@ -58,6 +58,12 @@ def test_duplicate_name_conflict(client: TestClient) -> None:
     assert client.post("/api/genuts", json=_payload("dup")).status_code == 409
 
 
+def test_code_path_round_trip(client: TestClient) -> None:
+    body = client.post("/api/genuts", json=_payload("g-cp", code_path="genut/checkout")).json()
+    assert body["code_path"] == "genut/checkout"
+    assert client.post("/api/genuts", json=_payload("g-cp2")).json()["code_path"] is None
+
+
 def test_list_and_delete(client: TestClient) -> None:
     genut_id = client.post("/api/genuts", json=_payload()).json()["id"]
     listing = client.get("/api/genuts")
