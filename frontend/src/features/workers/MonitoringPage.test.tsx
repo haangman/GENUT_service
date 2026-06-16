@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
 import { renderWithProviders } from '../../test/utils'
@@ -48,10 +48,16 @@ describe('MonitoringPage', () => {
       ),
     )
 
+    server.use(http.get('/api/jobs/5/logs', () => HttpResponse.json([])))
+
     renderWithProviders(<MonitoringPage />)
     expect(await screen.findByText('worker-a')).toBeInTheDocument()
     expect(await screen.findByText('대기(프로덕트 사용 중)')).toBeInTheDocument()
-    expect(await screen.findByText('status=success total=4 pos=2 neg=2')).toBeInTheDocument()
+    const resultCell = await screen.findByText('status=success total=4 pos=2 neg=2')
+
+    // 행을 클릭하면 바로 그 행 아래에 로그 패널이 펼쳐진다(인라인)
+    fireEvent.click(resultCell)
+    expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
   })
 })
 
@@ -78,8 +84,17 @@ describe('JobLogs (증분 폴링)', () => {
     // since가 0을 넘어 전진했음(증분)
     await waitFor(() => expect(Math.max(...sinceSeen)).toBeGreaterThanOrEqual(2))
 
-    // 로그 파일 다운로드 링크 제공
-    const link = screen.getByRole('link', { name: '로그 파일 다운로드' })
-    expect(link).toHaveAttribute('href', '/api/jobs/7/log/download')
+    // 로그 저장 버튼: 그 순간까지의 로그를 job 이름+날짜시간 파일명으로 저장
+    ;(URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:mock')
+    ;(URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn()
+    let savedName = ''
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        savedName = this.download
+      })
+    fireEvent.click(screen.getByRole('button', { name: '로그 저장' }))
+    clickSpy.mockRestore()
+    expect(savedName).toMatch(/^job_7_\d{8}-\d{6}\.log$/)
   })
 })

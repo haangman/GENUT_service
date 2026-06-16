@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listQueue, listWorkers } from '../../api/workers'
@@ -6,6 +6,15 @@ import { getJobLogs, listJobs } from '../../api/jobs'
 import type { JobEvent } from '../../types/api'
 
 const TERMINAL = new Set(['done', 'failed'])
+
+// 파일명용 타임스탬프: YYYYMMDD-HHMMSS
+function formatStamp(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}` +
+    `-${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`
+  )
+}
 
 function WorkerGrid() {
   const { data } = useQuery({
@@ -112,19 +121,33 @@ export function JobLogs({
     if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight
   }, [events])
 
+  // 현재 화면에 쌓인(=그 순간까지의) 로그를 파일로 저장. 출력 중에도 동작.
+  const handleSave = () => {
+    const text = events.map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n')
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `job_${jobId}_${formatStamp(new Date())}.log`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <div className="mt-2">
+    <div>
       <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
         <span>
           job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
         </span>
-        <a
-          href={`/api/jobs/${jobId}/log/download`}
-          download={`job_${jobId}.log`}
-          className="text-blue-600 underline"
+        <button
+          type="button"
+          onClick={handleSave}
+          className="rounded border px-2 py-0.5 text-blue-600"
         >
-          로그 파일 다운로드
-        </a>
+          로그 저장
+        </button>
       </div>
       <pre
         ref={preRef}
@@ -158,25 +181,27 @@ function JobHistory() {
         </thead>
         <tbody>
           {data?.items.map((job) => (
-            <tr
-              key={job.id}
-              className="cursor-pointer border-b hover:bg-gray-50"
-              onClick={() => setSelectedJobId(job.id)}
-            >
-              <td className="py-2">{job.id}</td>
-              <td>{job.product_id}</td>
-              <td>{job.status}</td>
-              <td className="text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
-            </tr>
+            <Fragment key={job.id}>
+              <tr
+                className="cursor-pointer border-b hover:bg-gray-50"
+                onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
+              >
+                <td className="py-2">{job.id}</td>
+                <td>{job.product_id}</td>
+                <td>{job.status}</td>
+                <td className="text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
+              </tr>
+              {selectedJobId === job.id ? (
+                <tr className="border-b bg-gray-50">
+                  <td colSpan={4} className="p-2">
+                    <JobLogs jobId={job.id} status={job.status} />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
           ))}
         </tbody>
       </table>
-      {selectedJobId ? (
-        <JobLogs
-          jobId={selectedJobId}
-          status={data?.items.find((job) => job.id === selectedJobId)?.status ?? 'running'}
-        />
-      ) : null}
     </section>
   )
 }
