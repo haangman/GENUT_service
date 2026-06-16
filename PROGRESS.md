@@ -1,6 +1,6 @@
 # GENUT_service 진행 상세 기록
 
-작성일 기준: 2026-06-15. 본 문서는 현재까지 구현·검증한 내용을 상세히 정리한다.
+작성 2026-06-15 · 최종 갱신 2026-06-16. 본 문서는 현재까지 구현·검증한 내용을 상세히 정리한다.
 원격: https://github.com/haangman/GENUT_service (branch `main`, public).
 
 ---
@@ -113,10 +113,11 @@ migrations/              # Alembic (env.py + versions/)
 3. `.env` 조립(`env_builder`: DS_ASSIST_*는 GENUT, CMAKE_*·TEST_RUN_CMD·MODE는 프로덕트)
 4. executor 선택(Host=항등 경로, **Docker=컨테이너 경로 매핑**)
 5. 상대→절대(executor 경로공간) 변환, included만 `filelist.txt`에 절대경로로 기록
-6. `run_command` + 표준 플래그로 실행 (`subprocess_util`, UTF-8)
-7. `out/result.json` 수집 → result_summary, 성공 판정(exit code + result.json status)
+6. 준비 내용 로그(`on_event`): workspace·compile-db·out 경로, **file-list 내용**, **`.env` 내용(비밀 키 값 마스킹)**, 실제 실행 명령
+7. `run_command` 실행 — `on_event`가 있으면 **출력을 줄 단위로 스트리밍**(`subprocess_util.run_streaming`), 없으면 일괄 실행
+8. `out/result.json` 수집 → result_summary, 성공 판정(exit code + result.json status)
 
-`runner/worker.process_job`: 배정 job 실행 → 이벤트 기록 → DONE/FAILED(`finish_job`). patch/git/임의 예외는 그 job만 FAILED(격리).
+`runner/worker.process_job`: 배정 job 실행 → 각 단계/출력 이벤트를 **DB(JobEvent)와 파일(`<workspace>/job_<id>/job.log`)에 동시 기록**(시작~끝) → DONE/FAILED(`finish_job`). patch/git/임의 예외는 그 job만 FAILED(격리).
 
 **Docker**: `DockerExecutor`가 job 워크스페이스를 `/work`에 bind-mount, `docker run --rm -v <job>:/work -w ... <image> <argv>`. `Dockerfile.runner`(gcc/clang/cmake/ninja/git/python). docker 미설치 환경에서는 docker-마커 테스트 자동 skip.
 
@@ -126,7 +127,7 @@ migrations/              # Alembic (env.py + versions/)
 
 - Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches)
 - Files: `GET /products/{id}/tree?path=`, `POST /products/{id}/compile-check {files}` → `{included,excluded}`
-- Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, `GET /jobs/{id}/logs?since=`
+- Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹)
 - GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
 - 정적: 비-API 경로는 `frontend/dist/index.html`로 SPA fallback
@@ -138,7 +139,7 @@ migrations/              # Alembic (env.py + versions/)
 1. **테스트 요청**: 프로덕트 선택 → 지연 파일트리(폴더 일괄 가져오기, 확장자 allowlist by mode) → compile_commands 검사로 included/excluded 분리(미포함 별도 표시·제출 제외) → 함수명(선택) → 제출. 선택 변경 시 stale → 재검사 전 제출 차단.
 2. **프로덕트**: 목록 + 등록 폼(patch field-array) + **수정**(PUT, 기존값 프리필) + 삭제.
 3. **GENUT**: 목록 + 등록 폼(키 write-only) + **수정**(키 비우면 기존 유지) + 삭제.
-4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력 · 선택 시 로그 뷰어. 모두 폴링.
+4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력. 작업 클릭 시 **실시간 로그 뷰어**(`?since=` 커서로 증분 누적, 종료 시 폴링 중단, 자동 스크롤) + **로그 파일 다운로드** 링크.
 
 ---
 
@@ -146,8 +147,9 @@ migrations/              # Alembic (env.py + versions/)
 
 - **fake GENUT**(`tests/fake_genut/fake_genut.py`): 실 GENUT 계약 모사. 함수당 50:50 생성, `--function-name/--debug/--enable-assure` 반영, 시나리오(`GENUT_SCENARIO.json`)로 success/hard_fail/crash 및 `sleep_seconds`(관측용, 기본0) 구동, `result.json`에 env/file_list/compile_db provenance 기록. BOM 내성(utf-8-sig).
 - **가상 프로덕트**(conftest `make_virtual_product`): 로컬 git repo. `fake_genut_repo` 픽스처는 fake를 담은 로컬 git repo.
-- **레이어**: unit(paths/compile_db/env_builder) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip).
-- 현재 **58 passed, 1 deselected(docker)**.
+- **레이어**: unit(paths/compile_db/env_builder/마스킹) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash·스트리밍 이벤트) · subprocess(run_streaming) · 로그 다운로드(전체 내용·키 마스킹·404) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip). fake `sleep_seconds`/진행 라인.
+- 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
+- 현재 **백엔드 64 passed, 1 deselected(docker) · 프론트 24 passed**.
 
 ---
 
@@ -171,6 +173,12 @@ migrations/              # Alembic (env.py + versions/)
 | 추가 | 프로덕트/GENUT **수정** 기능 | `3a437c4` |
 | 추가 | fake `sleep_seconds` | `89f4893` |
 | 추가 | **BOM 내성 + 비차단 스케줄러 루프** | `a854825` |
+| 추가 | requirements.txt + .venv 실행 안내 | `88ae1fb` |
+| 추가 | requirements 인코딩(한글 주석 cp949) 수정 | `090ce96` |
+| 추가 | 테스트 이식성(sys.executable) + Linux/WSL 문서 | `cbfc89c` |
+| 추가 | **GENUT 출력 실시간 스트리밍 로그** | `553a44c` |
+| 추가 | 로그 뷰어 **증분(since) 폴링** | `7d189f9` |
+| 추가 | **전체 진행 로그 파일 + 실행 중 다운로드** | `5e73e5e` |
 
 ---
 
@@ -188,6 +196,13 @@ migrations/              # Alembic (env.py + versions/)
 - **CLI `serve`**: 단일 Typer 명령이라 서브커맨드 인식 실패 → 콜백 추가(`ed16afc`).
 - **BOM 비내성**(중요): PowerShell `Set-Content -Encoding utf8`이 BOM을 붙여 `json.loads` 실패 → 전 파일 excluded → file_list 빈 채로 생성(테스트 0). `compile_db_service`·fake를 `utf-8-sig`로 수정 + 회귀 테스트(`a854825`). 실 Windows compile_commands.json도 BOM이 흔하므로 유효한 견고성 개선.
 - **스케줄러 루프 비효율**: "배치 전체 완료까지 대기 후 claim" → 첫 tick에 1개만 잡히면 단독 실행으로 워커 유휴. **비차단 디스패치**로 개선(`a854825`).
+- **requirements 한글 주석**: 새 venv의 기본 pip가 cp949로 디코딩하다 실패 → ASCII 주석으로 수정(`090ce96`). 클린 클론에서 전 과정 재현·검증.
+- **테스트의 `python` 하드코딩**: Linux/WSL(`python3`)에서 runner 테스트 실패 → `sys.executable` 사용(`cbfc89c`).
+
+### 12.4 작업 로그(실시간·전체·다운로드)
+- 단계별 로그를 남긴다: `[schedule]`→`[clone]`/`[patch]`→`[prepare]`(workspace·compile-db·out 경로, **file-list 내용**, **`.env` 내용·키 마스킹**)→`[run] $실제 명령`+출력 라인(스트리밍)→`[collect]`. DB(JobEvent, 실시간 뷰어)와 `job.log` 파일에 동시 기록.
+- **실시간(부분) 다운로드** `GET /api/jobs/{id}/log/download`: 라이브 검증에서 25초 작업이 다운로드 시점에 따라 **17줄 → 44줄**로 증가, 시작~`[collect]`까지 포함. `.env`는 `DS_ASSIST_CREDENTIAL_KEY=********`로 마스킹(실제 키 `demo-key` 비노출).
+- 로그 뷰어는 마지막 이벤트 id 이후(`?since=`)만 받아 누적, 종료(done/failed) 시 폴링 중단 + 자동 스크롤.
 
 ---
 
