@@ -77,6 +77,34 @@ def test_pipeline_reaches_done(
     assert glob.glob(str(workspace / f"job_{job.id}" / "product" / "tests" / "generated" / "test_*"))
 
 
+def test_pipeline_persistent_code_path_preserves_generated(
+    db_session, make_virtual_product, fake_genut_repo, workspace, tmp_path
+):
+    vp = make_virtual_product("e2e-cp", mode="cpp", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product = _make_product(db_session, vp)
+    code_dir = tmp_path / "persist_e2e"
+    product.code_path = str(code_dir)
+    db_session.commit()
+    _make_genut(db_session, "w-cp", fake_genut_repo)
+
+    # 1차: 실제 스케줄러로 통과 → 영속 경로에 테스트 생성
+    job1 = job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+    assert run_pending(db_session) == 1
+    db_session.expire_all()
+    assert db_session.get(Job, job1.id).status == JobStatus.DONE.value
+    out = code_dir / "tests" / "generated"
+    assert glob.glob(str(out / "test_*"))
+
+    # 이전 생성물 모사(untracked) 후 2차 실행
+    keep = out / "keepme_Test.cpp"
+    keep.write_text("// previously generated\n", encoding="utf-8")
+    job2 = job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+    assert run_pending(db_session) == 1
+    db_session.expire_all()
+    assert db_session.get(Job, job2.id).status == JobStatus.DONE.value
+    assert keep.is_file()  # 제자리 업데이트 → 보존됨
+
+
 def test_failure_does_not_block_other_products(
     db_session, make_virtual_product, fake_genut_repo, workspace
 ):
