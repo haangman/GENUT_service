@@ -1,5 +1,6 @@
-# GENUT_service 런타임 의존성
-# (pyproject.toml [project.dependencies]와 동기화. 정식 설치는 `pip install -e .` 권장)
+# GENUT_service runtime dependencies
+# (kept in sync with pyproject.toml [project.dependencies];
+#  `pip install -e .` is the canonical install)
 
 fastapi>=0.110
 uvicorn[standard]>=0.27
@@ -10,5 +11,5 @@ pydantic-settings>=2.2
 python-dotenv>=1.0
 typer>=0.12
 
-# Postgres를 사용할 경우 주석 해제 (기본 DB는 SQLite)
+# Uncomment to use PostgreSQL (default DB is SQLite):
 # psycopg[binary]>=3.1
