@@ -58,6 +58,24 @@ def test_duplicate_name_conflict(client: TestClient) -> None:
     assert client.post("/api/genuts", json=_payload("dup")).status_code == 409
 
 
+def test_user_id_round_trip_and_optional(client: TestClient, db_session: Session) -> None:
+    body = client.post("/api/genuts", json=_payload("uid", ds_assist_user_id="user-42")).json()
+    assert body["ds_assist_user_id"] == "user-42"
+    # 미지정/빈 값 → None
+    assert client.post("/api/genuts", json=_payload("uid-none")).json()["ds_assist_user_id"] is None
+    assert (
+        client.post("/api/genuts", json=_payload("uid-empty", ds_assist_user_id="  ")).json()[
+            "ds_assist_user_id"
+        ]
+        is None
+    )
+    # 수정으로 변경
+    gid = body["id"]
+    client.put(f"/api/genuts/{gid}", json={"ds_assist_user_id": "user-99"})
+    db_session.expire_all()
+    assert db_session.get(GenutInstance, gid).ds_assist_user_id == "user-99"
+
+
 def test_code_path_round_trip(client: TestClient) -> None:
     body = client.post("/api/genuts", json=_payload("g-cp", code_path="genut/checkout")).json()
     assert body["code_path"] == "genut/checkout"

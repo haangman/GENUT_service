@@ -17,6 +17,7 @@ type TextFieldName =
 const TEXT_FIELDS: { name: TextFieldName; label: string }[] = [
   { name: 'name', label: '이름' },
   { name: 'product_code', label: '프로덕트 ID' },
+  { name: 'code_path', label: '코드 저장 경로 (선택, 절대/상대)' },
   { name: 'git_url', label: 'Git URL' },
   { name: 'git_ref', label: 'Git ref' },
   { name: 'compile_db_rel', label: 'compile_commands.json 폴더(상대)' },
@@ -24,7 +25,6 @@ const TEXT_FIELDS: { name: TextFieldName; label: string }[] = [
   { name: 'cmake_configure_cmd', label: 'CMAKE_CONFIGURE_CMD' },
   { name: 'cmake_build_cmd', label: 'CMAKE_BUILD_CMD' },
   { name: 'test_run_cmd', label: 'TEST_RUN_CMD' },
-  { name: 'code_path', label: '코드 저장 경로 (선택, 절대/상대)' },
 ]
 
 const inputClass = 'mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm'

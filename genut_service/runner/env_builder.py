@@ -12,6 +12,7 @@ def build_env(product: Product, genut: GenutInstance) -> dict[str, str]:
     return {
         "TEST_GENERATION_MODE": product.test_generation_mode,
         "DS_ASSIST_CREDENTIAL_KEY": genut.ds_assist_credential_key,
+        "DS_ASSIST_USER_ID": genut.ds_assist_user_id or "",
         "DS_ASSIST_SEND_SYSTEM_NAME": genut.ds_assist_send_system_name,
         "CMAKE_CONFIGURE_CMD": product.cmake_configure_cmd,
         "CMAKE_BUILD_CMD": product.cmake_build_cmd,

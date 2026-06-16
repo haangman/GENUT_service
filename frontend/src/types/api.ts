@@ -45,6 +45,7 @@ export interface Genut {
   repo_url: string
   repo_ref: string
   ds_assist_send_system_name: string
+  ds_assist_user_id: string | null
   max_attempts: number
   run_command: string
   enabled: boolean
@@ -59,6 +60,7 @@ export interface GenutCreate {
   repo_ref: string
   ds_assist_credential_key: string
   ds_assist_send_system_name: string
+  ds_assist_user_id?: string
   max_attempts: number
   run_command: string
   enabled: boolean

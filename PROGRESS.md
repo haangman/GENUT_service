@@ -19,7 +19,7 @@
 
 - **CLI 옵션**: `--file-list`(절대경로 txt, 내부 소스도 절대경로) · `--compile-db-path`(compile_commands.json 폴더 절대경로) · `--out-test-folder-path`(절대경로) · `--max-attempts`(기본 10) · `--debug` · `--enable-assure` · `--function-name`(선택)
 - **동작**: 함수마다 여러 테스트를 한 번에 생성, **positive:negative = 50:50**. 생성 테스트를 프로젝트에 통합 후 configure→build→test 실행, 에러를 max-attempts까지 자가 수정.
-- **.env**: `TEST_GENERATION_MODE`(c|cpp|kunit) · `DS_ASSIST_CREDENTIAL_KEY`(LLM API 키) · `DS_ASSIST_SEND_SYSTEM_NAME` · `CMAKE_CONFIGURE_CMD` · `CMAKE_BUILD_CMD` · `TEST_RUN_CMD`
+- **.env**: `TEST_GENERATION_MODE`(c|cpp|kunit) · `DS_ASSIST_CREDENTIAL_KEY`(LLM API 키) · `DS_ASSIST_USER_ID` · `DS_ASSIST_SEND_SYSTEM_NAME` · `CMAKE_CONFIGURE_CMD` · `CMAKE_BUILD_CMD` · `TEST_RUN_CMD`
 
 > 로컬 `Downloads\GENUT\GENUT`(GTest 스킬)과는 **다른** 도구다.
 
@@ -128,7 +128,7 @@ migrations/              # Alembic (env.py + versions/)
 - Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches, +`code_path`: 코드 영속 경로 선택·절대/상대)
 - Files: `GET /products/{id}/tree?path=`, `POST /products/{id}/compile-check {files}` → `{included,excluded}`
 - Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹)
-- GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`code_path` 선택)
+- GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`ds_assist_user_id`·`code_path` 선택)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
 - 정적: 비-API 경로는 `frontend/dist/index.html`로 SPA fallback
 

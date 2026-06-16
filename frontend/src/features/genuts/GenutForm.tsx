@@ -41,6 +41,13 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
       </div>
 
       <div>
+        <label htmlFor="code_path" className="text-sm font-medium">
+          코드 저장 경로 (선택, 절대/상대)
+        </label>
+        <input id="code_path" className={inputClass} {...register('code_path')} />
+      </div>
+
+      <div>
         <label htmlFor="repo_url" className="text-sm font-medium">
           GENUT repo URL
         </label>
@@ -78,6 +85,17 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
       </div>
 
       <div>
+        <label htmlFor="ds_assist_user_id" className="text-sm font-medium">
+          DS_ASSIST_USER_ID
+        </label>
+        <input
+          id="ds_assist_user_id"
+          className={inputClass}
+          {...register('ds_assist_user_id')}
+        />
+      </div>
+
+      <div>
         <label htmlFor="ds_assist_send_system_name" className="text-sm font-medium">
           DS_ASSIST_SEND_SYSTEM_NAME
         </label>
@@ -110,13 +128,6 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
           실행 명령 (run_command)
         </label>
         <input id="run_command" className={inputClass} {...register('run_command')} />
-      </div>
-
-      <div>
-        <label htmlFor="code_path" className="text-sm font-medium">
-          코드 저장 경로 (선택, 절대/상대)
-        </label>
-        <input id="code_path" className={inputClass} {...register('code_path')} />
       </div>
 
       <button

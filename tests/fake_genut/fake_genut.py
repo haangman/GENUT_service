@@ -139,7 +139,12 @@ def main(argv: list[str] | None = None) -> None:
         "enable_assure": args.enable_assure,
         "env_seen": {
             key: env.get(key)
-            for key in ("TEST_GENERATION_MODE", "DS_ASSIST_SEND_SYSTEM_NAME", "TEST_RUN_CMD")
+            for key in (
+                "TEST_GENERATION_MODE",
+                "DS_ASSIST_SEND_SYSTEM_NAME",
+                "DS_ASSIST_USER_ID",
+                "TEST_RUN_CMD",
+            )
         },
         "file_list_seen": file_list,
         "compile_db_seen": args.compile_db_path,

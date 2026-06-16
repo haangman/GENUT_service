@@ -13,6 +13,7 @@ function genut(id = 1, name = 'genut-a') {
     repo_url: 'https://example.com/genut.git',
     repo_ref: 'main',
     ds_assist_send_system_name: 'sys-A',
+    ds_assist_user_id: null,
     max_attempts: 10,
     run_command: 'python -m genut',
     enabled: true,

@@ -9,6 +9,7 @@ const VALID: GenutFormValues = {
   repo_url: 'https://example.com/genut.git',
   repo_ref: 'main',
   ds_assist_credential_key: 'secret',
+  ds_assist_user_id: 'user-1',
   ds_assist_send_system_name: 'sys-A',
   max_attempts: 10,
   run_command: 'python -m genut',
@@ -32,6 +33,12 @@ describe('GenutForm', () => {
     const values = onSubmit.mock.calls[0][0]
     expect(values.name).toBe('g1')
     expect(values.ds_assist_credential_key).toBe('secret')
+    expect(values.ds_assist_user_id).toBe('user-1')
     expect(values.max_attempts).toBe(10)
+  })
+
+  it('renders the DS_ASSIST_USER_ID input', () => {
+    render(<GenutForm onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('DS_ASSIST_USER_ID')).toBeInTheDocument()
   })
 })

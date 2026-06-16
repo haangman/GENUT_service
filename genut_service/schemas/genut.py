@@ -14,11 +14,19 @@ def _norm_code_path(value: str | None) -> str | None:
     return normalized or None
 
 
+def _empty_to_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 class GenutBase(BaseModel):
     name: str
     repo_url: str
     repo_ref: str = "main"
     ds_assist_send_system_name: str
+    ds_assist_user_id: str | None = None
     max_attempts: int = Field(default=10, ge=1)
     run_command: str = "python -m genut"
     enabled: bool = True
@@ -28,6 +36,11 @@ class GenutBase(BaseModel):
     @classmethod
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
+
+    @field_validator("ds_assist_user_id")
+    @classmethod
+    def _normalize_user_id(cls, value: str | None) -> str | None:
+        return _empty_to_none(value)
 
 
 class GenutCreate(GenutBase):
@@ -39,6 +52,7 @@ class GenutUpdate(BaseModel):
     repo_url: str | None = None
     repo_ref: str | None = None
     ds_assist_send_system_name: str | None = None
+    ds_assist_user_id: str | None = None
     # 미지정/None이면 기존 값을 유지(write-only)
     ds_assist_credential_key: str | None = None
     max_attempts: int | None = Field(default=None, ge=1)
@@ -50,6 +64,11 @@ class GenutUpdate(BaseModel):
     @classmethod
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
+
+    @field_validator("ds_assist_user_id")
+    @classmethod
+    def _normalize_user_id(cls, value: str | None) -> str | None:
+        return _empty_to_none(value)
 
 
 class GenutRead(GenutBase):

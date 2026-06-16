@@ -37,6 +37,7 @@ def _setup(db_session: Session, vp: dict, genut_repo: dict, file_list, function_
         run_command=genut_repo["run_command"],
         ds_assist_credential_key="secret",
         ds_assist_send_system_name="sysX",
+        ds_assist_user_id="userX",
         max_attempts=5,
     )
     db_session.add_all([product, genut])
@@ -86,6 +87,7 @@ def test_runner_env_provenance(db_session, make_virtual_product, fake_genut_repo
     env_seen = _read_result(result)["env_seen"]
     assert env_seen["TEST_GENERATION_MODE"] == "cpp"
     assert env_seen["DS_ASSIST_SEND_SYSTEM_NAME"] == "sysX"
+    assert env_seen["DS_ASSIST_USER_ID"] == "userX"
     assert env_seen["TEST_RUN_CMD"] == "echo test"
 
 

@@ -103,6 +103,8 @@ class GenutInstance(TimestampMixin, Base):
 
     ds_assist_credential_key: Mapped[str] = mapped_column(String(1024))
     ds_assist_send_system_name: Mapped[str] = mapped_column(String(255))
+    # DS_ASSIST_USER_ID(.env). 기존 행 호환을 위해 nullable.
+    ds_assist_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     max_attempts: Mapped[int] = mapped_column(Integer, default=10)
     run_command: Mapped[str] = mapped_column(String(1024), default="python -m genut")
