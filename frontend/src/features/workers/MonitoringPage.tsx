@@ -162,16 +162,23 @@ export function JobLogs({
 
 function JobHistory() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
+  const [canceling, setCanceling] = useState<Set<number>>(new Set())
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['jobs', 'history'],
     queryFn: () => listJobs({ page_size: 50 }),
-    refetchInterval: 5000,
+    refetchInterval: 2000, // 강제 종료 후 상태(canceled) 반영을 빠르게 보이도록
   })
   const cancelMut = useMutation({
     mutationFn: (jobId: number) => cancelJob(jobId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs', 'history'] }),
+    onError: () =>
+      window.alert('강제 종료 요청에 실패했습니다. 페이지를 새로고침(Ctrl+Shift+R) 후 다시 시도하세요.'),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs', 'history'] }),
   })
+  const requestCancel = (jobId: number) => {
+    setCanceling((prev) => new Set(prev).add(jobId))
+    cancelMut.mutate(jobId)
+  }
   return (
     <section>
       <h2 className="mb-2 text-sm font-semibold">Job 이력</h2>
@@ -201,13 +208,13 @@ function JobHistory() {
                     <button
                       type="button"
                       className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      disabled={cancelMut.isPending}
+                      disabled={canceling.has(job.id)}
                       onClick={(event) => {
                         event.stopPropagation()
-                        cancelMut.mutate(job.id)
+                        requestCancel(job.id)
                       }}
                     >
-                      강제 종료
+                      {canceling.has(job.id) ? '종료 중…' : '강제 종료'}
                     </button>
                   ) : null}
                 </td>
