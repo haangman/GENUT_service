@@ -69,8 +69,9 @@ def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) 
         ev("venv", "info", f"기존 .venv 재사용: {executor.to_exec_path(venv_dir)}")
     else:
         ev("venv", "info", f".venv 생성: {executor.to_exec_path(venv_dir)}")
+        # --clear: 잔존/부분 생성 디렉터리가 있어도 깨끗이 다시 만든다(견고성).
         res = executor.run(
-            [executor.base_python(), "-m", "venv", executor.to_exec_path(venv_dir)],
+            [executor.base_python(), "-m", "venv", "--clear", executor.to_exec_path(venv_dir)],
             genut_dir,
             timeout,
             on_line=on_line,

@@ -271,6 +271,11 @@ def test_runner_venv_reused_on_second_run(
     )
     assert r1.success
     assert any("생성" in m and ".venv" in m for m in ev1)
+    # ensure_checkout(영속 code_path) 경로에서도 git log가 emit된다
+    assert any("GENUT git log" in m for m in ev1)
+    # 디스크에 venv 표식이 실제로 생성됨
+    persist_venv = tmp_path / "genut_persist" / ".venv" / "pyvenv.cfg"
+    assert persist_venv.is_file()
 
     job2 = Job(product_id=product.id, genut_instance_id=genut.id, file_list=["src/a.cpp"])
     db_session.add(job2)
@@ -298,10 +303,11 @@ def test_runner_emits_git_log(db_session, make_virtual_product, fake_genut_repo,
         on_event=lambda phase, level, msg: events.append((phase, msg)),
     )
     msgs = [m for _, m in events]
-    assert any("프로덕트 git log" in m for m in msgs)
-    assert any("GENUT git log" in m for m in msgs)
-    # 픽스처가 "init" 메시지로 커밋하므로 로그 본문에 포함된다
-    assert any("git log" in m and "init" in m for m in msgs)
+    # 프로덕트·GENUT git log 메시지를 각각 찾아 본문(커밋 subject "init")을 직접 검증
+    prod_log = next(m for m in msgs if m.startswith("프로덕트 git log:"))
+    genut_log = next(m for m in msgs if m.startswith("GENUT git log:"))
+    assert "init" in prod_log
+    assert "init" in genut_log
 
 
 def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
