@@ -214,6 +214,21 @@ def test_prepare_venv_skips_install_without_requirements(tmp_path) -> None:
     assert len(ex.calls) == 1  # venv 생성만, pip install 없음
 
 
+def test_prepare_venv_reuses_existing(tmp_path) -> None:
+    genut_dir = tmp_path / "genut"
+    genut_dir.mkdir()
+    # 이미 만들어진 venv 표식(pyvenv.cfg)
+    (genut_dir / ".venv").mkdir()
+    (genut_dir / ".venv" / "pyvenv.cfg").write_text("home = x\n", encoding="utf-8")
+    (genut_dir / "requirements.txt").write_text("# none\n", encoding="utf-8")
+    ex = _RecordingExecutor()
+    genut_runner._prepare_venv(ex, genut_dir, timeout=60, ev=lambda *a: None, stream=False)
+    # venv 생성 호출이 없어야 한다(재사용)
+    assert all(not (len(c) >= 3 and c[1] == "-m" and c[2] == "venv") for c in ex.calls)
+    # requirements 설치는 여전히 수행
+    assert any(c[1:4] == ["-m", "pip", "install"] for c in ex.calls)
+
+
 def test_prepare_venv_raises_on_failure(tmp_path) -> None:
     genut_dir = tmp_path / "genut"
     genut_dir.mkdir()
@@ -238,6 +253,36 @@ def test_runner_venv_setup_creates_venv_and_runs(
     assert result.success
     venv_dir = tmp_path / f"job_{job.id}" / "genut" / ".venv"
     assert venv_dir.is_dir()  # 가상환경이 생성됨
+
+
+def test_runner_venv_reused_on_second_run(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """영속 경로의 .venv는 1차에 생성되고, 2차에는 재사용된다(재생성 안 함)."""
+    vp = make_virtual_product("venvreuse", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    genut.code_path = str(tmp_path / "genut_persist")  # 영속 → 같은 genut_dir 재사용
+    db_session.commit()
+
+    ev1: list[str] = []
+    r1 = genut_runner.run(
+        job, product, genut, workspace_root=str(tmp_path), use_venv=True,
+        on_event=lambda p, l, m: ev1.append(m),
+    )
+    assert r1.success
+    assert any("생성" in m and ".venv" in m for m in ev1)
+
+    job2 = Job(product_id=product.id, genut_instance_id=genut.id, file_list=["src/a.cpp"])
+    db_session.add(job2)
+    db_session.commit()
+    ev2: list[str] = []
+    r2 = genut_runner.run(
+        job2, product, genut, workspace_root=str(tmp_path), use_venv=True,
+        on_event=lambda p, l, m: ev2.append(m),
+    )
+    assert r2.success
+    assert any("기존 .venv 재사용" in m for m in ev2)
+    assert not any("재사용" not in m and "생성" in m and ".venv" in m for m in ev2)
 
 
 def test_runner_emits_git_log(db_session, make_virtual_product, fake_genut_repo, tmp_path):

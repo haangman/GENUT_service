@@ -64,15 +64,19 @@ def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) 
     venv_python = executor.venv_python(venv_dir)
     on_line = (lambda line: ev("venv", "info", line)) if stream else None
 
-    ev("venv", "info", f".venv 생성/갱신: {executor.to_exec_path(venv_dir)}")
-    res = executor.run(
-        [executor.base_python(), "-m", "venv", executor.to_exec_path(venv_dir)],
-        genut_dir,
-        timeout,
-        on_line=on_line,
-    )
-    if not res["success"]:
-        raise VenvError(f".venv 생성 실패: {(res.get('stderr') or res.get('stdout') or '')[:500]}")
+    # 이미 만들어진 venv면(루트의 pyvenv.cfg로 판단, OS 무관) 재생성하지 않고 재사용한다.
+    if (venv_dir / "pyvenv.cfg").is_file():
+        ev("venv", "info", f"기존 .venv 재사용: {executor.to_exec_path(venv_dir)}")
+    else:
+        ev("venv", "info", f".venv 생성: {executor.to_exec_path(venv_dir)}")
+        res = executor.run(
+            [executor.base_python(), "-m", "venv", executor.to_exec_path(venv_dir)],
+            genut_dir,
+            timeout,
+            on_line=on_line,
+        )
+        if not res["success"]:
+            raise VenvError(f".venv 생성 실패: {(res.get('stderr') or res.get('stdout') or '')[:500]}")
 
     req = genut_dir / "requirements.txt"
     if req.is_file():

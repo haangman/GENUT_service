@@ -114,7 +114,7 @@ migrations/              # Alembic (env.py + versions/)
 4. executor 선택(Host=항등 경로, **Docker=컨테이너 경로 매핑**)
 5. 상대→절대(executor 경로공간) 변환, included만 `filelist.txt`에 절대경로로 기록
 6. 준비 내용 로그(`on_event`): workspace·compile-db·out 경로, **file-list 내용**, **`.env` 내용(비밀 키 값 마스킹)**, 실제 실행 명령
-7. **(옵션) GENUT 가상환경 준비** — `genut_use_venv`(기본 True)면 GENUT 디렉터리에 `.venv` 생성(`python -m venv`) → `requirements.txt` 있으면 `pip install -r` → `run_command`의 선행 인터프리터(`python`류)를 venv python으로 치환(=venv 진입). 실패 시 `VenvError`로 job FAILED. executor가 OS별 python 경로 제공(Host=`sys.executable`/`Scripts|bin`, Docker=`python`/`bin`)
+7. **(옵션) GENUT 가상환경 준비** — `genut_use_venv`(기본 True)면 GENUT 디렉터리의 `.venv`를 준비. **이미 있으면(루트 `pyvenv.cfg`로 판단, OS 무관) 재생성하지 않고 재사용**, 없으면 `python -m venv`로 생성(영속 `code_path`면 다음 job에서 재사용됨) → `requirements.txt` 있으면 `pip install -r`(재사용 시에도 수행해 최신화) → `run_command`의 선행 인터프리터(`python`류)를 venv python으로 치환(=venv 진입). 실패 시 `VenvError`로 job FAILED. executor가 OS별 python 경로 제공(Host=`sys.executable`/`Scripts|bin`, Docker=`python`/`bin`)
 8. `run_command` 실행 — `on_event`가 있으면 **출력을 줄 단위로 스트리밍**(`subprocess_util.run_streaming`), 없으면 일괄 실행
 9. `out/result.json` 수집 → result_summary, 성공 판정(exit code + result.json status)
 
