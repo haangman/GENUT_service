@@ -85,20 +85,23 @@ def process_job(
             on_event=emit,
             on_process=on_process,
         )
-    except git_ops.PatchError as exc:
+    except Exception as exc:  # noqa: BLE001 - 어떤 예외든 job만 격리해 종료시킨다
+        # 강제 종료로 서브프로세스가 죽어 예외가 났을 수 있으니 취소를 우선 판정한다.
+        # (예: venv 단계에서 kill → VenvError. 이를 failed가 아니라 canceled로 마무리)
+        canceled = process_registry.is_canceled(job_id)
         process_registry.unregister(job_id)
-        emit(JobPhase.PATCH.value, "error", f"patch 실패: {exc}")
-        finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {exc}")
-        return
-    except git_ops.GitError as exc:
-        process_registry.unregister(job_id)
-        emit(JobPhase.CLONE.value, "error", f"git 실패: {exc}")
-        finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {exc}")
-        return
-    except Exception as exc:  # noqa: BLE001 - 어떤 예외든 job만 실패시키고 격리
-        process_registry.unregister(job_id)
-        emit(JobPhase.RUN.value, "error", f"실행 오류: {exc}")
-        finish_job(session, job_id, JobStatus.FAILED, error=str(exc))
+        if canceled:
+            emit(JobPhase.COLLECT.value, "error", "강제 종료됨 (사용자 요청)")
+            finish_job(session, job_id, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
+        elif isinstance(exc, git_ops.PatchError):
+            emit(JobPhase.PATCH.value, "error", f"patch 실패: {exc}")
+            finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {exc}")
+        elif isinstance(exc, git_ops.GitError):
+            emit(JobPhase.CLONE.value, "error", f"git 실패: {exc}")
+            finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {exc}")
+        else:
+            emit(JobPhase.RUN.value, "error", f"실행 오류: {exc}")
+            finish_job(session, job_id, JobStatus.FAILED, error=str(exc))
         return
 
     canceled = process_registry.is_canceled(job_id)

@@ -158,6 +158,27 @@ def test_worker_marks_canceled_job(
     assert db_session.get(Job, job.id).status == JobStatus.CANCELED.value
 
 
+def test_worker_marks_canceled_even_when_run_raises(
+    db_session, make_virtual_product, fake_genut_repo, workspace
+):
+    """취소로 서브프로세스가 죽어 예외가 나도(예: venv 단계) failed가 아니라 canceled로 끝난다."""
+    from genut_service.runner import process_registry, worker
+
+    product = _make_product(
+        db_session, make_virtual_product("cxl2", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    )
+    _make_genut(db_session, "w-cxl2", fake_genut_repo)
+    job = job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+
+    def fake_run(j, *_a, **_kw):
+        process_registry.cancel(j.id)  # 강제 종료 요청 상태에서
+        raise genut_runner.VenvError(".venv 생성 실패: killed")  # venv가 죽어 예외 발생
+
+    run_pending(db_session, process=lambda s, jid: worker.process_job(s, jid, runner_run=fake_run))
+    db_session.expire_all()
+    assert db_session.get(Job, job.id).status == JobStatus.CANCELED.value
+
+
 def test_failure_does_not_block_other_products(
     db_session, make_virtual_product, fake_genut_repo, workspace
 ):
