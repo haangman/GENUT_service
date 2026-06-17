@@ -48,7 +48,8 @@ class Product(TimestampMixin, Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True)
+    # 이름은 중복 허용(서로 다른 id·정보로 등록). 같은 이름끼리는 스케줄러가 병렬 실행을 막는다.
+    name: Mapped[str] = mapped_column(String(255))
     product_code: Mapped[str] = mapped_column(String(255))
     git_url: Mapped[str] = mapped_column(String(1024))
     git_ref: Mapped[str] = mapped_column(String(255), default="main")

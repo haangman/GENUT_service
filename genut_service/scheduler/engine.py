@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from genut_service.db.models import GenutInstance, Job, ProductLock
+from genut_service.db.models import GenutInstance, Job, Product, ProductLock
 from genut_service.enums import JobStatus, WorkerStatus
 from genut_service.scheduler.lock import release_lock, try_acquire_lock
 
@@ -40,21 +40,27 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
     if not idle_workers:
         return []
 
-    busy_products = set(session.scalars(select(ProductLock.product_id)))
-
-    candidates = session.scalars(
-        select(Job)
-        .where(Job.status == JobStatus.QUEUED.value)
-        .order_by(Job.priority.desc(), Job.submitted_at.asc(), Job.id.asc())
+    # 배타는 프로덕트 "이름" 기준이다. 같은 이름의 프로덕트(다른 id)끼리도 동시에 돌지 않는다.
+    busy_names = set(
+        session.scalars(
+            select(Product.name).join(ProductLock, ProductLock.product_id == Product.id)
+        )
     )
 
-    # 프로덕트가 비어있는(락 없는) 순서대로, 프로덕트당 1개씩 후보를 뽑는다
+    candidates = session.execute(
+        select(Job, Product.name)
+        .join(Product, Product.id == Job.product_id)
+        .where(Job.status == JobStatus.QUEUED.value)
+        .order_by(Job.priority.desc(), Job.submitted_at.asc(), Job.id.asc())
+    ).all()
+
+    # 락이 없는 이름부터, 같은 이름당 1개씩만 후보로 뽑는다
     eligible: list[Job] = []
-    seen_products = set(busy_products)
-    for job in candidates:
-        if job.product_id in seen_products:
+    seen_names = set(busy_names)
+    for job, name in candidates:
+        if name in seen_names:
             continue
-        seen_products.add(job.product_id)
+        seen_names.add(name)
         eligible.append(job)
 
     assignments: list[tuple[int, int]] = []

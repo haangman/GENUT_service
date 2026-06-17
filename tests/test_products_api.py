@@ -55,10 +55,14 @@ def test_parent_path_is_rejected(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
-def test_duplicate_name_conflict(client: TestClient) -> None:
-    assert client.post("/api/products", json=_payload("dup")).status_code == 201
-    resp = client.post("/api/products", json=_payload("dup"))
-    assert resp.status_code == 409
+def test_duplicate_name_allowed_with_different_id(client: TestClient) -> None:
+    # 같은 이름이라도 서로 다른 id(다른 정보)로 등록할 수 있다
+    a = client.post("/api/products", json=_payload("dup", product_code="P-A"))
+    b = client.post("/api/products", json=_payload("dup", product_code="P-B"))
+    assert a.status_code == 201, a.text
+    assert b.status_code == 201, b.text
+    assert a.json()["id"] != b.json()["id"]
+    assert a.json()["name"] == b.json()["name"] == "dup"
 
 
 def test_list_pagination(client: TestClient) -> None:

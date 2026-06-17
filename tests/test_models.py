@@ -57,13 +57,15 @@ def test_create_product_with_ordered_patches(db_session: Session) -> None:
     assert [p.name for p in loaded.patches] == ["first", "second"]
 
 
-def test_product_name_is_unique(db_session: Session) -> None:
-    db_session.add(_make_product("dup"))
+def test_product_name_allows_duplicates(db_session: Session) -> None:
+    # 이름 중복 허용: 서로 다른 id로 등록된다
+    a = _make_product("dup")
+    b = _make_product("dup")
+    db_session.add_all([a, b])
     db_session.commit()
-    db_session.add(_make_product("dup"))
-    with pytest.raises(IntegrityError):
-        db_session.commit()
-    db_session.rollback()
+    assert a.id != b.id
+    rows = db_session.scalars(select(Product).where(Product.name == "dup")).all()
+    assert len(rows) == 2
 
 
 def test_genut_instance_defaults(db_session: Session) -> None:

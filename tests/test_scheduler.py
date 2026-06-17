@@ -133,6 +133,26 @@ def test_failure_isolation(db_session: Session) -> None:
     assert (new_job.id, ) in [(jid,) for jid, _ in again]
 
 
+def test_same_name_products_are_mutually_exclusive(db_session: Session) -> None:
+    # 이름이 같은 두 프로덕트(다른 id)는 동시에 실행되지 않는다
+    p1 = _product(db_session, "SAME")
+    p2 = _product(db_session, "SAME")
+    assert p1.id != p2.id
+    _worker(db_session, "w1")
+    _worker(db_session, "w2")
+    _job(db_session, p1.id)
+    _job(db_session, p2.id)
+
+    assignments = claim_jobs(db_session)
+    assert len(assignments) == 1  # 같은 이름 → 동시에 1개만
+    assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 1
+
+    # 첫 job이 끝나면 같은 이름의 다른 프로덕트 job을 배정할 수 있다
+    finish_job(db_session, assignments[0][0], JobStatus.DONE)
+    again = claim_jobs(db_session)
+    assert len(again) == 1
+
+
 def test_disabled_worker_is_not_used(db_session: Session) -> None:
     product = _product(db_session, "P")
     _worker(db_session, "w1", enabled=False)

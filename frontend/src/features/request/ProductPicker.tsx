@@ -28,7 +28,7 @@ export function ProductPicker() {
         </option>
         {products.map((product) => (
           <option key={product.id} value={product.id}>
-            {product.name}
+            {product.name} (#{product.id})
           </option>
         ))}
       </select>
