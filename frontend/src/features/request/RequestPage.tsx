@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { FileTreePanel } from './FileTree'
 import { ProductPicker } from './ProductPicker'
@@ -8,6 +9,9 @@ import { useRequestBuilder } from './store'
 export function RequestPage() {
   const productId = useRequestBuilder((state) => state.productId)
   const lastSubmittedJobId = useRequestBuilder((state) => state.lastSubmittedJobId)
+
+  // 페이지를 떠날 때 요청 빌더를 초기화한다 → 테스트 요청 탭으로 다시 들어오면 항상 초기 모습.
+  useEffect(() => () => useRequestBuilder.getState().reset(), [])
 
   return (
     <div>

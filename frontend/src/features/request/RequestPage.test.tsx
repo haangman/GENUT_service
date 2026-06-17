@@ -19,4 +19,16 @@ describe('RequestPage', () => {
     expect(await screen.findByText('요청이 접수되었습니다. job #42')).toBeInTheDocument()
     expect(screen.getByText('프로덕트를 선택하세요.')).toBeInTheDocument()
   })
+
+  it('resets the builder when leaving the page (tab navigation)', () => {
+    useRequestBuilder.getState().setProduct(1, 'cpp')
+    useRequestBuilder.getState().addPaths(['src/a.cpp'])
+    useRequestBuilder.getState().completeSubmission(9)
+    const { unmount } = renderWithProviders(<RequestPage />)
+    unmount()
+    const state = useRequestBuilder.getState()
+    expect(state.productId).toBeNull()
+    expect(state.selected).toEqual([])
+    expect(state.lastSubmittedJobId).toBeNull()
+  })
 })
