@@ -59,6 +59,50 @@ python3 -m genut_service serve --host 127.0.0.1 --port 8000
 - **인코딩 함정 없음**: cp949 관련 문제(BOM/requirements 한글 주석)는 Windows-한국어 로케일 특유다. Linux(UTF-8)에선 발생하지 않고, git CRLF 경고도 없다.
 - 워크스페이스(`WORKSPACE_ROOT`)와 작업 디렉터리는 네이티브 Linux FS에 두자(도커 bind-mount 성능/정합성).
 
+## 코드 수정 후 웹페이지에 반영하기
+
+수정 대상(프론트/백엔드)에 따라 절차가 다르다. 핵심: 서버(`genut-service serve`)는 `frontend/dist`를
+**요청마다 디스크에서 읽어** SPA로 서빙하므로 **프론트 재빌드는 서버 재시작이 필요 없지만**,
+**백엔드(파이썬) 코드 변경은 서버를 재시작해야** 반영된다(uvicorn `--reload` 미사용 시).
+
+### A. 운영형 — 서버가 `dist`를 서빙(포트 8000 한 곳)
+
+프론트엔드(`frontend/src`) 수정:
+```bash
+npm --prefix ./frontend run build     # dist 재생성 (tsc 타입체크 + vite, 새 해시 번들)
+```
+- 서버 재시작 불필요. 브라우저에서 **강력 새로고침**(`Ctrl+Shift+R`)으로 캐시된 옛 번들을 무효화한다.
+
+백엔드(`genut_service/`) 수정:
+```bash
+# 서버를 멈추고(터미널 Ctrl+C) 다시 실행
+python -m genut_service serve --host 127.0.0.1 --port 8000
+#   또는 자동 재시작: --reload 로 띄워두면 .py 변경 시 자동 reload
+python -m genut_service serve --reload
+```
+- DB 모델/스키마를 바꿨다면 마이그레이션도 적용한다:
+```bash
+alembic revision --autogenerate -m "..."
+alembic upgrade head
+```
+
+### B. 개발형 — Vite 개발 서버(HMR, UI 작업에 권장)
+
+```bash
+python -m genut_service serve              # 터미널1: 백엔드 API (8000)
+npm --prefix ./frontend run dev            # 터미널2: Vite 개발 서버 (5173)
+```
+- 브라우저는 **http://localhost:5173** 접속. `frontend/src` 저장 시 **HMR로 자동 반영**(재빌드·새로고침 불필요). `/api` 호출은 5173→8000으로 프록시된다.
+- 백엔드 변경은 A와 동일하게 8000 서버를 재시작(또는 `--reload`)한다.
+
+| 수정 대상 | 운영형(A) | 개발형(B) |
+|-----------|-----------|-----------|
+| 프론트엔드 | `run build` → `Ctrl+Shift+R` | 저장 시 HMR 자동 반영 |
+| 백엔드 | 서버 재시작(또는 `--reload`) | 서버 재시작(또는 `--reload`) |
+| DB 모델 변경 | `alembic revision --autogenerate` → `upgrade head` | 동일 |
+
+> 반영 후에는 프로젝트 규칙대로 **관련 테스트(`pytest`, `npm --prefix ./frontend test`) 통과를 확인하고 영어로 커밋**한다.
+
 ## 마일스톤
 
 `M0` 스캐폴딩 → `M1` 데이터 모델 → `M2` 프로덕트 등록 → `M3` 파일트리/compile_commands 검사 → `M4` 요청 제출 → `M5` 스케줄러/동시성 → `M6` GENUT 등록 → `M7` runner+fake+가상프로덕트 → `M8` Docker → `M9` 모니터링 → `M10` prod 서빙/Postgres.
