@@ -22,8 +22,8 @@ describe('ProductPicker', () => {
     )
 
     renderWithProviders(<ProductPicker />)
-    // 같은 이름(dup)이지만 id로 구분되어 두 옵션이 모두 표시된다
-    expect(await screen.findByRole('option', { name: 'dup (#1)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'dup (#2)' })).toBeInTheDocument()
+    // 같은 이름(dup)이지만 "이름(아이디)"로 구분되어 두 옵션이 모두 표시된다
+    expect(await screen.findByRole('option', { name: 'dup(1)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'dup(2)' })).toBeInTheDocument()
   })
 })
