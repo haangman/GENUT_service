@@ -52,3 +52,19 @@ def test_apply_patch_failure_raises(tmp_path: Path) -> None:
     _init_repo(repo)
     with pytest.raises(git_ops.PatchError):
         git_ops.apply_patch(str(repo), "this is not a valid diff\n")
+
+
+def test_recent_log_returns_commit_subjects(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "a.txt").write_text("one\ntwo\n", encoding="utf-8")
+    _git(["commit", "-am", "second commit"], repo)
+    out = git_ops.recent_log(repo)
+    assert "init" in out
+    assert "second commit" in out
+
+
+def test_recent_log_tolerates_non_repo(tmp_path: Path) -> None:
+    # git repo가 아니어도 예외 없이 안내 문자열을 반환한다
+    out = git_ops.recent_log(tmp_path)
+    assert "git log 조회 실패" in out

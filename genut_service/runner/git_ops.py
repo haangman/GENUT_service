@@ -66,6 +66,31 @@ def ensure_checkout(url: str, ref: str, dest: Path, timeout: int = 300) -> None:
     clone(url, ref, dest, timeout=timeout)
 
 
+def recent_log(repo_dir: str | Path, count: int = 5, timeout: int = 30) -> str:
+    """repo의 최근 커밋 로그(oneline)를 반환한다.
+
+    조회에 실패해도 예외를 던지지 않고 안내 문자열을 반환한다(로그 출력용 — job 실행을
+    막지 않는다). 형식: `<short-hash> <date> <author> <subject>`.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(repo_dir), "log", "-n", str(count),
+                "--pretty=format:%h %ad %an %s", "--date=short",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return f"(git log 조회 실패: {exc})"
+    if result.returncode == 0:
+        return result.stdout.strip() or "(커밋 없음)"
+    return f"(git log 조회 실패: {(result.stderr or '').strip()[:200]})"
+
+
 def apply_patch(repo_dir: str, patch_text: str, timeout: int = 120) -> None:
     """unified diff 텍스트를 git apply로 적용한다(멱등). 실패 시 PatchError.
 

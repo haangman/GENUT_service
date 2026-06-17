@@ -240,6 +240,25 @@ def test_runner_venv_setup_creates_venv_and_runs(
     assert venv_dir.is_dir()  # 가상환경이 생성됨
 
 
+def test_runner_emits_git_log(db_session, make_virtual_product, fake_genut_repo, tmp_path):
+    """clone/업데이트 단계에서 프로덕트·GENUT의 git log가 job 로그로 emit된다."""
+    vp = make_virtual_product("gitlog", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    events: list[tuple[str, str]] = []
+    genut_runner.run(
+        job,
+        product,
+        genut,
+        workspace_root=str(tmp_path),
+        on_event=lambda phase, level, msg: events.append((phase, msg)),
+    )
+    msgs = [m for _, m in events]
+    assert any("프로덕트 git log" in m for m in msgs)
+    assert any("GENUT git log" in m for m in msgs)
+    # 픽스처가 "init" 메시지로 커밋하므로 로그 본문에 포함된다
+    assert any("git log" in m and "init" in m for m in msgs)
+
+
 def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     vp = make_virtual_product("stream", sources={"src/a.cpp": "// @genut-fn: foo\n"})
     product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])

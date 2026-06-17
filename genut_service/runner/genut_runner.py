@@ -139,6 +139,7 @@ def run(
         product_dir = job_root / "product"
         _ev("clone", "info", f"프로덕트 clone(임시): {product.git_url} ({product.git_ref})")
         git_ops.clone(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
+    _ev("clone", "info", f"프로덕트 git log:\n{git_ops.recent_log(product_dir, timeout=git_timeout)}")
     for patch in sorted(product.patches, key=lambda p: p.order_index):
         _ev("patch", "info", f"patch 적용: {patch.name}")
         git_ops.apply_patch(str(product_dir), patch.content, timeout=git_timeout)
@@ -152,6 +153,7 @@ def run(
         genut_dir = job_root / "genut"
         _ev("clone", "info", f"GENUT clone(임시): {genut.repo_url} ({genut.repo_ref})")
         git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
+    _ev("clone", "info", f"GENUT git log:\n{git_ops.recent_log(genut_dir, timeout=git_timeout)}")
 
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
     env_dict = env_builder.build_env(product, genut)

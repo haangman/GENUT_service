@@ -108,8 +108,8 @@ migrations/              # Alembic (env.py + versions/)
 ## 7. Runner / 실행
 
 `runner/genut_runner.run(job, product, genut, *, workspace_root, debug, enable_assure, ..., make_executor)`:
-1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용** → `out_tests_rel` 아래 생성 테스트(untracked) 보존; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
-2. GENUT 코드 준비 — `code_path` 있으면 영속 경로 업데이트, 없으면 `job_<id>/genut`에 임시 clone
+1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용** → `out_tests_rel` 아래 생성 테스트(untracked) 보존; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. clone/업데이트 후 **`git log`(최근 커밋)를 job 로그로 출력**(`git_ops.recent_log`, 실패해도 무시). 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
+2. GENUT 코드 준비 — `code_path` 있으면 영속 경로 업데이트, 없으면 `job_<id>/genut`에 임시 clone. 역시 clone/업데이트 후 **`git log`를 job 로그로 출력**
 3. `.env` 조립(`env_builder`: DS_ASSIST_*는 GENUT, CMAKE_*·TEST_RUN_CMD·MODE는 프로덕트)
 4. executor 선택(Host=항등 경로, **Docker=컨테이너 경로 매핑**)
 5. 상대→절대(executor 경로공간) 변환, included만 `filelist.txt`에 절대경로로 기록
