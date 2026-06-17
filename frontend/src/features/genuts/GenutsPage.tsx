@@ -10,6 +10,7 @@ function toFormValues(genut: Genut): Partial<GenutFormValues> {
   return {
     name: genut.name,
     repo_url: genut.repo_url,
+    assure_repo_url: genut.assure_repo_url ?? '',
     repo_ref: genut.repo_ref,
     ds_assist_credential_key: '', // 비워두면 기존 값 유지
     ds_assist_user_id: genut.ds_assist_user_id ?? '',
@@ -45,15 +46,21 @@ export function GenutsPage() {
   const handleSubmit = (values: GenutFormValues) => {
     const code_path = values.code_path.trim() || undefined
     const ds_assist_user_id = values.ds_assist_user_id.trim() || undefined
+    const assure_repo_url = values.assure_repo_url.trim() || undefined
     if (editing) {
-      const data: Record<string, unknown> = { ...values, code_path, ds_assist_user_id }
+      const data: Record<string, unknown> = {
+        ...values,
+        code_path,
+        ds_assist_user_id,
+        assure_repo_url,
+      }
       // 키를 비워두면 전송하지 않아 기존 값을 유지한다
       if (!values.ds_assist_credential_key) delete data.ds_assist_credential_key
       saveMut.mutate({ id: editing.id, data })
     } else {
       saveMut.mutate({
         id: null,
-        data: { ...values, code_path, ds_assist_user_id, enabled: true },
+        data: { ...values, code_path, ds_assist_user_id, assure_repo_url, enabled: true },
       })
     }
   }

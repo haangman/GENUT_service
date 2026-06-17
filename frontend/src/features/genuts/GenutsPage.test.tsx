@@ -12,6 +12,7 @@ function genut(id = 1, name = 'genut-a') {
     name,
     repo_url: 'https://example.com/genut.git',
     repo_ref: 'main',
+    assure_repo_url: null,
     ds_assist_send_system_name: 'sys-A',
     ds_assist_user_id: null,
     max_attempts: 10,

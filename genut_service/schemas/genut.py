@@ -25,6 +25,7 @@ class GenutBase(BaseModel):
     name: str
     repo_url: str
     repo_ref: str = "main"
+    assure_repo_url: str | None = None
     ds_assist_send_system_name: str
     ds_assist_user_id: str | None = None
     max_attempts: int = Field(default=10, ge=1)
@@ -37,9 +38,9 @@ class GenutBase(BaseModel):
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
 
-    @field_validator("ds_assist_user_id")
+    @field_validator("ds_assist_user_id", "assure_repo_url")
     @classmethod
-    def _normalize_user_id(cls, value: str | None) -> str | None:
+    def _normalize_optional_text(cls, value: str | None) -> str | None:
         return _empty_to_none(value)
 
 
@@ -51,6 +52,7 @@ class GenutUpdate(BaseModel):
     name: str | None = None
     repo_url: str | None = None
     repo_ref: str | None = None
+    assure_repo_url: str | None = None
     ds_assist_send_system_name: str | None = None
     ds_assist_user_id: str | None = None
     # 미지정/None이면 기존 값을 유지(write-only)
@@ -65,9 +67,9 @@ class GenutUpdate(BaseModel):
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
 
-    @field_validator("ds_assist_user_id")
+    @field_validator("ds_assist_user_id", "assure_repo_url")
     @classmethod
-    def _normalize_user_id(cls, value: str | None) -> str | None:
+    def _normalize_optional_text(cls, value: str | None) -> str | None:
         return _empty_to_none(value)
 
 

@@ -160,6 +160,18 @@ def run(
         git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
     _ev("clone", "info", f"GENUT git log:\n{git_ops.recent_log(genut_dir, timeout=git_timeout)}")
 
+    # 2-1) ASSURE 코드 확보 (선택) — GENUT 코드와 같은 depth(형제 디렉터리)에 받는다.
+    #      GENUT가 영속(code_path)이면 ASSURE도 영속(제자리 업데이트), 임시면 임시 clone.
+    if genut.assure_repo_url:
+        assure_dir = genut_dir.parent / f"{genut_dir.name}_assure"
+        if genut.code_path:
+            _ev("clone", "info", f"ASSURE 업데이트(영속): {assure_dir} ← {genut.assure_repo_url}")
+            git_ops.ensure_checkout(genut.assure_repo_url, "", assure_dir, timeout=git_timeout)
+        else:
+            _ev("clone", "info", f"ASSURE clone(임시): {assure_dir} ← {genut.assure_repo_url}")
+            git_ops.clone(genut.assure_repo_url, "", assure_dir, timeout=git_timeout)
+        _ev("clone", "info", f"ASSURE git log:\n{git_ops.recent_log(assure_dir, timeout=git_timeout)}")
+
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
     env_dict = env_builder.build_env(product, genut)
     env_builder.write_env_file(genut_dir / ".env", env_dict)

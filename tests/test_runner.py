@@ -290,6 +290,43 @@ def test_runner_venv_reused_on_second_run(
     assert not any("재사용" not in m and "생성" in m and ".venv" in m for m in ev2)
 
 
+def test_runner_clones_assure_at_same_depth(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """assure_repo_url가 있으면 ASSURE를 GENUT 코드와 같은 depth(형제)로 받고 git log를 남긴다."""
+    vp = make_virtual_product("assure", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    genut.assure_repo_url = fake_genut_repo["repo_url"]  # 아무 git repo면 충분
+    db_session.commit()
+
+    events: list[tuple[str, str]] = []
+    result = genut_runner.run(
+        job, product, genut, workspace_root=str(tmp_path),
+        on_event=lambda phase, level, msg: events.append((phase, msg)),
+    )
+    assert result.success
+    genut_dir = tmp_path / f"job_{job.id}" / "genut"
+    assure_dir = tmp_path / f"job_{job.id}" / "genut_assure"
+    assert (genut_dir / ".git").is_dir()
+    assert (assure_dir / ".git").is_dir()  # ASSURE가 받아짐
+    assert assure_dir.parent == genut_dir.parent  # GENUT와 같은 depth(형제)
+    assert any("ASSURE git log" in m for _, m in events)
+
+
+def test_runner_skips_assure_when_url_absent(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    vp = make_virtual_product("noassure", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])  # assure_repo_url 없음
+    events: list[tuple[str, str]] = []
+    genut_runner.run(
+        job, product, genut, workspace_root=str(tmp_path),
+        on_event=lambda phase, level, msg: events.append((phase, msg)),
+    )
+    assert not (tmp_path / f"job_{job.id}" / "genut_assure").exists()
+    assert not any("ASSURE" in m for _, m in events)
+
+
 def test_runner_uses_compile_dp_path_flag(
     db_session, make_virtual_product, fake_genut_repo, tmp_path
 ):

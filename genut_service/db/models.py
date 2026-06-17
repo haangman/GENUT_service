@@ -100,6 +100,8 @@ class GenutInstance(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), unique=True)
     repo_url: Mapped[str] = mapped_column(String(1024))
     repo_ref: Mapped[str] = mapped_column(String(255), default="main")
+    # ASSURE repo URL(선택). 지정 시 GENUT 코드와 같은 depth(형제 디렉터리)에 받아둔다.
+    assure_repo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     ds_assist_credential_key: Mapped[str] = mapped_column(String(1024))
     ds_assist_send_system_name: Mapped[str] = mapped_column(String(255))

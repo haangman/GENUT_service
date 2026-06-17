@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const genutFormSchema = z.object({
   name: z.string().min(1, '이름을 입력하세요'),
   repo_url: z.string().min(1, 'repo URL을 입력하세요'),
+  assure_repo_url: z.string(),
   repo_ref: z.string().min(1, 'repo ref를 입력하세요'),
   ds_assist_credential_key: z.string().min(1, 'API 키를 입력하세요'),
   ds_assist_user_id: z.string(),
@@ -22,6 +23,7 @@ export type GenutFormValues = z.infer<typeof genutFormSchema>
 export const EMPTY_GENUT_FORM: GenutFormValues = {
   name: '',
   repo_url: '',
+  assure_repo_url: '',
   repo_ref: 'main',
   ds_assist_credential_key: '',
   ds_assist_user_id: '',

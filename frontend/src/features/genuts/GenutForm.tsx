@@ -60,6 +60,13 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
       </div>
 
       <div>
+        <label htmlFor="assure_repo_url" className="text-sm font-medium">
+          ASSURE repo URL (선택)
+        </label>
+        <input id="assure_repo_url" className={inputClass} {...register('assure_repo_url')} />
+      </div>
+
+      <div>
         <label htmlFor="repo_ref" className="text-sm font-medium">
           repo ref
         </label>

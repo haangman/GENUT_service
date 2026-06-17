@@ -82,6 +82,21 @@ def test_code_path_round_trip(client: TestClient) -> None:
     assert client.post("/api/genuts", json=_payload("g-cp2")).json()["code_path"] is None
 
 
+def test_assure_repo_url_round_trip(client: TestClient) -> None:
+    body = client.post(
+        "/api/genuts", json=_payload("assure", assure_repo_url="https://example.com/assure.git")
+    ).json()
+    assert body["assure_repo_url"] == "https://example.com/assure.git"
+    # 미지정/빈 값 → None
+    assert client.post("/api/genuts", json=_payload("assure-none")).json()["assure_repo_url"] is None
+    assert (
+        client.post("/api/genuts", json=_payload("assure-empty", assure_repo_url="  ")).json()[
+            "assure_repo_url"
+        ]
+        is None
+    )
+
+
 def test_list_and_delete(client: TestClient) -> None:
     genut_id = client.post("/api/genuts", json=_payload()).json()["id"]
     listing = client.get("/api/genuts")

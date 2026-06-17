@@ -7,6 +7,7 @@ import type { GenutFormValues } from './genutSchema'
 const VALID: GenutFormValues = {
   name: 'g1',
   repo_url: 'https://example.com/genut.git',
+  assure_repo_url: '',
   repo_ref: 'main',
   ds_assist_credential_key: 'secret',
   ds_assist_user_id: 'user-1',
@@ -40,5 +41,10 @@ describe('GenutForm', () => {
   it('renders the DS_ASSIST_USER_ID input', () => {
     render(<GenutForm onSubmit={vi.fn()} />)
     expect(screen.getByLabelText('DS_ASSIST_USER_ID')).toBeInTheDocument()
+  })
+
+  it('renders the ASSURE repo URL input', () => {
+    render(<GenutForm onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('ASSURE repo URL (선택)')).toBeInTheDocument()
   })
 })
