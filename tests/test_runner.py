@@ -214,6 +214,27 @@ def test_prepare_venv_skips_install_without_requirements(tmp_path) -> None:
     assert len(ex.calls) == 1  # venv 생성만, pip install 없음
 
 
+def test_host_venv_python_stays_inside_venv(tmp_path) -> None:
+    """venv python 경로는 venv 디렉터리 안을 가리켜야 한다(symlink resolve 금지).
+
+    리눅스에서 .resolve()로 bin/python symlink를 따라가면 베이스 python(외부 관리)이 되어
+    pip가 externally-managed 오류를 낸다. 이 회귀를 방지한다.
+    """
+    import subprocess
+    import sys
+
+    from genut_service.runner.executors import HostExecutor
+
+    venv_dir = tmp_path / ".venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, capture_output=True)
+
+    vpy = HostExecutor().venv_python(venv_dir)
+    assert os.path.exists(vpy)
+    venv_abs = os.path.abspath(venv_dir)
+    # venv python은 venv 디렉터리 하위여야 한다(베이스로 빠지면 commonpath가 달라짐)
+    assert os.path.commonpath([os.path.abspath(vpy), venv_abs]) == venv_abs
+
+
 def test_prepare_venv_reuses_existing(tmp_path) -> None:
     genut_dir = tmp_path / "genut"
     genut_dir.mkdir()

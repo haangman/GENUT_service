@@ -26,9 +26,15 @@ class HostExecutor:
         return sys.executable
 
     def venv_python(self, venv_dir: Path | str) -> str:
-        """venv 안의 python 실행 경로(OS별 레이아웃)."""
+        """venv 안의 python 실행 경로(OS별 레이아웃).
+
+        **심볼릭 링크를 따라가지 않는다**(`os.path.abspath`, `resolve()` 아님). 리눅스에서
+        venv의 `bin/python`은 베이스 인터프리터로의 symlink인데, 이를 resolve하면 베이스
+        경로가 되어 pip가 venv가 아닌 베이스(외부 관리, PEP 668) 환경을 대상으로 실행돼
+        `externally-managed-environment` 오류가 난다. venv 경로 그대로 실행해야 venv가 활성화된다.
+        """
         sub = "Scripts/python.exe" if os.name == "nt" else "bin/python"
-        return str((Path(venv_dir) / sub).resolve())
+        return os.path.abspath(Path(venv_dir) / sub)
 
     def run(
         self,

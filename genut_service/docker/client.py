@@ -44,8 +44,12 @@ class DockerExecutor:
         return "python"
 
     def venv_python(self, venv_dir: Path | str) -> str:
-        """venv 안의 python 컨테이너 경로(리눅스 레이아웃)."""
-        return self.to_exec_path(Path(venv_dir) / "bin" / "python")
+        """venv 안의 python 컨테이너 경로(리눅스 레이아웃).
+
+        leaf(`bin/python`)는 컨테이너 베이스 python으로의 symlink이므로 resolve하면 안 된다
+        (호스트에서 relative_to 실패/베이스 환경 지목). 디렉터리 컨테이너 경로 + `/bin/python`로 만든다.
+        """
+        return f"{self.to_exec_path(venv_dir)}/bin/python"
 
     def run(
         self,
