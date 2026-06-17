@@ -290,6 +290,26 @@ def test_runner_venv_reused_on_second_run(
     assert not any("재사용" not in m and "생성" in m and ".venv" in m for m in ev2)
 
 
+def test_runner_uses_compile_dp_path_flag(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """GENUT CLI 플래그는 --compile-dp-path 다(--compile-db-path 아님)."""
+    vp = make_virtual_product("flag", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    events: list[tuple[str, str]] = []
+    result = genut_runner.run(
+        job,
+        product,
+        genut,
+        workspace_root=str(tmp_path),
+        on_event=lambda phase, level, msg: events.append((phase, msg)),
+    )
+    assert result.success  # fake도 --compile-dp-path를 요구하므로 성공해야 함
+    cmd = next(m for p, m in events if p == "run" and m.startswith("$ "))
+    assert "--compile-dp-path" in cmd
+    assert "--compile-db-path" not in cmd
+
+
 def test_runner_emits_git_log(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     """clone/업데이트 단계에서 프로덕트·GENUT의 git log가 job 로그로 emit된다."""
     vp = make_virtual_product("gitlog", sources={"src/a.cpp": "// @genut-fn: foo\n"})

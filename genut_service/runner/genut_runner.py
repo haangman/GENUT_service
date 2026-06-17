@@ -183,7 +183,7 @@ def run(
 
     # 준비 내용 로그 (실행 전 점검용)
     _ev("prepare", "info", f"workspace: {job_root}")
-    _ev("prepare", "info", f"compile-db-path: {executor.to_exec_path(compile_db_abs)}")
+    _ev("prepare", "info", f"compile-dp-path: {executor.to_exec_path(compile_db_abs)}")
     _ev("prepare", "info", f"out-test-folder: {executor.to_exec_path(out_abs)}")
     _ev("prepare", "info", f"file-list ({len(exec_files)}개):\n" + "\n".join(exec_files))
     _ev("prepare", "info", ".env (key 값 마스킹):\n" + _masked_env_text(env_dict))
@@ -200,7 +200,7 @@ def run(
     argv = [
         *run_head,
         "--file-list", executor.to_exec_path(filelist_path),
-        "--compile-db-path", executor.to_exec_path(compile_db_abs),
+        "--compile-dp-path", executor.to_exec_path(compile_db_abs),
         "--out-test-folder-path", executor.to_exec_path(out_abs),
         "--max-attempts", str(genut.max_attempts),
     ]

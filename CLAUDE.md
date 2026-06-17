@@ -6,7 +6,7 @@
 
 `GENUT_service`는 **GENUT(테스트 자동생성 CLI 도구)를 여러 워커로 병렬 실행**하여, 다수의 대상 프로덕트(C/C++/kunit)에 단위 테스트를 생성하는 서비스다.
 
-- **GENUT**: 서비스에 repo로 등록되어 매 실행 시 최신 코드로 clone 후 CLI로 호출된다. CLI 옵션 `--file-list`(절대경로 txt)·`--compile-db-path`·`--out-test-folder-path`·`--max-attempts`·`--debug`·`--enable-assure`·`--function-name`. 함수당 positive:negative 50:50 테스트 생성. `.env`로 `TEST_GENERATION_MODE`(c|cpp|kunit)·`DS_ASSIST_CREDENTIAL_KEY`·`DS_ASSIST_USER_ID`·`DS_ASSIST_SEND_SYSTEM_NAME`·`CMAKE_CONFIGURE_CMD`·`CMAKE_BUILD_CMD`·`TEST_RUN_CMD`를 받는다.
+- **GENUT**: 서비스에 repo로 등록되어 매 실행 시 최신 코드로 clone 후 CLI로 호출된다. CLI 옵션 `--file-list`(절대경로 txt)·`--compile-dp-path`·`--out-test-folder-path`·`--max-attempts`·`--debug`·`--enable-assure`·`--function-name`. 함수당 positive:negative 50:50 테스트 생성. `.env`로 `TEST_GENERATION_MODE`(c|cpp|kunit)·`DS_ASSIST_CREDENTIAL_KEY`·`DS_ASSIST_USER_ID`·`DS_ASSIST_SEND_SYSTEM_NAME`·`CMAKE_CONFIGURE_CMD`·`CMAKE_BUILD_CMD`·`TEST_RUN_CMD`를 받는다.
 - **동시성**: 등록된 GENUT 1개 = 워커 1개. 한 프로덕트는 동시에 1개 job만(`product_locks` PK 배타). N개 GENUT → 서로 다른 N개 프로덕트 동시 실행. 동일 프로덕트 동시 요청은 1개만 실행, 나머지 대기.
 - **실행 격리**: job마다 Docker 컨테이너(`use_docker=true`). 기본은 호스트 실행.
 

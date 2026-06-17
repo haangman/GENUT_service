@@ -63,7 +63,7 @@ def extract_functions(src_path: str) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file-list", required=True)
-    parser.add_argument("--compile-db-path", required=True)
+    parser.add_argument("--compile-dp-path", required=True)
     parser.add_argument("--out-test-folder-path", required=True)
     parser.add_argument("--max-attempts", type=int, default=10)
     parser.add_argument("--debug", action="store_true")
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         },
         "file_list_seen": file_list,
-        "compile_db_seen": args.compile_db_path,
+        "compile_db_seen": args.compile_dp_path,
     }
     (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps({"success": status == "success", "status": status}))

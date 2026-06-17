@@ -17,7 +17,7 @@
 
 서비스에 **repo로 등록**되어, 매 실행 시 최신 코드로 clone 후 CLI로 호출된다.
 
-- **CLI 옵션**: `--file-list`(절대경로 txt, 내부 소스도 절대경로) · `--compile-db-path`(compile_commands.json 폴더 절대경로) · `--out-test-folder-path`(절대경로) · `--max-attempts`(기본 10) · `--debug` · `--enable-assure` · `--function-name`(선택)
+- **CLI 옵션**: `--file-list`(절대경로 txt, 내부 소스도 절대경로) · `--compile-dp-path`(compile_commands.json 폴더 절대경로) · `--out-test-folder-path`(절대경로) · `--max-attempts`(기본 10) · `--debug` · `--enable-assure` · `--function-name`(선택)
 - **동작**: 함수마다 여러 테스트를 한 번에 생성, **positive:negative = 50:50**. 생성 테스트를 프로젝트에 통합 후 configure→build→test 실행, 에러를 max-attempts까지 자가 수정.
 - **.env**: `TEST_GENERATION_MODE`(c|cpp|kunit) · `DS_ASSIST_CREDENTIAL_KEY`(LLM API 키) · `DS_ASSIST_USER_ID` · `DS_ASSIST_SEND_SYSTEM_NAME` · `CMAKE_CONFIGURE_CMD` · `CMAKE_BUILD_CMD` · `TEST_RUN_CMD`
 
