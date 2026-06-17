@@ -11,4 +11,12 @@ describe('RequestPage', () => {
     renderWithProviders(<RequestPage />)
     expect(await screen.findByText('프로덕트를 선택하세요.')).toBeInTheDocument()
   })
+
+  it('shows the submission banner on the initial screen after a request', async () => {
+    useRequestBuilder.getState().completeSubmission(42)
+    renderWithProviders(<RequestPage />)
+    // 초기 화면(프로덕트 미선택)으로 복귀하면서 접수 안내가 함께 표시된다
+    expect(await screen.findByText('요청이 접수되었습니다. job #42')).toBeInTheDocument()
+    expect(screen.getByText('프로덕트를 선택하세요.')).toBeInTheDocument()
+  })
 })

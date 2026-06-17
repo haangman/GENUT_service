@@ -31,4 +31,23 @@ describe('useRequestBuilder', () => {
     useRequestBuilder.getState().removeFile('a')
     expect(useRequestBuilder.getState().selected).toEqual(['b'])
   })
+
+  it('completeSubmission resets the builder but keeps the job id', () => {
+    useRequestBuilder.getState().setProduct(1, 'cpp')
+    useRequestBuilder.getState().addPaths(['a', 'b'])
+    useRequestBuilder.getState().setFunctionName('foo')
+    useRequestBuilder.getState().completeSubmission(7)
+    const state = useRequestBuilder.getState()
+    expect(state.lastSubmittedJobId).toBe(7)
+    expect(state.productId).toBeNull()
+    expect(state.selected).toEqual([])
+    expect(state.functionName).toBe('')
+    expect(state.compileResult).toBeNull()
+  })
+
+  it('setProduct clears the previous submission banner', () => {
+    useRequestBuilder.getState().completeSubmission(7)
+    useRequestBuilder.getState().setProduct(2, 'cpp')
+    expect(useRequestBuilder.getState().lastSubmittedJobId).toBeNull()
+  })
 })

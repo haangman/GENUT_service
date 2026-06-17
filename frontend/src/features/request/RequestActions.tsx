@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { createJob } from '../../api/jobs'
 import { compileCheck } from '../../api/tree'
@@ -12,7 +11,7 @@ export function RequestActions() {
   const compileStale = useRequestBuilder((state) => state.compileStale)
   const setCompileResult = useRequestBuilder((state) => state.setCompileResult)
   const setFunctionName = useRequestBuilder((state) => state.setFunctionName)
-  const [submittedJobId, setSubmittedJobId] = useState<number | null>(null)
+  const completeSubmission = useRequestBuilder((state) => state.completeSubmission)
 
   const checkMut = useMutation({
     mutationFn: () => compileCheck(productId as number, selected),
@@ -26,7 +25,8 @@ export function RequestActions() {
         files: selected,
         function_name: functionName || undefined,
       }),
-    onSuccess: (job) => setSubmittedJobId(job.id),
+    // 제출 성공 시 요청 빌더를 초기화한다 → 페이지가 초기 화면으로 돌아간다.
+    onSuccess: (job) => completeSubmission(job.id),
   })
 
   const canCheck = selected.length > 0 && !checkMut.isPending
@@ -96,9 +96,6 @@ export function RequestActions() {
       >
         제출
       </button>
-      {submittedJobId ? (
-        <p className="text-green-700">요청이 접수되었습니다. job #{submittedJobId}</p>
-      ) : null}
       {submitMut.isError ? (
         <p role="alert" className="text-red-600">
           제출에 실패했습니다.

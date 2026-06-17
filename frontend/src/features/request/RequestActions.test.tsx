@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
@@ -48,6 +48,10 @@ describe('RequestActions', () => {
     const submit = screen.getByRole('button', { name: '제출' })
     expect(submit).toBeEnabled()
     await userEvent.click(submit)
-    expect(await screen.findByText(/job #7/)).toBeInTheDocument()
+
+    // 제출 성공 시 빌더가 초기화되고(접수된 job id만 보존) → 페이지가 초기 화면으로 복귀
+    await waitFor(() => expect(useRequestBuilder.getState().lastSubmittedJobId).toBe(7))
+    expect(useRequestBuilder.getState().productId).toBeNull()
+    expect(useRequestBuilder.getState().selected).toEqual([])
   })
 })
