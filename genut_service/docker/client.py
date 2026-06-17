@@ -39,6 +39,14 @@ class DockerExecutor:
         rel = Path(host_path).resolve().relative_to(self.job_root).as_posix()
         return self.container_root if rel == "." else f"{self.container_root}/{rel}"
 
+    def base_python(self) -> str:
+        """venv 생성에 쓸 기준 인터프리터(컨테이너 PATH의 python)."""
+        return "python"
+
+    def venv_python(self, venv_dir: Path | str) -> str:
+        """venv 안의 python 컨테이너 경로(리눅스 레이아웃)."""
+        return self.to_exec_path(Path(venv_dir) / "bin" / "python")
+
     def run(
         self,
         argv: list[str],

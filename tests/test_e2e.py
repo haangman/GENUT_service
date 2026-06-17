@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from genut_service.config import get_settings
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
 from genut_service.enums import JobStatus
+from genut_service.runner import genut_runner
 from genut_service.scheduler.loop import run_pending
 from genut_service.services import job_service
 
@@ -103,6 +104,35 @@ def test_pipeline_persistent_code_path_preserves_generated(
     db_session.expire_all()
     assert db_session.get(Job, job2.id).status == JobStatus.DONE.value
     assert keep.is_file()  # 제자리 업데이트 → 보존됨
+
+
+def test_worker_passes_use_venv_from_settings(
+    db_session, make_virtual_product, fake_genut_repo, workspace
+):
+    from genut_service.runner import worker
+
+    captured: dict = {}
+
+    def fake_run(*_args, **kwargs):
+        captured.update(kwargs)
+        return genut_runner.RunResult(
+            success=True, returncode=0, stdout="", stderr="", result_summary="ok"
+        )
+
+    get_settings().genut_use_venv = True  # autouse 기본(False)을 이 테스트만 켠다
+
+    product = _make_product(
+        db_session, make_virtual_product("uv", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    )
+    _make_genut(db_session, "w-uv", fake_genut_repo)
+    job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+    # process_job에 가짜 runner를 주입해 worker가 설정값을 전달하는지 확인
+    run_pending(
+        db_session,
+        process=lambda s, jid: worker.process_job(s, jid, runner_run=fake_run),
+    )
+
+    assert captured.get("use_venv") is True
 
 
 def test_failure_does_not_block_other_products(

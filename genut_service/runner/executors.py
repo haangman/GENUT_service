@@ -7,6 +7,8 @@ executor는 (1) 호스트 경로를 실행 환경 경로로 변환(to_exec_path)
 
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,6 +20,15 @@ class HostExecutor:
 
     def to_exec_path(self, host_path: Path | str) -> str:
         return str(Path(host_path).resolve())
+
+    def base_python(self) -> str:
+        """venv 생성에 쓸 기준 인터프리터(현재 호스트 인터프리터)."""
+        return sys.executable
+
+    def venv_python(self, venv_dir: Path | str) -> str:
+        """venv 안의 python 실행 경로(OS별 레이아웃)."""
+        sub = "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        return str((Path(venv_dir) / sub).resolve())
 
     def run(
         self,

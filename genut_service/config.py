@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # GENUT CLI 실행 타임아웃(초) — GENUT 내부 루프가 길 수 있어 넉넉히 둔다
     genut_run_timeout: int = 1800
 
+    # job 실행 시 GENUT 명령 전에 .venv 가상환경을 만들고 requirements.txt를 설치할지
+    genut_use_venv: bool = True
+
     # git clone/fetch 등 분석성 명령 타임아웃(초)
     git_timeout: int = 300
 

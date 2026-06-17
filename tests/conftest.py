@@ -18,8 +18,22 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import genut_service.db.models  # noqa: F401  (모델을 메타데이터에 등록)
+from genut_service.config import get_settings
 from genut_service.db.base import Base, get_session
 from genut_service.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _disable_venv_by_default() -> Iterator[None]:
+    """테스트 기본값: GENUT venv 준비 비활성(실 venv 생성/설치 비용 회피).
+
+    venv 동작을 검증하는 테스트는 run(use_venv=True) 또는 설정을 직접 켠다.
+    """
+    settings = get_settings()
+    original = settings.genut_use_venv
+    settings.genut_use_venv = False
+    yield
+    settings.genut_use_venv = original
 
 
 @pytest.fixture

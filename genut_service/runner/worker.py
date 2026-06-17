@@ -76,6 +76,7 @@ def process_job(
             enable_assure=enable_assure,
             genut_timeout=settings.genut_run_timeout,
             git_timeout=settings.git_timeout,
+            use_venv=settings.genut_use_venv,
             make_executor=make_executor,
             on_event=emit,
         )

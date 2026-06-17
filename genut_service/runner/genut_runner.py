@@ -24,6 +24,13 @@ from genut_service.runner.executors import HostExecutor
 # 로그에 노출하면 안 되는 .env 키 값(마스킹 대상)
 _SECRET_ENV_KEYS = {"DS_ASSIST_CREDENTIAL_KEY"}
 
+# run_command 선행 토큰이 python 인터프리터인지 판단할 때 쓰는 이름들
+_PYTHON_NAMES = {"python", "python3", "python.exe", "python3.exe", "py", "py.exe"}
+
+
+class VenvError(RuntimeError):
+    """GENUT 가상환경(.venv) 준비 실패."""
+
 
 def _masked_env_text(env: dict[str, str]) -> str:
     """.env 내용을 텍스트로. 비밀 키 값은 마스킹한다."""
@@ -31,6 +38,60 @@ def _masked_env_text(env: dict[str, str]) -> str:
         f"{key}={'********' if key in _SECRET_ENV_KEYS else value}"
         for key, value in env.items()
     )
+
+
+def _is_python_token(token: str) -> bool:
+    base = Path(token).name.lower()
+    return base in _PYTHON_NAMES or base.startswith("python")
+
+
+def _with_venv_python(run_head: list[str], venv_python: str) -> list[str]:
+    """run_command의 선행 인터프리터(python류)를 venv python으로 치환한다.
+
+    선행 토큰이 python이 아니면(예: 콘솔 스크립트) 그대로 둔다.
+    """
+    if run_head and _is_python_token(run_head[0]):
+        return [venv_python, *run_head[1:]]
+    return run_head
+
+
+def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) -> str:
+    """genut_dir/.venv 가상환경을 만들고 requirements.txt를 설치한 뒤 venv python 경로 반환.
+
+    executor를 통해 실행하므로 호스트/Docker 모두 동일하게 동작한다.
+    """
+    venv_dir = genut_dir / ".venv"
+    venv_python = executor.venv_python(venv_dir)
+    on_line = (lambda line: ev("venv", "info", line)) if stream else None
+
+    ev("venv", "info", f".venv 생성/갱신: {executor.to_exec_path(venv_dir)}")
+    res = executor.run(
+        [executor.base_python(), "-m", "venv", executor.to_exec_path(venv_dir)],
+        genut_dir,
+        timeout,
+        on_line=on_line,
+    )
+    if not res["success"]:
+        raise VenvError(f".venv 생성 실패: {(res.get('stderr') or res.get('stdout') or '')[:500]}")
+
+    req = genut_dir / "requirements.txt"
+    if req.is_file():
+        ev("venv", "info", "requirements.txt 설치")
+        res = executor.run(
+            [venv_python, "-m", "pip", "install", "-r", executor.to_exec_path(req)],
+            genut_dir,
+            timeout,
+            on_line=on_line,
+        )
+        if not res["success"]:
+            raise VenvError(
+                f"requirements 설치 실패: {(res.get('stderr') or res.get('stdout') or '')[:500]}"
+            )
+    else:
+        ev("venv", "info", "requirements.txt 없음 — 설치 생략")
+
+    ev("venv", "info", f"가상환경(.venv) 진입: {venv_python}")
+    return venv_python
 
 
 @dataclass
@@ -54,6 +115,7 @@ def run(
     enable_assure: bool = False,
     genut_timeout: int = 1800,
     git_timeout: int = 300,
+    use_venv: bool = False,
     make_executor: Callable[[Path], object] | None = None,
     on_event: Callable[[str, str, str], None] | None = None,
 ) -> RunResult:
@@ -119,9 +181,17 @@ def run(
     _ev("prepare", "info", f"file-list ({len(exec_files)}개):\n" + "\n".join(exec_files))
     _ev("prepare", "info", ".env (key 값 마스킹):\n" + _masked_env_text(env_dict))
 
-    # 6) GENUT CLI argv (run_command + 표준 플래그)
+    # 6) GENUT 실행 전: 가상환경(.venv) 준비 후 인터프리터를 venv python으로 치환
+    run_head = shlex.split(genut.run_command)
+    if use_venv:
+        venv_python = _prepare_venv(
+            executor, genut_dir, timeout=genut_timeout, ev=_ev, stream=on_event is not None
+        )
+        run_head = _with_venv_python(run_head, venv_python)
+
+    # GENUT CLI argv (run_command + 표준 플래그)
     argv = [
-        *shlex.split(genut.run_command),
+        *run_head,
         "--file-list", executor.to_exec_path(filelist_path),
         "--compile-db-path", executor.to_exec_path(compile_db_abs),
         "--out-test-folder-path", executor.to_exec_path(out_abs),

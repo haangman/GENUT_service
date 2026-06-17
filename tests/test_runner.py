@@ -165,6 +165,81 @@ def test_runner_persistent_code_path_preserves_generated(
     assert keep.is_file()  # 생성된 테스트(untracked) 보존됨
 
 
+class _RecordingExecutor:
+    """venv 준비 로직 단위 테스트용 가짜 executor (실제 venv 생성 안 함)."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def to_exec_path(self, path) -> str:  # noqa: ANN001
+        return str(path)
+
+    def base_python(self) -> str:
+        return "BASEPY"
+
+    def venv_python(self, venv_dir) -> str:  # noqa: ANN001
+        return str(Path(venv_dir) / "bin" / "python")
+
+    def run(self, argv, cwd, timeout, on_line=None):  # noqa: ANN001, ARG002
+        self.calls.append(list(argv))
+        return {"success": True, "returncode": 0, "stdout": "", "stderr": ""}
+
+
+def test_with_venv_python_substitutes_leading_interpreter() -> None:
+    assert genut_runner._with_venv_python(["python", "-m", "genut"], "/v/py") == [
+        "/v/py", "-m", "genut",
+    ]
+    assert genut_runner._with_venv_python(["/usr/bin/python3", "x.py"], "/v/py") == ["/v/py", "x.py"]
+    # python이 아닌 선행 토큰(콘솔 스크립트 등)은 그대로 둔다
+    assert genut_runner._with_venv_python(["genut", "run"], "/v/py") == ["genut", "run"]
+
+
+def test_prepare_venv_creates_and_installs_requirements(tmp_path) -> None:
+    genut_dir = tmp_path / "genut"
+    genut_dir.mkdir()
+    (genut_dir / "requirements.txt").write_text("# none\n", encoding="utf-8")
+    ex = _RecordingExecutor()
+    venv_py = genut_runner._prepare_venv(ex, genut_dir, timeout=60, ev=lambda *a: None, stream=False)
+    # 1) venv 생성, 2) requirements 설치(venv python으로)
+    assert ex.calls[0][:3] == ["BASEPY", "-m", "venv"]
+    assert ex.calls[1][:4] == [venv_py, "-m", "pip", "install"]
+    assert venv_py.endswith("python")
+
+
+def test_prepare_venv_skips_install_without_requirements(tmp_path) -> None:
+    genut_dir = tmp_path / "genut"
+    genut_dir.mkdir()
+    ex = _RecordingExecutor()
+    genut_runner._prepare_venv(ex, genut_dir, timeout=60, ev=lambda *a: None, stream=False)
+    assert len(ex.calls) == 1  # venv 생성만, pip install 없음
+
+
+def test_prepare_venv_raises_on_failure(tmp_path) -> None:
+    genut_dir = tmp_path / "genut"
+    genut_dir.mkdir()
+
+    class _FailExecutor(_RecordingExecutor):
+        def run(self, argv, cwd, timeout, on_line=None):  # noqa: ANN001, ARG002
+            return {"success": False, "returncode": 1, "stdout": "", "stderr": "boom"}
+
+    import pytest
+
+    with pytest.raises(genut_runner.VenvError):
+        genut_runner._prepare_venv(_FailExecutor(), genut_dir, timeout=60, ev=lambda *a: None, stream=False)
+
+
+def test_runner_venv_setup_creates_venv_and_runs(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """use_venv=True면 실제 .venv를 만들고 그 python으로 GENUT를 실행한다."""
+    vp = make_virtual_product("venv", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    result = genut_runner.run(job, product, genut, workspace_root=str(tmp_path), use_venv=True)
+    assert result.success
+    venv_dir = tmp_path / f"job_{job.id}" / "genut" / ".venv"
+    assert venv_dir.is_dir()  # 가상환경이 생성됨
+
+
 def test_runner_streams_events(db_session, make_virtual_product, fake_genut_repo, tmp_path):
     vp = make_virtual_product("stream", sources={"src/a.cpp": "// @genut-fn: foo\n"})
     product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
