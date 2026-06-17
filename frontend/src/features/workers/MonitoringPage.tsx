@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listQueue, listWorkers } from '../../api/workers'
-import { getJobLogs, listJobs } from '../../api/jobs'
+import { cancelJob, getJobLogs, listJobs } from '../../api/jobs'
 import type { JobEvent } from '../../types/api'
 
-const TERMINAL = new Set(['done', 'failed'])
+const TERMINAL = new Set(['done', 'failed', 'canceled'])
 
 // 파일명용 타임스탬프: YYYYMMDD-HHMMSS
 function formatStamp(date: Date): string {
@@ -162,10 +162,15 @@ export function JobLogs({
 
 function JobHistory() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
+  const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['jobs', 'history'],
     queryFn: () => listJobs({ page_size: 50 }),
     refetchInterval: 5000,
+  })
+  const cancelMut = useMutation({
+    mutationFn: (jobId: number) => cancelJob(jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs', 'history'] }),
   })
   return (
     <section>
@@ -177,6 +182,7 @@ function JobHistory() {
             <th>product</th>
             <th>상태</th>
             <th>결과</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -190,10 +196,25 @@ function JobHistory() {
                 <td>{job.product_id}</td>
                 <td>{job.status}</td>
                 <td className="text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
+                <td className="text-right">
+                  {job.status === 'running' ? (
+                    <button
+                      type="button"
+                      className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      disabled={cancelMut.isPending}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        cancelMut.mutate(job.id)
+                      }}
+                    >
+                      강제 종료
+                    </button>
+                  ) : null}
+                </td>
               </tr>
               {selectedJobId === job.id ? (
                 <tr className="border-b bg-gray-50">
-                  <td colSpan={4} className="p-2">
+                  <td colSpan={5} className="p-2">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>

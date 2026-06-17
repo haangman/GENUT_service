@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
+from genut_service.enums import JobStatus
+from genut_service.runner import process_registry
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobCreate, JobEventRead, JobRead
 from genut_service.services import job_service
@@ -46,6 +48,19 @@ def get_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
     job = job_service.get_job(session, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
+    return JobRead.model_validate(job)
+
+
+@router.post("/{job_id}/cancel", response_model=JobRead)
+def cancel_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
+    """실행 중인 job을 강제 종료한다. 워커가 곧 상태를 canceled로 마무리한다."""
+    job = job_service.get_job(session, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
+    if job.status != JobStatus.RUNNING.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "실행 중인 job이 아니다")
+    # 같은 프로세스의 워커가 돌리는 서브프로세스를 죽인다. 종료 처리는 워커가 한다.
+    process_registry.cancel(job_id)
     return JobRead.model_validate(job)
 
 

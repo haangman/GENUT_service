@@ -48,11 +48,13 @@ def run_streaming(
     timeout: int = 600,
     env: dict | None = None,
     on_line: Callable[[str], None] | None = None,
+    on_start: Callable[[subprocess.Popen], None] | None = None,
 ) -> dict:
     """argv를 실행하며 stdout(+stderr)을 줄 단위로 스트리밍한다.
 
     각 줄이 나올 때마다 on_line(line)을 호출(실시간 로그 기록용)하고, 전체 출력을
     모아 run()과 동일한 형태로 반환한다. stderr는 stdout에 합쳐 시간 순서를 보존한다.
+    on_start가 주어지면 프로세스 생성 직후 Popen 핸들로 호출한다(강제 종료 등록용).
     """
     try:
         proc = subprocess.Popen(
@@ -68,6 +70,12 @@ def run_streaming(
         )
     except FileNotFoundError as exc:
         return {"success": False, "returncode": None, "stdout": "", "stderr": str(exc)}
+
+    if on_start is not None:
+        try:
+            on_start(proc)
+        except Exception:  # noqa: BLE001 - 등록 콜백 실패가 실행을 막지 않도록
+            pass
 
     lines: list[str] = []
 

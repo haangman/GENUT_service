@@ -180,7 +180,7 @@ class _RecordingExecutor:
     def venv_python(self, venv_dir) -> str:  # noqa: ANN001
         return str(Path(venv_dir) / "bin" / "python")
 
-    def run(self, argv, cwd, timeout, on_line=None):  # noqa: ANN001, ARG002
+    def run(self, argv, cwd, timeout, on_line=None, on_start=None):  # noqa: ANN001, ARG002
         self.calls.append(list(argv))
         return {"success": True, "returncode": 0, "stdout": "", "stderr": ""}
 
@@ -255,7 +255,7 @@ def test_prepare_venv_raises_on_failure(tmp_path) -> None:
     genut_dir.mkdir()
 
     class _FailExecutor(_RecordingExecutor):
-        def run(self, argv, cwd, timeout, on_line=None):  # noqa: ANN001, ARG002
+        def run(self, argv, cwd, timeout, on_line=None, on_start=None):  # noqa: ANN001, ARG002
             return {"success": False, "returncode": 1, "stdout": "", "stderr": "boom"}
 
     import pytest
@@ -346,6 +346,29 @@ def test_runner_skips_assure_when_url_absent(
     )
     assert not (tmp_path / f"job_{job.id}" / "genut_assure").exists()
     assert not any("ASSURE" in m for _, m in events)
+
+
+def test_runner_on_process_can_kill(db_session, make_virtual_product, fake_genut_repo, tmp_path):
+    """on_process로 받은 GENUT 서브프로세스를 죽이면 실행이 실패로 끝난다(강제 종료 기반)."""
+    vp = make_virtual_product(
+        "kill",
+        sources={"src/a.cpp": "// @genut-fn: foo\n"},
+        scenario={"outcome": "success", "sleep_seconds": 30},
+    )
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+
+    def on_process(proc):
+        proc.kill()  # 시작하자마자 강제 종료
+
+    result = genut_runner.run(
+        job,
+        product,
+        genut,
+        workspace_root=str(tmp_path),
+        on_event=lambda *a: None,  # 스트리밍 경로 활성화 → on_start(on_process) 호출됨
+        on_process=on_process,
+    )
+    assert result.success is False  # sleep 30이지만 즉시 종료되어 실패
 
 
 def test_runner_uses_compile_dp_path_flag(

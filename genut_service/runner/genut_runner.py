@@ -55,7 +55,7 @@ def _with_venv_python(run_head: list[str], venv_python: str) -> list[str]:
     return run_head
 
 
-def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) -> str:
+def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool, on_process=None) -> str:
     """genut_dir/.venv 가상환경을 만들고 requirements.txt를 설치한 뒤 venv python 경로 반환.
 
     executor를 통해 실행하므로 호스트/Docker 모두 동일하게 동작한다.
@@ -75,6 +75,7 @@ def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) 
             genut_dir,
             timeout,
             on_line=on_line,
+            on_start=on_process,
         )
         if not res["success"]:
             raise VenvError(f".venv 생성 실패: {(res.get('stderr') or res.get('stdout') or '')[:500]}")
@@ -87,6 +88,7 @@ def _prepare_venv(executor, genut_dir: Path, *, timeout: int, ev, stream: bool) 
             genut_dir,
             timeout,
             on_line=on_line,
+            on_start=on_process,
         )
         if not res["success"]:
             raise VenvError(
@@ -123,6 +125,7 @@ def run(
     use_venv: bool = False,
     make_executor: Callable[[Path], object] | None = None,
     on_event: Callable[[str, str, str], None] | None = None,
+    on_process: Callable[[object], None] | None = None,
 ) -> RunResult:
     def _ev(phase: str, level: str, message: str) -> None:
         if on_event is not None:
@@ -204,7 +207,12 @@ def run(
     run_head = shlex.split(genut.run_command)
     if use_venv:
         venv_python = _prepare_venv(
-            executor, genut_dir, timeout=genut_timeout, ev=_ev, stream=on_event is not None
+            executor,
+            genut_dir,
+            timeout=genut_timeout,
+            ev=_ev,
+            stream=on_event is not None,
+            on_process=on_process,
         )
         run_head = _with_venv_python(run_head, venv_python)
 
@@ -226,7 +234,7 @@ def run(
     # 7) 실행 (호스트 또는 컨테이너) — on_event가 있으면 출력을 줄 단위로 스트리밍
     _ev("run", "info", f"$ {' '.join(argv)}")
     on_line = (lambda line: _ev("run", "info", line)) if on_event is not None else None
-    proc = executor.run(argv, genut_dir, genut_timeout, on_line=on_line)
+    proc = executor.run(argv, genut_dir, genut_timeout, on_line=on_line, on_start=on_process)
 
     # 8) 결과 수집 (산출물은 호스트 out_abs에 존재; 컨테이너는 bind-mount로 공유)
     generated: list[str] = []

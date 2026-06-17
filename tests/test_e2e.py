@@ -135,6 +135,29 @@ def test_worker_passes_use_venv_from_settings(
     assert captured.get("use_venv") is True
 
 
+def test_worker_marks_canceled_job(
+    db_session, make_virtual_product, fake_genut_repo, workspace
+):
+    from genut_service.runner import process_registry, worker
+
+    product = _make_product(
+        db_session, make_virtual_product("cxl", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    )
+    _make_genut(db_session, "w-cxl", fake_genut_repo)
+    job = job_service.submit_request(db_session, product.id, ["src/a.cpp"])
+
+    def fake_run(j, *_a, **_kw):
+        # 실행 중 사용자가 강제 종료한 상황을 모사
+        process_registry.cancel(j.id)
+        return genut_runner.RunResult(
+            success=False, returncode=1, stdout="", stderr="killed", result_summary=None
+        )
+
+    run_pending(db_session, process=lambda s, jid: worker.process_job(s, jid, runner_run=fake_run))
+    db_session.expire_all()
+    assert db_session.get(Job, job.id).status == JobStatus.CANCELED.value
+
+
 def test_failure_does_not_block_other_products(
     db_session, make_virtual_product, fake_genut_repo, workspace
 ):

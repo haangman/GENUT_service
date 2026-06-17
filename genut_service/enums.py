@@ -24,6 +24,7 @@ class JobStatus(StrEnum):
     RETRYING = "retrying"
     DONE = "done"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class WorkerStatus(StrEnum):
@@ -55,4 +56,6 @@ class JobPhase(StrEnum):
 
 
 # 종료(terminal) 상태 집합 — 락 해제/폴링 중단 판정에 사용
-TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.DONE, JobStatus.FAILED})
+TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELED}
+)

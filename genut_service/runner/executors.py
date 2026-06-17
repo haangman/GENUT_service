@@ -42,9 +42,10 @@ class HostExecutor:
         cwd_host: Path,
         timeout: int,
         on_line: Callable[[str], None] | None = None,
+        on_start: Callable[[object], None] | None = None,
     ) -> dict:
         if on_line is not None:
             return subprocess_util.run_streaming(
-                argv, cwd=str(cwd_host), timeout=timeout, on_line=on_line
+                argv, cwd=str(cwd_host), timeout=timeout, on_line=on_line, on_start=on_start
             )
         return subprocess_util.run(argv, cwd=str(cwd_host), timeout=timeout)

@@ -57,6 +57,7 @@ class DockerExecutor:
         cwd_host: Path,
         timeout: int,
         on_line: Callable[[str], None] | None = None,
+        on_start: Callable[[object], None] | None = None,
     ) -> dict:
         cmd = [
             self.docker_bin,
@@ -73,5 +74,7 @@ class DockerExecutor:
             cmd += ["--memory", str(self.memory)]
         cmd += [self.image, *argv]
         if on_line is not None:
-            return subprocess_util.run_streaming(cmd, timeout=timeout, on_line=on_line)
+            return subprocess_util.run_streaming(
+                cmd, timeout=timeout, on_line=on_line, on_start=on_start
+            )
         return subprocess_util.run(cmd, timeout=timeout)

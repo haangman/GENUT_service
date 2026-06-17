@@ -59,6 +59,41 @@ describe('MonitoringPage', () => {
     fireEvent.click(resultCell)
     expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
   })
+
+  it('shows a force-kill button for running jobs and posts cancel', async () => {
+    let canceled = false
+    const runningJob = {
+      id: 8,
+      product_id: 3,
+      genut_instance_id: 1,
+      status: 'running',
+      function_name: null,
+      file_list: [],
+      excluded_files: [],
+      attempt: 0,
+      submitted_at: '2026-06-15T00:00:00Z',
+      started_at: null,
+      finished_at: null,
+      result_summary: null,
+      error: null,
+    }
+    server.use(
+      http.get('/api/workers', () => HttpResponse.json([])),
+      http.get('/api/queue', () => HttpResponse.json([])),
+      http.get('/api/jobs', () =>
+        HttpResponse.json({ items: [runningJob], total: 1, page: 1, page_size: 50 }),
+      ),
+      http.post('/api/jobs/8/cancel', () => {
+        canceled = true
+        return HttpResponse.json({ ...runningJob })
+      }),
+    )
+
+    renderWithProviders(<MonitoringPage />)
+    const btn = await screen.findByRole('button', { name: '강제 종료' })
+    fireEvent.click(btn)
+    await waitFor(() => expect(canceled).toBe(true))
+  })
 })
 
 describe('JobLogs (증분 폴링)', () => {

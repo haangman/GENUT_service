@@ -84,6 +84,42 @@ def test_get_missing_job_404(client: TestClient) -> None:
     assert client.get("/api/jobs/9999").status_code == 404
 
 
+def test_cancel_missing_job_404(client: TestClient) -> None:
+    assert client.post("/api/jobs/99999/cancel").status_code == 404
+
+
+def test_cancel_non_running_job_409(client: TestClient, checkout: Path) -> None:
+    product_id = _create_product(client)
+    job_id = client.post(
+        "/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]}
+    ).json()["id"]
+    # queued(실행 중 아님) → 409
+    assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 409
+
+
+def test_cancel_running_job_marks_for_cancellation(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    from genut_service.db.models import Job
+    from genut_service.enums import JobStatus
+    from genut_service.runner import process_registry
+
+    product_id = _create_product(client)
+    job_id = client.post(
+        "/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]}
+    ).json()["id"]
+    # running 상태로 만든 뒤 강제 종료 요청
+    job = db_session.get(Job, job_id)
+    job.status = JobStatus.RUNNING.value
+    db_session.commit()
+    try:
+        resp = client.post(f"/api/jobs/{job_id}/cancel")
+        assert resp.status_code == 200
+        assert process_registry.is_canceled(job_id) is True
+    finally:
+        process_registry.unregister(job_id)
+
+
 def test_job_logs_with_since(
     client: TestClient, checkout: Path, db_session: Session
 ) -> None:

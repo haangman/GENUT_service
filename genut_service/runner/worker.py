@@ -10,7 +10,7 @@ from genut_service import workspace
 from genut_service.config import get_settings
 from genut_service.db.models import GenutInstance, Job, JobEvent, Product
 from genut_service.enums import JobPhase, JobStatus
-from genut_service.runner import genut_runner, git_ops
+from genut_service.runner import genut_runner, git_ops, process_registry
 from genut_service.scheduler.engine import finish_job
 
 
@@ -66,6 +66,10 @@ def process_job(
                 memory=settings.docker_memory,
             )
 
+    # 실행 중 시작되는 서브프로세스를 강제 종료 레지스트리에 등록한다.
+    def on_process(proc) -> None:  # noqa: ANN001
+        process_registry.register(job_id, proc)
+
     try:
         result = runner_run(
             job,
@@ -79,21 +83,31 @@ def process_job(
             use_venv=settings.genut_use_venv,
             make_executor=make_executor,
             on_event=emit,
+            on_process=on_process,
         )
     except git_ops.PatchError as exc:
+        process_registry.unregister(job_id)
         emit(JobPhase.PATCH.value, "error", f"patch 실패: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {exc}")
         return
     except git_ops.GitError as exc:
+        process_registry.unregister(job_id)
         emit(JobPhase.CLONE.value, "error", f"git 실패: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {exc}")
         return
     except Exception as exc:  # noqa: BLE001 - 어떤 예외든 job만 실패시키고 격리
+        process_registry.unregister(job_id)
         emit(JobPhase.RUN.value, "error", f"실행 오류: {exc}")
         finish_job(session, job_id, JobStatus.FAILED, error=str(exc))
         return
 
-    if result.success:
+    canceled = process_registry.is_canceled(job_id)
+    process_registry.unregister(job_id)
+
+    if canceled:
+        emit(JobPhase.COLLECT.value, "error", "강제 종료됨 (사용자 요청)")
+        finish_job(session, job_id, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
+    elif result.success:
         emit(JobPhase.COLLECT.value, "info", f"완료: {result.result_summary or 'ok'}")
         finish_job(session, job_id, JobStatus.DONE, result_summary=result.result_summary or "ok")
     else:

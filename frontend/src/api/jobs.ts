@@ -23,3 +23,7 @@ export function getJob(id: number): Promise<Job> {
 export function getJobLogs(id: number, since = 0): Promise<JobEvent[]> {
   return apiFetch<JobEvent[]>(`/jobs/${id}/logs`, { query: { since } })
 }
+
+export function cancelJob(id: number): Promise<Job> {
+  return apiFetch<Job>(`/jobs/${id}/cancel`, { method: 'POST' })
+}
