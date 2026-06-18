@@ -231,38 +231,41 @@ function JobHistory() {
   return (
     <section>
       <h2 className="mb-2 text-sm font-semibold">Job 이력</h2>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b text-left text-gray-500">
-            <th className="py-2">#</th>
-            <th>product</th>
-            <th>상태</th>
-            <th>제출 시각</th>
-            <th>시작 시간</th>
-            <th>종료 시간</th>
-            <th>총 수행 시간</th>
-            <th>결과</th>
-            <th></th>
-          </tr>
-        </thead>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-600">
+              <th className="border border-gray-200 px-3 py-2">#</th>
+              <th className="border border-gray-200 px-3 py-2">product</th>
+              <th className="border border-gray-200 px-3 py-2">상태</th>
+              <th className="border border-gray-200 px-3 py-2">제출 시각</th>
+              <th className="border border-gray-200 px-3 py-2">시작 시간</th>
+              <th className="border border-gray-200 px-3 py-2">종료 시간</th>
+              <th className="border border-gray-200 px-3 py-2">총 수행 시간</th>
+              <th className="border border-gray-200 px-3 py-2">결과</th>
+              <th className="border border-gray-200 px-3 py-2"></th>
+            </tr>
+          </thead>
         <tbody>
           {data?.items.map((job) => (
             <Fragment key={job.id}>
               <tr
-                className="cursor-pointer border-b hover:bg-gray-50"
+                className={`cursor-pointer hover:bg-gray-50 ${
+                  selectedJobId === job.id ? 'bg-blue-50' : ''
+                }`}
                 onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
               >
-                <td className="py-2">{job.id}</td>
-                <td>{job.product_id}</td>
-                <td>{job.status}</td>
-                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.submitted_at)}</td>
-                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.started_at)}</td>
-                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.finished_at)}</td>
-                <td className="whitespace-nowrap text-gray-500">
+                <td className="border border-gray-200 px-3 py-2 font-medium text-gray-700">{job.id}</td>
+                <td className="border border-gray-200 px-3 py-2">{job.product_id}</td>
+                <td className="border border-gray-200 px-3 py-2">{job.status}</td>
+                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.submitted_at)}</td>
+                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.started_at)}</td>
+                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.finished_at)}</td>
+                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">
                   {formatDuration(job.started_at, job.finished_at)}
                 </td>
-                <td className="text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
-                <td className="text-right">
+                <td className="border border-gray-200 px-3 py-2 text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
+                <td className="border border-gray-200 px-3 py-2 text-right">
                   {job.status === 'running' ? (
                     <button
                       type="button"
@@ -279,8 +282,8 @@ function JobHistory() {
                 </td>
               </tr>
               {selectedJobId === job.id ? (
-                <tr className="border-b bg-gray-50">
-                  <td colSpan={9} className="p-2">
+                <tr className="bg-gray-50">
+                  <td colSpan={9} className="border border-gray-200 p-3">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>
@@ -288,7 +291,8 @@ function JobHistory() {
             </Fragment>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </section>
   )
 }
