@@ -14,6 +14,30 @@ from genut_service.runner import genut_runner, git_ops, process_registry
 from genut_service.scheduler.engine import finish_job
 
 
+def _force_finish_failed(
+    session: Session, job_id: int, error: str, status: JobStatus = JobStatus.FAILED
+) -> None:
+    """종료 처리(finish_job)가 예외로 실패했을 때의 최후 폴백.
+
+    현재 세션을 롤백 후 finish_job을 재시도하고, 그래도 실패하면 새 세션으로 한 번 더
+    시도한다. 취소된 job이면 status=CANCELED를 보존한다(기본 FAILED).
+    """
+    try:
+        session.rollback()
+        finish_job(session, job_id, status, error=error[:2000])
+        return
+    except Exception:  # noqa: BLE001 - 폴백이라 어떤 실패든 다음 수단으로 넘어간다
+        pass
+    try:
+        from genut_service.db.base import SessionLocal
+
+        with SessionLocal() as fresh:
+            finish_job(fresh, job_id, status, error=error[:2000])
+    except Exception:  # noqa: BLE001
+        pass
+
+
+
 def process_job(
     session: Session,
     job_id: int,
@@ -70,6 +94,9 @@ def process_job(
     def on_process(proc) -> None:  # noqa: ANN001
         process_registry.register(job_id, proc)
 
+    # runner 실행. 취소 시 워커가 단계 경계에서 멈추도록 should_cancel 콜백을 전달한다.
+    result = None
+    run_error: Exception | None = None
     try:
         result = runner_run(
             job,
@@ -84,42 +111,43 @@ def process_job(
             make_executor=make_executor,
             on_event=emit,
             on_process=on_process,
+            should_cancel=lambda: process_registry.is_canceled(job_id),
         )
     except Exception as exc:  # noqa: BLE001 - 어떤 예외든 job만 격리해 종료시킨다
-        # 강제 종료로 서브프로세스가 죽어 예외가 났을 수 있으니 취소를 우선 판정한다.
-        # (예: venv 단계에서 kill → VenvError. 이를 failed가 아니라 canceled로 마무리)
-        canceled = process_registry.is_canceled(job_id)
-        process_registry.unregister(job_id)
+        run_error = exc
+
+    # 종료 처리는 이 워커 스레드만 수행한다(단일 소유자 → 락/워커 경합 없음).
+    # 취소 여부는 unregister 이전에 캡처한다(unregister가 취소 플래그를 지우므로).
+    # 강제 종료로 서브프로세스가 죽어 예외가 났을 수 있어 취소를 가장 먼저 판정한다.
+    canceled = process_registry.is_canceled(job_id)
+    process_registry.unregister(job_id)
+    try:
         if canceled:
             emit(JobPhase.COLLECT.value, "error", "강제 종료됨 (사용자 요청)")
             finish_job(session, job_id, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
-        elif isinstance(exc, git_ops.PatchError):
-            emit(JobPhase.PATCH.value, "error", f"patch 실패: {exc}")
-            finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {exc}")
-        elif isinstance(exc, git_ops.GitError):
-            emit(JobPhase.CLONE.value, "error", f"git 실패: {exc}")
-            finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {exc}")
+        elif run_error is not None:
+            if isinstance(run_error, git_ops.PatchError):
+                emit(JobPhase.PATCH.value, "error", f"patch 실패: {run_error}")
+                finish_job(session, job_id, JobStatus.FAILED, error=f"patch 실패: {run_error}")
+            elif isinstance(run_error, git_ops.GitError):
+                emit(JobPhase.CLONE.value, "error", f"git 실패: {run_error}")
+                finish_job(session, job_id, JobStatus.FAILED, error=f"git 실패: {run_error}")
+            else:
+                emit(JobPhase.RUN.value, "error", f"실행 오류: {run_error}")
+                finish_job(session, job_id, JobStatus.FAILED, error=str(run_error))
+        elif result.success:
+            emit(JobPhase.COLLECT.value, "info", f"완료: {result.result_summary or 'ok'}")
+            finish_job(session, job_id, JobStatus.DONE, result_summary=result.result_summary or "ok")
         else:
-            emit(JobPhase.RUN.value, "error", f"실행 오류: {exc}")
-            finish_job(session, job_id, JobStatus.FAILED, error=str(exc))
-        return
-
-    canceled = process_registry.is_canceled(job_id)
-    process_registry.unregister(job_id)
-
-    if canceled:
-        emit(JobPhase.COLLECT.value, "error", "강제 종료됨 (사용자 요청)")
-        finish_job(session, job_id, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
-    elif result.success:
-        emit(JobPhase.COLLECT.value, "info", f"완료: {result.result_summary or 'ok'}")
-        finish_job(session, job_id, JobStatus.DONE, result_summary=result.result_summary or "ok")
-    else:
-        detail = (result.stderr or result.stdout or "GENUT 실행 실패")[-2000:]
-        emit(JobPhase.COLLECT.value, "error", f"실패: {detail[:500]}")
-        finish_job(
-            session,
-            job_id,
-            JobStatus.FAILED,
-            result_summary=result.result_summary,
-            error=detail or "GENUT 실행 실패",
-        )
+            detail = (result.stderr or result.stdout or "GENUT 실행 실패")[-2000:]
+            emit(JobPhase.COLLECT.value, "error", f"실패: {detail[:500]}")
+            finish_job(
+                session,
+                job_id,
+                JobStatus.FAILED,
+                result_summary=result.result_summary,
+                error=detail or "GENUT 실행 실패",
+            )
+    except Exception as finish_exc:  # noqa: BLE001 - 종료 처리 자체 실패 시 최후 폴백
+        fallback = JobStatus.CANCELED if canceled else JobStatus.FAILED
+        _force_finish_failed(session, job_id, f"종료 처리 실패: {finish_exc}", fallback)

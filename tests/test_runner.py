@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, Patch, Product
@@ -361,6 +363,18 @@ def test_runner_persistent_code_path_puts_genut_and_assure_in_subdirs(
     # 저장경로 루트에 직접 받지 않고, _assure 형제 디렉터리도 만들지 않는다
     assert not (code_root / ".git").is_dir()
     assert not (tmp_path / "genut_store_assure").exists()
+
+
+def test_runner_should_cancel_aborts_early(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """should_cancel이 True면 무거운 단계(clone 등) 전에 Canceled로 중단한다(협조적 취소)."""
+    vp = make_virtual_product("coopcxl", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    with pytest.raises(genut_runner.Canceled):
+        genut_runner.run(
+            job, product, genut, workspace_root=str(tmp_path), should_cancel=lambda: True
+        )
 
 
 def test_runner_skips_assure_when_url_absent(

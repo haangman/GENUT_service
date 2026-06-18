@@ -59,7 +59,10 @@ def cancel_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
     if job.status != JobStatus.RUNNING.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "실행 중인 job이 아니다")
-    # 같은 프로세스의 워커가 돌리는 서브프로세스를 죽인다. 종료 처리는 워커가 한다.
+    # 같은 프로세스의 워커가 돌리는 서브프로세스를 죽이고 취소 플래그를 세운다.
+    # 종료(상태 전이·락 해제·워커 idle)는 API가 직접 하지 않고 그 job을 돌리는 워커
+    # 스레드만 수행한다 — 살아있는 워커와 동시에 finish_job을 호출하면 락이 조기 해제돼
+    # 같은 프로덕트에 다른 job이 재배정되는 경합이 생기기 때문이다.
     process_registry.cancel(job_id)
     return JobRead.model_validate(job)
 

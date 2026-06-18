@@ -32,6 +32,10 @@ class VenvError(RuntimeError):
     """GENUT 가상환경(.venv) 준비 실패."""
 
 
+class Canceled(RuntimeError):
+    """사용자 강제 종료 요청으로 실행을 중단함(워커가 CANCELED로 마무리한다)."""
+
+
 def _masked_env_text(env: dict[str, str]) -> str:
     """.env 내용을 텍스트로. 비밀 키 값은 마스킹한다."""
     return "\n".join(
@@ -126,6 +130,7 @@ def run(
     make_executor: Callable[[Path], object] | None = None,
     on_event: Callable[[str, str, str], None] | None = None,
     on_process: Callable[[object], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> RunResult:
     def _ev(phase: str, level: str, message: str) -> None:
         if on_event is not None:
@@ -134,8 +139,18 @@ def run(
             except Exception:  # noqa: BLE001
                 pass
 
+    def _ck() -> None:
+        """취소 요청이 있으면 단계 경계에서 즉시 중단한다(워커가 CANCELED로 마무리).
+
+        서브프로세스가 등록되지 않는 단계(clone/patch/.env 등) 사이에서도 취소가 반영되도록
+        각 무거운 단계 직전에 호출한다.
+        """
+        if should_cancel is not None and should_cancel():
+            raise Canceled("작업이 취소되었습니다")
+
     job_root = Path(workspace_root) / f"job_{job.id}"
     job_root.mkdir(parents=True, exist_ok=True)
+    _ck()
 
     # 1) 프로덕트 코드 확보 (code_path 있으면 영속 경로 제자리 업데이트, 없으면 임시 clone)
     #    + 순서대로 patch 멱등 적용. (PatchError/GitError는 호출자가 처리)
@@ -156,6 +171,7 @@ def run(
         _ev("patch", "info", f"patch 적용: {patch.name}")
         git_ops.apply_patch(str(product_dir), patch.content, timeout=git_timeout)
 
+    _ck()
     # 2) GENUT 코드 확보 (code_path 있으면 영속 경로의 GENUT 하위에 제자리 업데이트, 없으면 임시 clone)
     if genut.code_path:
         code_root = workspace.resolve_code_path(genut.code_path)
@@ -182,6 +198,7 @@ def run(
             git_ops.clone(genut.assure_repo_url, "", assure_dir, timeout=git_timeout)
         _ev("clone", "info", f"ASSURE git log:\n{git_ops.recent_log(assure_dir, timeout=git_timeout)}")
 
+    _ck()
     # 3) .env 조립 (GENUT 작업 디렉터리에 기록)
     env_dict = env_builder.build_env(product, genut)
     env_builder.write_env_file(genut_dir / ".env", env_dict)
@@ -210,6 +227,7 @@ def run(
     _ev("prepare", "info", f"file-list ({len(exec_files)}개):\n" + "\n".join(exec_files))
     _ev("prepare", "info", ".env (key 값 마스킹):\n" + _masked_env_text(env_dict))
 
+    _ck()
     # 6) GENUT 실행 전: 가상환경(.venv) 준비 후 인터프리터를 venv python으로 치환
     run_head = shlex.split(genut.run_command)
     if use_venv:
@@ -238,6 +256,7 @@ def run(
     if job.function_name:
         argv += ["--function-name", job.function_name]
 
+    _ck()
     # 7) 실행 (호스트 또는 컨테이너) — on_event가 있으면 출력을 줄 단위로 스트리밍
     _ev("run", "info", f"$ {' '.join(argv)}")
     on_line = (lambda line: _ev("run", "info", line)) if on_event is not None else None

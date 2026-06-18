@@ -55,6 +55,11 @@ def is_canceled(job_id: int) -> bool:
         return job_id in _canceled
 
 
+def has_process(job_id: int) -> bool:
+    with _lock:
+        return job_id in _procs
+    
+
 def cancel(job_id: int) -> bool:
     """job을 강제 종료 요청. 실행 중 서브프로세스가 있으면 죽이고 True, 없으면 False.
 
