@@ -294,8 +294,8 @@ def test_runner_venv_reused_on_second_run(
     assert any("생성" in m and ".venv" in m for m in ev1)
     # ensure_checkout(영속 code_path) 경로에서도 git log가 emit된다
     assert any("GENUT git log" in m for m in ev1)
-    # 디스크에 venv 표식이 실제로 생성됨
-    persist_venv = tmp_path / "genut_persist" / ".venv" / "pyvenv.cfg"
+    # 디스크에 venv 표식이 실제로 생성됨 (GENUT는 저장경로/GENUT 하위)
+    persist_venv = tmp_path / "genut_persist" / "GENUT" / ".venv" / "pyvenv.cfg"
     assert persist_venv.is_file()
 
     job2 = Job(product_id=product.id, genut_instance_id=genut.id, file_list=["src/a.cpp"])
@@ -332,6 +332,26 @@ def test_runner_clones_assure_at_same_depth(
     assert (assure_dir / ".git").is_dir()  # ASSURE가 받아짐
     assert assure_dir.parent == genut_dir.parent  # GENUT와 같은 depth(형제)
     assert any("ASSURE git log" in m for _, m in events)
+
+
+def test_runner_persistent_code_path_puts_genut_and_assure_in_subdirs(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """genut.code_path가 있으면 GENUT는 저장경로/GENUT, ASSURE는 저장경로/ASSURE에 받는다."""
+    vp = make_virtual_product("subdirs", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    code_root = tmp_path / "genut_store"
+    genut.code_path = str(code_root)
+    genut.assure_repo_url = fake_genut_repo["repo_url"]  # 아무 git repo면 충분
+    db_session.commit()
+
+    result = genut_runner.run(job, product, genut, workspace_root=str(tmp_path))
+    assert result.success
+    assert (code_root / "GENUT" / ".git").is_dir()   # GENUT → 저장경로/GENUT
+    assert (code_root / "ASSURE" / ".git").is_dir()  # ASSURE → 저장경로/ASSURE
+    # 저장경로 루트에 직접 받지 않고, _assure 형제 디렉터리도 만들지 않는다
+    assert not (code_root / ".git").is_dir()
+    assert not (tmp_path / "genut_store_assure").exists()
 
 
 def test_runner_skips_assure_when_url_absent(

@@ -42,9 +42,9 @@ def product_code_dir(product: Product) -> Path:
 
 
 def genut_code_dir(genut: GenutInstance) -> Path | None:
-    """GENUT 코드 디렉터리: code_path 있으면 그 경로, 없으면 None(임시 clone 사용)."""
+    """GENUT 코드 디렉터리: code_path 있으면 그 경로의 GENUT 하위, 없으면 None(임시 clone 사용)."""
     if genut.code_path:
-        return resolve_code_path(genut.code_path)
+        return resolve_code_path(genut.code_path) / "GENUT"
     return None
 
 

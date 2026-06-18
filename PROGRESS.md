@@ -115,8 +115,8 @@ migrations/              # Alembic (env.py + versions/)
 
 `runner/genut_runner.run(job, product, genut, *, workspace_root, debug, enable_assure, ..., make_executor)`:
 1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용** → `out_tests_rel` 아래 생성 테스트(untracked) 보존; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. clone/업데이트 후 **`git log`(최근 커밋)를 job 로그로 출력**(`git_ops.recent_log`, 실패해도 무시). 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
-2. GENUT 코드 준비 — `code_path` 있으면 영속 경로 업데이트, 없으면 `job_<id>/genut`에 임시 clone. 역시 clone/업데이트 후 **`git log`를 job 로그로 출력**
-2-1. **ASSURE 코드 준비(선택)** — `assure_repo_url`이 있으면 **GENUT 코드와 같은 depth(형제 디렉터리 `<genut_dir>_assure`)** 에 받는다. GENUT가 영속(`code_path`)이면 ASSURE도 영속(제자리 업데이트), 임시면 임시 clone. clone/업데이트 후 `git log`도 출력
+2. GENUT 코드 준비 — `code_path` 있으면 **그 영속 경로의 `GENUT` 하위(`<code_path>/GENUT`)** 에 업데이트, 없으면 `job_<id>/genut`에 임시 clone. 역시 clone/업데이트 후 **`git log`를 job 로그로 출력**
+2-1. **ASSURE 코드 준비(선택)** — `assure_repo_url`이 있으면, GENUT가 영속(`code_path`)이면 **`<code_path>/ASSURE`** 에 제자리 업데이트하고, 임시면 **GENUT 형제 디렉터리(`<genut_dir>_assure`)** 에 임시 clone한다. 즉 영속 저장 경로는 `<code_path>/GENUT`·`<code_path>/ASSURE`로 나란히 받는다. clone/업데이트 후 `git log`도 출력
 3. `.env` 조립(`env_builder`: DS_ASSIST_*는 GENUT, CMAKE_*·TEST_RUN_CMD·MODE는 프로덕트)
 4. executor 선택(Host=항등 경로, **Docker=컨테이너 경로 매핑**)
 5. 상대→절대(executor 경로공간) 변환, included만 `filelist.txt`에 절대경로로 기록

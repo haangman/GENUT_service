@@ -152,25 +152,28 @@ def run(
         _ev("patch", "info", f"patch 적용: {patch.name}")
         git_ops.apply_patch(str(product_dir), patch.content, timeout=git_timeout)
 
-    # 2) GENUT 코드 확보 (code_path 있으면 영속 경로 제자리 업데이트, 없으면 임시 clone)
+    # 2) GENUT 코드 확보 (code_path 있으면 영속 경로의 GENUT 하위에 제자리 업데이트, 없으면 임시 clone)
     if genut.code_path:
-        genut_dir = workspace.resolve_code_path(genut.code_path)
+        code_root = workspace.resolve_code_path(genut.code_path)
+        genut_dir = code_root / "GENUT"
         _ev("clone", "info", f"GENUT 업데이트(영속): {genut_dir} ← {genut.repo_url} ({genut.repo_ref})")
         git_ops.ensure_checkout(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
     else:
+        code_root = None
         genut_dir = job_root / "genut"
         _ev("clone", "info", f"GENUT clone(임시): {genut.repo_url} ({genut.repo_ref})")
         git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout)
     _ev("clone", "info", f"GENUT git log:\n{git_ops.recent_log(genut_dir, timeout=git_timeout)}")
 
-    # 2-1) ASSURE 코드 확보 (선택) — GENUT 코드와 같은 depth(형제 디렉터리)에 받는다.
-    #      GENUT가 영속(code_path)이면 ASSURE도 영속(제자리 업데이트), 임시면 임시 clone.
+    # 2-1) ASSURE 코드 확보 (선택)
+    #      영속(code_path)이면 저장경로/ASSURE 하위에, 임시면 GENUT 형제 디렉터리(genut_assure)에 받는다.
     if genut.assure_repo_url:
-        assure_dir = genut_dir.parent / f"{genut_dir.name}_assure"
         if genut.code_path:
+            assure_dir = code_root / "ASSURE"
             _ev("clone", "info", f"ASSURE 업데이트(영속): {assure_dir} ← {genut.assure_repo_url}")
             git_ops.ensure_checkout(genut.assure_repo_url, "", assure_dir, timeout=git_timeout)
         else:
+            assure_dir = genut_dir.parent / f"{genut_dir.name}_assure"
             _ev("clone", "info", f"ASSURE clone(임시): {assure_dir} ← {genut.assure_repo_url}")
             git_ops.clone(genut.assure_repo_url, "", assure_dir, timeout=git_timeout)
         _ev("clone", "info", f"ASSURE git log:\n{git_ops.recent_log(assure_dir, timeout=git_timeout)}")
