@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
 import { renderWithProviders } from '../../test/utils'
-import { JobLogs, MonitoringPage } from './MonitoringPage'
+import { JobLogs, MonitoringPage, formatDuration } from './MonitoringPage'
 
 function ev(id: number, phase: string, message: string) {
   return { id, job_id: 7, ts: '2026-06-15T00:00:00Z', level: 'info', phase, message, payload: null }
@@ -204,6 +204,26 @@ describe('MonitoringPage', () => {
     const btn = await screen.findByRole('button', { name: '강제 종료' })
     fireEvent.click(btn)
     await waitFor(() => expect(canceled).toBe(true))
+  })
+})
+
+describe('formatDuration', () => {
+  it('완료된 job은 시작~종료 차이를 고정 표시한다', () => {
+    expect(formatDuration('2026-06-15T00:00:00Z', '2026-06-15T00:01:30Z')).toBe('1:30')
+  })
+
+  it('실행 중 job은 현재 시각까지의 경과를 (진행 중)으로 표시한다', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-15T00:00:45Z'))
+    // 종료 전(endIso=null)이면 now-start 경과 → 실시간 갱신의 근거
+    expect(formatDuration('2026-06-15T00:00:00Z', null)).toBe('0:45 (진행 중)')
+    vi.setSystemTime(new Date('2026-06-15T00:01:07Z'))
+    expect(formatDuration('2026-06-15T00:00:00Z', null)).toBe('1:07 (진행 중)')
+    vi.useRealTimers()
+  })
+
+  it('미시작(시작 시각 없음) job은 -', () => {
+    expect(formatDuration(null, null)).toBe('-')
   })
 })
 

@@ -29,7 +29,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 // 총 수행 시간(시작~종료). 종료 전이면 현재까지 경과 + '(진행 중)', 미시작이면 '-'.
-function formatDuration(startIso: string | null, endIso: string | null): string {
+export function formatDuration(startIso: string | null, endIso: string | null): string {
   if (!startIso) return '-'
   const start = new Date(startIso).getTime()
   const end = endIso ? new Date(endIso).getTime() : Date.now()
@@ -230,12 +230,20 @@ export function JobLogs({
 function JobHistory() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
   const [canceling, setCanceling] = useState<Set<number>>(new Set())
+  const [, setTick] = useState(0) // 1초 틱: 실행 중 job의 총 수행 시간 실시간 갱신용
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['jobs', 'history'],
     queryFn: () => listJobs({ page_size: 50 }),
     refetchInterval: 2000, // 강제 종료 후 상태(canceled) 반영을 빠르게 보이도록
   })
+  // 실행 중(시작했고 아직 종료 전)인 job이 있으면 1초마다 리렌더해 총 수행 시간을 실시간 갱신한다.
+  const anyRunning = (data?.items ?? []).some((job) => job.started_at && !job.finished_at)
+  useEffect(() => {
+    if (!anyRunning) return
+    const timer = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(timer)
+  }, [anyRunning])
   const cancelMut = useMutation({
     mutationFn: (jobId: number) => cancelJob(jobId),
     onError: () =>
