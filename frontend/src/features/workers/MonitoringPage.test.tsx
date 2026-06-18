@@ -60,6 +60,45 @@ describe('MonitoringPage', () => {
     expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
   })
 
+  it('shows start time, end time, and total duration for jobs', async () => {
+    server.use(
+      http.get('/api/workers', () => HttpResponse.json([])),
+      http.get('/api/queue', () => HttpResponse.json([])),
+      http.get('/api/jobs', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 9,
+              product_id: 4,
+              genut_instance_id: 1,
+              status: 'done',
+              function_name: null,
+              file_list: [],
+              excluded_files: [],
+              attempt: 0,
+              submitted_at: '2026-06-15T00:00:00Z',
+              started_at: '2026-06-15T00:00:00Z',
+              finished_at: '2026-06-15T00:01:30Z',
+              result_summary: 'status=success total=4 pos=2 neg=2',
+              error: null,
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        }),
+      ),
+    )
+
+    renderWithProviders(<MonitoringPage />)
+    // 총 수행 시간 = 90초 → "1:30" (두 시각의 차이라 타임존과 무관). 데이터 로드까지 대기.
+    expect(await screen.findByText('1:30')).toBeInTheDocument()
+    // 컬럼 헤더가 표시된다
+    expect(screen.getByText('시작 시간')).toBeInTheDocument()
+    expect(screen.getByText('종료 시간')).toBeInTheDocument()
+    expect(screen.getByText('총 수행 시간')).toBeInTheDocument()
+  })
+
   it('shows a force-kill button for running jobs and posts cancel', async () => {
     let canceled = false
     const runningJob = {

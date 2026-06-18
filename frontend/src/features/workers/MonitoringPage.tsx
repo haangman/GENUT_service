@@ -16,6 +16,33 @@ function formatStamp(date: Date): string {
   )
 }
 
+// 로컬 시각 표시: YYYY-MM-DD HH:MM:SS (없으면 '-')
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '-'
+  const p = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  )
+}
+
+// 총 수행 시간(시작~종료). 종료 전이면 현재까지 경과 + '(진행 중)', 미시작이면 '-'.
+function formatDuration(startIso: string | null, endIso: string | null): string {
+  if (!startIso) return '-'
+  const start = new Date(startIso).getTime()
+  const end = endIso ? new Date(endIso).getTime() : Date.now()
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '-'
+  const totalSec = Math.floor((end - start) / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  const p = (n: number) => String(n).padStart(2, '0')
+  const base = h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`
+  return endIso ? base : `${base} (진행 중)`
+}
+
 function WorkerGrid() {
   const { data } = useQuery({
     queryKey: ['workers'],
@@ -188,6 +215,9 @@ function JobHistory() {
             <th className="py-2">#</th>
             <th>product</th>
             <th>상태</th>
+            <th>시작 시간</th>
+            <th>종료 시간</th>
+            <th>총 수행 시간</th>
             <th>결과</th>
             <th></th>
           </tr>
@@ -202,6 +232,11 @@ function JobHistory() {
                 <td className="py-2">{job.id}</td>
                 <td>{job.product_id}</td>
                 <td>{job.status}</td>
+                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.started_at)}</td>
+                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.finished_at)}</td>
+                <td className="whitespace-nowrap text-gray-500">
+                  {formatDuration(job.started_at, job.finished_at)}
+                </td>
                 <td className="text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
                 <td className="text-right">
                   {job.status === 'running' ? (
@@ -221,7 +256,7 @@ function JobHistory() {
               </tr>
               {selectedJobId === job.id ? (
                 <tr className="border-b bg-gray-50">
-                  <td colSpan={5} className="p-2">
+                  <td colSpan={8} className="p-2">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>
