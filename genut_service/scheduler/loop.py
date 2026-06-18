@@ -61,11 +61,15 @@ class Scheduler:
             await asyncio.gather(*running, return_exceptions=True)
 
     async def start(self) -> None:
-        # 시작 시 이전 실행에서 남은 stale 락을 정리한다
+        # 시작 시: 이전 실행에서 끊긴 job을 interrupted로 마킹하고, 남은 stale 락을 정리한다
         try:
-            from genut_service.scheduler.janitor import release_stale_locks
+            from genut_service.scheduler.janitor import (
+                mark_interrupted_jobs,
+                release_stale_locks,
+            )
 
             with self._session_factory() as session:
+                mark_interrupted_jobs(session)
                 release_stale_locks(session)
         except Exception:  # noqa: BLE001
             pass

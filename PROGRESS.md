@@ -82,13 +82,13 @@ migrations/              # Alembic (env.py + versions/)
 - **products**: name(**중복 허용**·unique 아님), product_code, git_url, git_ref, `compile_db_rel`, `out_tests_rel`, `code_path`(영속 체크아웃 경로·선택), `cmake_configure_cmd`, `cmake_build_cmd`, `test_run_cmd`, `test_generation_mode`, active. (+ 순서 있는 **patches** 1—N)
 - **patches**: product_id, order_index, name, content(unified diff). UNIQUE(product_id, order_index).
 - **genut_instances**(=워커): name(unique), repo_url, repo_ref, `assure_repo_url`(선택), `ds_assist_credential_key`(secret·응답 제외), `ds_assist_send_system_name`, `ds_assist_user_id`(선택), max_attempts(기본10), `run_command`, `code_path`(영속 경로·선택), enabled, worker_status(idle|busy|error|disabled), current_job_id(soft 참조).
-- **jobs**: product_id, genut_instance_id, status(실제 전이: `queued → running → done|failed|`**`canceled`**; enum엔 `assigned/preparing/collecting/retrying`도 정의돼 있으나 현재 미사용), function_name, `file_list`(JSON, included), `excluded_files`(JSON), priority, attempt, submitted/started/finished_at, result_summary, error.
+- **jobs**: product_id, genut_instance_id, status(실제 전이: `queued → running → done|failed|`**`canceled`**`|`**`interrupted`**; 서버 재시작 시 남은 in-flight job은 기동 janitor가 `interrupted`로 종료; enum엔 `assigned/preparing/collecting/retrying`도 정의돼 있으나 현재 미사용), function_name, `file_list`(JSON, included), `excluded_files`(JSON), priority, attempt, submitted/started/finished_at, result_summary, error.
 - **job_events**: job_id, ts, level, phase, message, payload(JSON) — append-only 로그.
 - **product_locks**: `product_id`(PK), job_id, genut_instance_id, acquired_at — **PK가 프로덕트당 락 1개 보장**.
 
 마이그레이션(5개, head=`20e9e4efaf2c`): `f944f16d574a`(core tables) → `38fc35ad54d5`(products·genut에 `code_path`) → `fe55b4bebf19`(`ds_assist_user_id`) → `406e1798f687`(`assure_repo_url`) → `20e9e4efaf2c`(products.name unique 제약 제거). `alembic check` drift 없음.
 
-`JobStatus`에 `canceled`(강제 종료) 추가 — `TERMINAL_STATUSES = {done, failed, canceled}`. `WorkerStatus`는 idle|busy|error|disabled.
+`JobStatus`에 `canceled`(강제 종료)·`interrupted`(서버 재시작 중단) 추가 — `TERMINAL_STATUSES = {done, failed, canceled, interrupted}`. `WorkerStatus`는 idle|busy|error|disabled.
 
 ---
 
@@ -97,7 +97,7 @@ migrations/              # Alembic (env.py + versions/)
 - **claim_jobs(session)**: enabled·idle 워커에 queued job을 배정. **프로덕트 이름당 1개**(중복명 허용에 따라 id가 아닌 이름 기준으로 차단), 락 보유 프로덕트 제외, idle 워커 수만큼. 정렬은 `priority DESC, submitted_at ASC, id ASC`. job→running, 워커→busy, `product_locks` insert.
 - **finish_job(session, job_id, status, ...)**: 종료 상태 기록 + 락 해제 + 워커→idle.
 - **lock.try_acquire_lock / release_lock**: PK 충돌(IntegrityError)이 배타성의 원자적 근거.
-- **loop.Scheduler**(운영): 매 tick `claim_jobs` 후 **비차단 디스패치**(`asyncio.to_thread`로 실행, 완료 대기 안 함) → 워커가 비는 즉시 다음 job을 잡는 롤링 병렬. lifespan에서 `scheduler_autostart`면 기동(테스트는 off). 시작 시 janitor 1회.
+- **loop.Scheduler**(운영): 매 tick `claim_jobs` 후 **비차단 디스패치**(`asyncio.to_thread`로 실행, 완료 대기 안 함) → 워커가 비는 즉시 다음 job을 잡는 롤링 병렬. lifespan에서 `scheduler_autostart`면 기동(테스트는 off). 시작 시 **`mark_interrupted_jobs`(기동 1회) — 이전 프로세스가 남긴 in-flight job을 `interrupted`로 종료** + janitor 1회로 락/워커 회수.
 - **loop.run_pending(session, process)**: 결정론적(동기) — E2E/테스트에서 사용.
 - **janitor.release_stale_locks**: 종료/소실 job의 락 해제 + 해당 busy 워커 idle 복구.
 
@@ -164,7 +164,7 @@ migrations/              # Alembic (env.py + versions/)
 - **레이어**: unit(paths/compile_db/env_builder/마스킹) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash·스트리밍 이벤트) · subprocess(run_streaming) · 로그 다운로드(전체 내용·키 마스킹·404) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip). fake `sleep_seconds`/진행 라인.
 - **강제 종료/취소 검증(신규)**: `process_registry`(등록/취소/레이스/플래그 4종) · runner(`on_process`로 live subprocess kill) · API(cancel 404/409/200 + `is_canceled`) · E2E(취소 후 runner가 raise해도 CANCELED). venv python 경로가 symlink resolve로 base 인터프리터로 새지 않는지 회귀 가드.
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
-- 현재 **백엔드 104 passed, 1 deselected(docker)**(총 105 테스트 함수·19 파일) **· 프론트 35 passed**(13 파일). (재실측 2026-06-18)
+- 현재 **백엔드 105 passed, 1 deselected(docker)**(총 106 테스트 함수·19 파일) **· 프론트 37 passed**(13 파일). (재실측 2026-06-18)
 
 ---
 

@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, ProductLock
-from genut_service.enums import TERMINAL_STATUSES, WorkerStatus
+from genut_service.enums import INFLIGHT_STATUSES, TERMINAL_STATUSES, JobStatus, WorkerStatus
 
 _TERMINAL = {status.value for status in TERMINAL_STATUSES}
+_INFLIGHT = {status.value for status in INFLIGHT_STATUSES}
+
+
+def mark_interrupted_jobs(session: Session) -> int:
+    """실행 도중 끊긴 job(running 등 in-flight)을 interrupted로 종료 처리한다. 처리 수 반환.
+
+    **스케줄러 기동 시 1회만** 호출해야 한다(정상 실행 중인 job을 죽이지 않도록). 인앱
+    스케줄러는 단일 프로세스이므로, 기동 시점에 DB에 남아 있는 in-flight job은 모두 이전
+    프로세스(서버 재시작 전)가 남긴 고아 job이다. interrupted(terminal)로 바꾸고
+    finished_at·사유를 기록한다. 락 해제/워커 idle 복구는 이어지는 release_stale_locks가
+    처리한다(interrupted는 terminal이므로).
+    """
+    now = datetime.now(timezone.utc)
+    count = 0
+    for job in session.scalars(select(Job).where(Job.status.in_(_INFLIGHT))):
+        job.status = JobStatus.INTERRUPTED.value
+        job.finished_at = now
+        job.error = "서버 재시작으로 실행이 중단됨"
+        count += 1
+    session.commit()
+    return count
 
 
 def release_stale_locks(session: Session) -> int:

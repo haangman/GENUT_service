@@ -25,6 +25,7 @@ class JobStatus(StrEnum):
     DONE = "done"
     FAILED = "failed"
     CANCELED = "canceled"
+    INTERRUPTED = "interrupted"  # 서버 재시작 등으로 실행 도중 끊김
 
 
 class WorkerStatus(StrEnum):
@@ -57,5 +58,16 @@ class JobPhase(StrEnum):
 
 # 종료(terminal) 상태 집합 — 락 해제/폴링 중단 판정에 사용
 TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELED}
+    {JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELED, JobStatus.INTERRUPTED}
+)
+
+# 실행 중(비-queued·비-terminal) 상태 집합 — 서버 재시작 시 '중단됨'으로 간주할 대상
+INFLIGHT_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.ASSIGNED,
+        JobStatus.PREPARING,
+        JobStatus.RUNNING,
+        JobStatus.COLLECTING,
+        JobStatus.RETRYING,
+    }
 )

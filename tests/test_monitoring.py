@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
 from genut_service.enums import JobStatus, WorkerStatus
 from genut_service.scheduler.engine import claim_jobs
-from genut_service.scheduler.janitor import release_stale_locks
+from genut_service.scheduler.janitor import mark_interrupted_jobs, release_stale_locks
 
 
 def _product(session: Session, name: str = "P") -> Product:
@@ -69,6 +69,36 @@ def test_janitor_releases_terminal_lock_and_resets_worker(db_session: Session) -
 
     released = release_stale_locks(db_session)
     assert released == 1
+    assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
+    db_session.expire_all()
+    assert db_session.get(GenutInstance, worker.id).worker_status == WorkerStatus.IDLE.value
+
+
+def test_mark_interrupted_jobs_marks_inflight_and_recovers(db_session: Session) -> None:
+    """서버 재시작 시: in-flight job은 interrupted로 종료되고, 이어진 janitor가 락/워커를 회수한다."""
+    product = _product(db_session)
+    worker = _worker(db_session)
+    running = Job(product_id=product.id, status=JobStatus.RUNNING.value, genut_instance_id=worker.id)
+    queued = Job(product_id=product.id, status=JobStatus.QUEUED.value)
+    done = Job(product_id=product.id, status=JobStatus.DONE.value)
+    db_session.add_all([running, queued, done])
+    db_session.flush()
+    worker.worker_status = WorkerStatus.BUSY.value
+    worker.current_job_id = running.id
+    db_session.add(ProductLock(product_id=product.id, job_id=running.id, genut_instance_id=worker.id))
+    db_session.commit()
+
+    n = mark_interrupted_jobs(db_session)
+    assert n == 1  # running 만 대상
+    db_session.expire_all()
+    assert db_session.get(Job, running.id).status == JobStatus.INTERRUPTED.value
+    assert db_session.get(Job, running.id).finished_at is not None
+    # queued/terminal job은 건드리지 않는다
+    assert db_session.get(Job, queued.id).status == JobStatus.QUEUED.value
+    assert db_session.get(Job, done.id).status == JobStatus.DONE.value
+
+    # interrupted는 terminal이므로 release_stale_locks가 락 해제 + 워커 idle 복구
+    release_stale_locks(db_session)
     assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
     db_session.expire_all()
     assert db_session.get(GenutInstance, worker.id).worker_status == WorkerStatus.IDLE.value

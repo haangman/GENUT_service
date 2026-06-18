@@ -5,7 +5,7 @@ import { listQueue, listWorkers } from '../../api/workers'
 import { cancelJob, getJobLogs, listJobs, rerunJob } from '../../api/jobs'
 import type { Job, JobEvent } from '../../types/api'
 
-const TERMINAL = new Set(['done', 'failed', 'canceled'])
+const TERMINAL = new Set(['done', 'failed', 'canceled', 'interrupted'])
 
 // 파일명용 타임스탬프: YYYYMMDD-HHMMSS
 function formatStamp(date: Date): string {
@@ -51,7 +51,9 @@ function jobResultLabel(job: Job): string {
     case 'done':
       return '완료'
     case 'failed':
-      return '실패나 서버 재시작으로 실행이 중단됨.'
+      return '실패로 실행이 중단됨.'
+    case 'interrupted':
+      return '서버 재시작으로 실행이 중단됨.'
     case 'canceled':
       return '강제 종료됨'
     default:

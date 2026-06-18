@@ -132,9 +132,43 @@ describe('MonitoringPage', () => {
     )
 
     renderWithProviders(<MonitoringPage />)
-    expect(await screen.findByText('실패나 서버 재시작으로 실행이 중단됨.')).toBeInTheDocument()
+    expect(await screen.findByText('실패로 실행이 중단됨.')).toBeInTheDocument()
     // 긴 에러 로그 원문은 결과 컬럼에 노출되지 않는다
     expect(screen.queryByText(/traceback/)).toBeNull()
+  })
+
+  it('interrupted job은 결과 컬럼에 서버 재시작 안내를 보여준다', async () => {
+    server.use(
+      http.get('/api/workers', () => HttpResponse.json([])),
+      http.get('/api/queue', () => HttpResponse.json([])),
+      http.get('/api/jobs', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 12,
+              product_id: 2,
+              genut_instance_id: 1,
+              status: 'interrupted',
+              function_name: null,
+              file_list: [],
+              excluded_files: [],
+              attempt: 0,
+              submitted_at: '2026-06-15T00:00:00Z',
+              started_at: '2026-06-15T00:00:00Z',
+              finished_at: '2026-06-15T00:00:30Z',
+              result_summary: null,
+              error: '서버 재시작으로 실행이 중단됨',
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        }),
+      ),
+    )
+
+    renderWithProviders(<MonitoringPage />)
+    expect(await screen.findByText('서버 재시작으로 실행이 중단됨.')).toBeInTheDocument()
   })
 
   it('shows a force-kill button for running jobs and posts cancel', async () => {
