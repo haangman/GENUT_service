@@ -27,3 +27,7 @@ export function getJobLogs(id: number, since = 0): Promise<JobEvent[]> {
 export function cancelJob(id: number): Promise<Job> {
   return apiFetch<Job>(`/jobs/${id}/cancel`, { method: 'POST' })
 }
+
+export function rerunJob(id: number): Promise<Job> {
+  return apiFetch<Job>(`/jobs/${id}/rerun`, { method: 'POST' })
+}

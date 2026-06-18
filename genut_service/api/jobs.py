@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
-from genut_service.enums import JobStatus
+from genut_service.enums import TERMINAL_STATUSES, JobStatus
 from genut_service.runner import process_registry
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobCreate, JobEventRead, JobRead
@@ -61,6 +61,20 @@ def cancel_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
         raise HTTPException(status.HTTP_409_CONFLICT, "실행 중인 job이 아니다")
     # 같은 프로세스의 워커가 돌리는 서브프로세스를 죽인다. 종료 처리는 워커가 한다.
     process_registry.cancel(job_id)
+    return JobRead.model_validate(job)
+
+
+@router.post("/{job_id}/rerun", response_model=JobRead, status_code=status.HTTP_201_CREATED)
+def rerun_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
+    """완료/실패/취소된 job과 동일한 입력으로 새 job을 큐에 추가한다."""
+    original = job_service.get_job(session, job_id)
+    if original is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
+    if original.status not in TERMINAL_STATUSES:
+        raise HTTPException(status.HTTP_409_CONFLICT, "완료된 job만 재수행할 수 있다")
+    job = job_service.rerun_job(session, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
     return JobRead.model_validate(job)
 
 

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listQueue, listWorkers } from '../../api/workers'
-import { cancelJob, getJobLogs, listJobs } from '../../api/jobs'
+import { cancelJob, getJobLogs, listJobs, rerunJob } from '../../api/jobs'
 import type { JobEvent } from '../../types/api'
 
 const TERMINAL = new Set(['done', 'failed', 'canceled'])
@@ -111,6 +111,18 @@ export function JobLogs({
   const preRef = useRef<HTMLPreElement>(null)
   const terminal = TERMINAL.has(status)
 
+  // 재수행: 동일 입력의 새 job을 큐에 추가한다(완료된 job에서만 가능).
+  const queryClient = useQueryClient()
+  const rerunMut = useMutation({
+    mutationFn: () => rerunJob(jobId),
+    onSuccess: (job) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs', 'history'] })
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
+      window.alert(`재수행 요청 완료 (새 job #${job.id})`)
+    },
+    onError: () => window.alert('재수행 요청에 실패했습니다.'),
+  })
+
   // 선택한 job이 바뀌면 누적 로그와 커서를 초기화
   useEffect(() => {
     setEvents([])
@@ -175,6 +187,16 @@ export function JobLogs({
         >
           로그 저장
         </button>
+        {terminal ? (
+          <button
+            type="button"
+            onClick={() => rerunMut.mutate()}
+            disabled={rerunMut.isPending}
+            className="rounded border px-2 py-0.5 text-blue-600 disabled:opacity-50"
+          >
+            {rerunMut.isPending ? '재수행 중…' : '재수행'}
+          </button>
+        ) : null}
       </div>
       <pre
         ref={preRef}

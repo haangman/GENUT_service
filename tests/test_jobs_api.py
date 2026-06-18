@@ -120,6 +120,49 @@ def test_cancel_running_job_marks_for_cancellation(
         process_registry.unregister(job_id)
 
 
+def test_rerun_creates_new_queued_job(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    from genut_service.db.models import Job
+    from genut_service.enums import JobStatus
+
+    product_id = _create_product(client)
+    original = client.post(
+        "/api/jobs",
+        json={"product_id": product_id, "files": ["src/a.cpp", "src/b.cpp"], "function_name": "foo"},
+    ).json()
+    # terminal(done) 상태로 만든다
+    job = db_session.get(Job, original["id"])
+    job.status = JobStatus.DONE.value
+    db_session.commit()
+
+    resp = client.post(f"/api/jobs/{original['id']}/rerun")
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["id"] != original["id"]
+    assert body["status"] == "queued"
+    # 입력은 그대로 복사된다
+    assert body["file_list"] == original["file_list"] == ["src/a.cpp"]
+    assert body["excluded_files"] == original["excluded_files"] == ["src/b.cpp"]
+    assert body["function_name"] == "foo"
+    # 워커/시작시각은 복사하지 않아 스케줄러가 재배정한다
+    assert body["genut_instance_id"] is None
+    assert body["started_at"] is None
+
+
+def test_rerun_missing_job_404(client: TestClient) -> None:
+    assert client.post("/api/jobs/99999/rerun").status_code == 404
+
+
+def test_rerun_non_terminal_409(client: TestClient, checkout: Path) -> None:
+    product_id = _create_product(client)
+    job_id = client.post(
+        "/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]}
+    ).json()["id"]
+    # 갓 제출한 queued(미완료) job → 재수행 불가 409
+    assert client.post(f"/api/jobs/{job_id}/rerun").status_code == 409
+
+
 def test_job_logs_with_since(
     client: TestClient, checkout: Path, db_session: Session
 ) -> None:

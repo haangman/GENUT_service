@@ -141,7 +141,7 @@ migrations/              # Alembic (env.py + versions/)
 
 - Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches, +`code_path`: 코드 영속 경로 선택·절대/상대)
 - Files: `GET /products/{id}/tree?path=`, `POST /products/{id}/compile-check {files}` → `{included,excluded}`
-- Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, **`POST /jobs/{id}/cancel`**(실행 중 job 강제 종료; RUNNING 아니면 409·없으면 404, 즉시 RUNNING 반환·워커가 CANCELED 확정), `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹·파일 없으면 DB 이벤트로 재구성)
+- Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, **`POST /jobs/{id}/cancel`**(실행 중 job 강제 종료; RUNNING 아니면 409·없으면 404, 즉시 RUNNING 반환·워커가 CANCELED 확정), **`POST /jobs/{id}/rerun`**(동일 입력으로 새 queued job 생성·201; terminal(done/failed/canceled) 아니면 409·원본/프로덕트 없으면 404; file_list·excluded_files·function_name을 그대로 복사, genut/timestamps는 미복사해 스케줄러가 재배정), `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹·파일 없으면 DB 이벤트로 재구성)
 - GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`ds_assist_user_id`·`assure_repo_url`·`code_path` 선택)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
 - 정적: 비-API 경로는 `frontend/dist/index.html`로 SPA fallback
@@ -153,7 +153,7 @@ migrations/              # Alembic (env.py + versions/)
 1. **테스트 요청**: 프로덕트 선택(옵션 라벨 `name(id)`로 동명 구분) → 지연 파일트리(폴더 일괄 가져오기, 확장자 allowlist by mode) → compile_commands 검사로 included/excluded 분리(미포함 별도 표시·제출 제외) → 함수명(선택) → 제출. 선택 변경 시 stale → 재검사 전 제출 차단. **제출 성공·탭 이탈 시 빌더 리셋**(접수 배너의 job #N만 보존).
 2. **프로덕트**: 목록 + 등록 폼(patch field-array) + **수정**(PUT, 기존값 프리필) + 삭제.
 3. **GENUT**: 목록 + 등록 폼(키 write-only) + **수정**(키 비우면 기존 유지) + 삭제.
-4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력(**제출 시각·시작 시간·종료 시간·총 수행 시간** 컬럼 — `submitted_at`/`started_at`/`finished_at` 기준, 총 수행 시간은 종료 전이면 경과+`(진행 중)`). 작업 클릭 시 **실시간 로그 뷰어**(`?since=` 커서로 증분 누적, 종료 시 폴링 중단, 자동 스크롤) + **로그 파일 다운로드** 링크. 실행 중 job 행에는 **`강제 종료` 버튼**(클릭 즉시 `종료 중…`으로 낙관적 표시 후 cancel POST, 이력 2s 폴링으로 canceled 반영).
+4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력(**제출 시각·시작 시간·종료 시간·총 수행 시간** 컬럼 — `submitted_at`/`started_at`/`finished_at` 기준, 총 수행 시간은 종료 전이면 경과+`(진행 중)`). 작업 클릭 시 **실시간 로그 뷰어**(`?since=` 커서로 증분 누적, 종료 시 폴링 중단, 자동 스크롤) + **로그 파일 다운로드** + **`재수행`**(완료 job만; 동일 입력으로 새 job을 큐에 추가) 버튼. 실행 중 job 행에는 **`강제 종료` 버튼**(클릭 즉시 `종료 중…`으로 낙관적 표시 후 cancel POST, 이력 2s 폴링으로 canceled 반영).
 
 ---
 
@@ -164,7 +164,7 @@ migrations/              # Alembic (env.py + versions/)
 - **레이어**: unit(paths/compile_db/env_builder/마스킹) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash·스트리밍 이벤트) · subprocess(run_streaming) · 로그 다운로드(전체 내용·키 마스킹·404) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip). fake `sleep_seconds`/진행 라인.
 - **강제 종료/취소 검증(신규)**: `process_registry`(등록/취소/레이스/플래그 4종) · runner(`on_process`로 live subprocess kill) · API(cancel 404/409/200 + `is_canceled`) · E2E(취소 후 runner가 raise해도 CANCELED). venv python 경로가 symlink resolve로 base 인터프리터로 새지 않는지 회귀 가드.
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
-- 현재 **백엔드 99 passed, 1 deselected(docker)**(총 100 테스트 함수·19 파일) **· 프론트 32 passed**(13 파일). (재실측 2026-06-18)
+- 현재 **백엔드 104 passed, 1 deselected(docker)**(총 105 테스트 함수·19 파일) **· 프론트 35 passed**(13 파일). (재실측 2026-06-18)
 
 ---
 

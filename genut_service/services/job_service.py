@@ -39,6 +39,32 @@ def submit_request(
     return job
 
 
+def rerun_job(session: Session, job_id: int) -> Job | None:
+    """원본 job과 동일한 입력으로 새 queued Job을 생성한다.
+
+    product/file_list/excluded_files/function_name을 그대로 복사한다(compile-check 재실행
+    없음 — "동일한 job"). genut_instance_id·timestamps·attempt 등은 복사하지 않아 스케줄러가
+    새로 배정한다. 원본이 없거나 그 product가 삭제됐으면 None.
+    """
+    original = session.get(Job, job_id)
+    if original is None:
+        return None
+    if session.get(Product, original.product_id) is None:
+        return None
+    job = Job(
+        product_id=original.product_id,
+        function_name=original.function_name,
+        # JSON 컬럼 aliasing 방지를 위해 새 리스트로 복사한다.
+        file_list=list(original.file_list or []),
+        excluded_files=list(original.excluded_files or []),
+        status=JobStatus.QUEUED.value,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
 def get_job(session: Session, job_id: int) -> Job | None:
     return session.get(Job, job_id)
 

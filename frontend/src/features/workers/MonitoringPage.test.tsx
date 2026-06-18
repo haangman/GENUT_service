@@ -172,4 +172,28 @@ describe('JobLogs (증분 폴링)', () => {
     clickSpy.mockRestore()
     expect(savedName).toMatch(/^job_7_\d{8}-\d{6}\.log$/)
   })
+
+  it('완료된 job에서 재수행 버튼을 누르면 rerun 엔드포인트를 호출한다', async () => {
+    let reran = false
+    server.use(
+      http.get('/api/jobs/7/logs', () => HttpResponse.json([])),
+      http.post('/api/jobs/7/rerun', () => {
+        reran = true
+        return HttpResponse.json({ id: 99 })
+      }),
+    )
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    renderWithProviders(<JobLogs jobId={7} status="done" />)
+    fireEvent.click(await screen.findByRole('button', { name: '재수행' }))
+    await waitFor(() => expect(reran).toBe(true))
+    alertSpy.mockRestore()
+  })
+
+  it('실행 중인 job에는 재수행 버튼이 없다', async () => {
+    server.use(http.get('/api/jobs/7/logs', () => HttpResponse.json([])))
+    renderWithProviders(<JobLogs jobId={7} status="running" pollMs={1000} />)
+    expect(await screen.findByRole('button', { name: '로그 저장' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '재수행' })).toBeNull()
+  })
 })
