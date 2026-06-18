@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 
 
@@ -41,11 +42,56 @@ def clone(src: str, ref: str, dest: Path, timeout: int = 300) -> None:
             pass
 
 
-def ensure_checkout(url: str, ref: str, dest: Path, timeout: int = 300) -> None:
+def _backup_preserved(dest: Path, preserve: Iterable[str]) -> list[tuple[str, Path, bool]]:
+    """preserve 경로들을 임시 위치로 복사해 둔다(reset --hard로부터 보호)."""
+    saved: list[tuple[str, Path, bool]] = []
+    for rel in preserve:
+        if not rel:
+            continue
+        src = dest / rel
+        if not src.exists():
+            continue
+        holder = Path(tempfile.mkdtemp(prefix="genut_keep_"))
+        backup = holder / "data"
+        if src.is_dir():
+            shutil.copytree(src, backup)
+        else:
+            shutil.copy2(src, backup)
+        saved.append((rel, holder, src.is_dir()))
+    return saved
+
+
+def _restore_preserved(dest: Path, saved: list[tuple[str, Path, bool]]) -> None:
+    """보관해 둔 preserve 경로들을 dest에 덮어써(overlay) 복원한다."""
+    for rel, holder, is_dir in saved:
+        target = dest / rel
+        backup = holder / "data"
+        try:
+            if is_dir:
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(backup, target, dirs_exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(backup, target)
+        finally:
+            shutil.rmtree(holder, ignore_errors=True)
+
+
+def ensure_checkout(
+    url: str,
+    ref: str,
+    dest: Path,
+    timeout: int = 300,
+    preserve: Iterable[str] = (),
+) -> None:
     """dest에 repo를 제자리 업데이트하거나(없으면) clone한다.
 
-    - `dest/.git`이 있으면 `fetch origin` + `reset --hard origin/<ref>`로 추적 파일만 최신화한다.
-      **git clean을 하지 않으므로 untracked 파일(생성된 테스트 등)은 보존**된다.
+    - `dest/.git`이 있으면 `fetch origin` + `reset --hard origin/<ref>`로 추적 파일을 최신화한다.
+      `git clean`을 하지 않으므로 **순수 untracked 파일은 보존**되지만, `reset --hard`는
+      **staged(인덱스에 add된) 신규 파일을 삭제**한다. 따라서 생성 산출물(예: 테스트 출력
+      폴더)이 GENUT 통합 과정에서 staged 되면 다음 실행의 reset에서 사라질 수 있다.
+      이를 막기 위해 `preserve`로 받은 dest 기준 경로들은 reset 전에 보관했다가 후에
+      덮어써(overlay) 복원한다 → staged/untracked 무관하게 보존된다.
       fetch/reset 실패는 관용적으로 무시하고 기존 체크아웃을 사용한다.
     - `.git`이 없으면(있던 비-repo 디렉터리는 정리 후) clone한다(실패 시 GitError).
     """
@@ -56,10 +102,12 @@ def ensure_checkout(url: str, ref: str, dest: Path, timeout: int = 300) -> None:
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
         if fetch.returncode == 0:
+            saved = _backup_preserved(dest, preserve)
             subprocess.run(
                 ["git", "-C", str(dest), "reset", "--hard", f"origin/{ref}" if ref else "@{u}"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
             )
+            _restore_preserved(dest, saved)
         return
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)

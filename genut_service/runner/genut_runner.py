@@ -142,7 +142,11 @@ def run(
     if product.code_path:
         product_dir = workspace.resolve_code_path(product.code_path)
         _ev("clone", "info", f"프로덕트 업데이트(영속): {product_dir} ← {product.git_url} ({product.git_ref})")
-        git_ops.ensure_checkout(product.git_url, product.git_ref, product_dir, timeout=git_timeout)
+        # out_tests_rel(생성 테스트 출력 폴더)은 reset --hard로부터 보존한다(staged 포함).
+        git_ops.ensure_checkout(
+            product.git_url, product.git_ref, product_dir, timeout=git_timeout,
+            preserve=[normalize_rel_path(product.out_tests_rel)],
+        )
     else:
         product_dir = job_root / "product"
         _ev("clone", "info", f"프로덕트 clone(임시): {product.git_url} ({product.git_ref})")

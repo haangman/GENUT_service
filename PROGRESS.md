@@ -114,7 +114,7 @@ migrations/              # Alembic (env.py + versions/)
 ## 7. Runner / 실행
 
 `runner/genut_runner.run(job, product, genut, *, workspace_root, debug, enable_assure, ..., make_executor)`:
-1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용** → `out_tests_rel` 아래 생성 테스트(untracked) 보존; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. clone/업데이트 후 **`git log`(최근 커밋)를 job 로그로 출력**(`git_ops.recent_log`, 실패해도 무시). 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
+1. product 코드 준비 — **`code_path`가 있으면 그 영속 경로에 제자리 업데이트**(`git_ops.ensure_checkout`: `.git` 있으면 `fetch + reset --hard origin/<ref>`, **`git clean` 미사용**; 없으면 clone), 없으면 기존대로 `job_<id>/product`에 임시 clone. **단 `reset --hard`는 순수 untracked는 보존하지만 staged(`git add`된) 신규 파일은 삭제**하므로, GENUT가 생성 테스트를 통합하며 staging 하면 다음 실행에서 사라진다. 이를 막기 위해 영속 체크아웃 시 **`out_tests_rel`(생성 테스트 출력 폴더)을 `preserve`로 reset 전후 보관·복원**해 staged/untracked 무관하게 보존한다. clone/업데이트 후 **`git log`(최근 커밋)를 job 로그로 출력**(`git_ops.recent_log`, 실패해도 무시). 이어서 순서대로 patch 적용(`git_ops.apply_patch`는 **멱등** — `git apply --reverse --check`로 이미 적용분은 건너뜀)
 2. GENUT 코드 준비 — `code_path` 있으면 **그 영속 경로의 `GENUT` 하위(`<code_path>/GENUT`)** 에 업데이트, 없으면 `job_<id>/genut`에 임시 clone. 역시 clone/업데이트 후 **`git log`를 job 로그로 출력**
 2-1. **ASSURE 코드 준비(선택)** — `assure_repo_url`이 있으면, GENUT가 영속(`code_path`)이면 **`<code_path>/ASSURE`** 에 제자리 업데이트하고, 임시면 **GENUT 형제 디렉터리(`<genut_dir>_assure`)** 에 임시 clone한다. 즉 영속 저장 경로는 `<code_path>/GENUT`·`<code_path>/ASSURE`로 나란히 받는다. clone/업데이트 후 `git log`도 출력
 3. `.env` 조립(`env_builder`: DS_ASSIST_*는 GENUT, CMAKE_*·TEST_RUN_CMD·MODE는 프로덕트)

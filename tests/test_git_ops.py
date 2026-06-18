@@ -68,3 +68,32 @@ def test_recent_log_tolerates_non_repo(tmp_path: Path) -> None:
     # git repo가 아니어도 예외 없이 안내 문자열을 반환한다
     out = git_ops.recent_log(tmp_path)
     assert "git log 조회 실패" in out
+
+
+def test_ensure_checkout_preserve_keeps_staged_output(tmp_path: Path) -> None:
+    """reset --hard는 staged 신규 파일을 지우지만 preserve로 지정한 폴더는 보존된다."""
+    origin = tmp_path / "origin"
+    _init_repo(origin)
+    (origin / "out").mkdir()
+    (origin / "out" / ".gitkeep").write_text("", encoding="utf-8")
+    _git(["add", "-A"], origin)
+    _git(["commit", "-m", "add out"], origin)
+
+    work = tmp_path / "work"
+    git_ops.ensure_checkout(str(origin), "main", work)  # 최초 clone
+    out = work / "out"
+
+    # 직전 실행이 생성하고 staging까지 한 산출물 모사
+    (out / "gen_Test.cpp").write_text("generated\n", encoding="utf-8")
+    _git(["add", str(out / "gen_Test.cpp")], work)
+
+    # preserve 없이 재체크아웃하면 staged 신규 파일은 사라진다(회귀의 근본 원인 입증)
+    git_ops.ensure_checkout(str(origin), "main", work)
+    assert not (out / "gen_Test.cpp").exists()
+
+    # 다시 생성·staging 후 preserve=["out"]로 재체크아웃하면 보존된다
+    (out / "gen_Test.cpp").write_text("generated\n", encoding="utf-8")
+    _git(["add", str(out / "gen_Test.cpp")], work)
+    git_ops.ensure_checkout(str(origin), "main", work, preserve=["out"])
+    assert (out / "gen_Test.cpp").is_file()  # 생성물 보존
+    assert (out / ".gitkeep").is_file()  # 커밋 baseline 도 유지

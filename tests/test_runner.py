@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -152,17 +153,25 @@ def test_runner_persistent_code_path_preserves_generated(
     assert out == (code_dir / "tests" / "generated").resolve()  # 영속 경로 안
     assert list(out.glob("test_*"))
 
-    # 이전 생성물 모사: untracked 더미 파일 추가
+    # 이전 생성물 모사: untracked 더미 + staged(git add) 더미 둘 다 추가.
+    # 실 GENUT가 생성 테스트를 프로젝트에 통합하며 staging 하는 경우를 모사한다.
     keep = out / "keepme_Test.cpp"
     keep.write_text("// previously generated\n", encoding="utf-8")
+    staged = out / "staged_Test.cpp"
+    staged.write_text("// staged by integration\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(code_dir), "add", str(staged)],
+        capture_output=True, text=True, check=True,
+    )
 
-    # 2차 실행(같은 code_path) → 제자리 업데이트(fetch+reset, git clean 없음)
+    # 2차 실행(같은 code_path) → 제자리 업데이트(fetch+reset). out 폴더는 보존되어야 한다.
     job2 = Job(product_id=product.id, genut_instance_id=genut.id, file_list=["src/a.cpp"])
     db_session.add(job2)
     db_session.commit()
     r2 = genut_runner.run(job2, product, genut, workspace_root=str(tmp_path))
     assert r2.success
-    assert keep.is_file()  # 생성된 테스트(untracked) 보존됨
+    assert keep.is_file()  # untracked 생성물 보존
+    assert staged.is_file()  # staged 생성물도 보존(reset --hard로부터 보호 — 회귀 방지)
 
 
 class _RecordingExecutor:
