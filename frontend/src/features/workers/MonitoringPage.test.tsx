@@ -100,6 +100,43 @@ describe('MonitoringPage', () => {
     expect(screen.getByText('총 수행 시간')).toBeInTheDocument()
   })
 
+  it('결과 컬럼에 긴 에러 로그 대신 간단한 설명을 보여준다', async () => {
+    const longError = 'E'.repeat(800) + ' traceback (most recent call last) ...'
+    server.use(
+      http.get('/api/workers', () => HttpResponse.json([])),
+      http.get('/api/queue', () => HttpResponse.json([])),
+      http.get('/api/jobs', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 11,
+              product_id: 2,
+              genut_instance_id: 1,
+              status: 'failed',
+              function_name: null,
+              file_list: [],
+              excluded_files: [],
+              attempt: 0,
+              submitted_at: '2026-06-15T00:00:00Z',
+              started_at: '2026-06-15T00:00:00Z',
+              finished_at: '2026-06-15T00:01:00Z',
+              result_summary: null,
+              error: longError,
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        }),
+      ),
+    )
+
+    renderWithProviders(<MonitoringPage />)
+    expect(await screen.findByText('실패나 서버 재시작으로 실행이 중단됨.')).toBeInTheDocument()
+    // 긴 에러 로그 원문은 결과 컬럼에 노출되지 않는다
+    expect(screen.queryByText(/traceback/)).toBeNull()
+  })
+
   it('shows a force-kill button for running jobs and posts cancel', async () => {
     let canceled = false
     const runningJob = {

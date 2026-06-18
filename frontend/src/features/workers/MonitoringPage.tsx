@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listQueue, listWorkers } from '../../api/workers'
 import { cancelJob, getJobLogs, listJobs, rerunJob } from '../../api/jobs'
-import type { JobEvent } from '../../types/api'
+import type { Job, JobEvent } from '../../types/api'
 
 const TERMINAL = new Set(['done', 'failed', 'canceled'])
 
@@ -41,6 +41,22 @@ function formatDuration(startIso: string | null, endIso: string | null): string 
   const p = (n: number) => String(n).padStart(2, '0')
   const base = h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`
   return endIso ? base : `${base} (진행 중)`
+}
+
+// 결과 컬럼 표시: 짧은 요약만 보여준다. 긴 에러 로그(job.error)는 컬럼에 넣지 않고
+// 상태 기반의 간단한 설명으로 대체한다(원문 로그는 행을 펼친 로그 뷰어/다운로드에서 확인).
+function jobResultLabel(job: Job): string {
+  if (job.result_summary) return job.result_summary
+  switch (job.status) {
+    case 'done':
+      return '완료'
+    case 'failed':
+      return '실패나 서버 재시작으로 실행이 중단됨.'
+    case 'canceled':
+      return '강제 종료됨'
+    default:
+      return ''
+  }
 }
 
 function WorkerGrid() {
@@ -264,7 +280,7 @@ function JobHistory() {
                 <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">
                   {formatDuration(job.started_at, job.finished_at)}
                 </td>
-                <td className="border border-gray-200 px-3 py-2 text-gray-500">{job.result_summary ?? job.error ?? ''}</td>
+                <td className="border border-gray-200 px-3 py-2 text-gray-500">{jobResultLabel(job)}</td>
                 <td className="border border-gray-200 px-3 py-2 text-right">
                   {job.status === 'running' ? (
                     <button
