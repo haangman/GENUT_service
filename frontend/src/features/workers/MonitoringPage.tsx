@@ -215,6 +215,7 @@ function JobHistory() {
             <th className="py-2">#</th>
             <th>product</th>
             <th>상태</th>
+            <th>제출 시각</th>
             <th>시작 시간</th>
             <th>종료 시간</th>
             <th>총 수행 시간</th>
@@ -232,6 +233,7 @@ function JobHistory() {
                 <td className="py-2">{job.id}</td>
                 <td>{job.product_id}</td>
                 <td>{job.status}</td>
+                <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.submitted_at)}</td>
                 <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.started_at)}</td>
                 <td className="whitespace-nowrap text-gray-500">{formatDateTime(job.finished_at)}</td>
                 <td className="whitespace-nowrap text-gray-500">
@@ -256,7 +258,7 @@ function JobHistory() {
               </tr>
               {selectedJobId === job.id ? (
                 <tr className="border-b bg-gray-50">
-                  <td colSpan={8} className="p-2">
+                  <td colSpan={9} className="p-2">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>

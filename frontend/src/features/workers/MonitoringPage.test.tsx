@@ -94,6 +94,7 @@ describe('MonitoringPage', () => {
     // 총 수행 시간 = 90초 → "1:30" (두 시각의 차이라 타임존과 무관). 데이터 로드까지 대기.
     expect(await screen.findByText('1:30')).toBeInTheDocument()
     // 컬럼 헤더가 표시된다
+    expect(screen.getByText('제출 시각')).toBeInTheDocument()
     expect(screen.getByText('시작 시간')).toBeInTheDocument()
     expect(screen.getByText('종료 시간')).toBeInTheDocument()
     expect(screen.getByText('총 수행 시간')).toBeInTheDocument()
