@@ -9,9 +9,37 @@ from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, ProductLock
 from genut_service.enums import INFLIGHT_STATUSES, TERMINAL_STATUSES, JobStatus, WorkerStatus
+from genut_service.scheduler.engine import finish_job
 
 _TERMINAL = {status.value for status in TERMINAL_STATUSES}
 _INFLIGHT = {status.value for status in INFLIGHT_STATUSES}
+
+
+def reap_stuck_jobs(session: Session, max_runtime_seconds: float) -> int:
+    """started_at가 max_runtime_seconds를 넘긴 in-flight(running 등) job을 회수한다. 처리 수 반환.
+
+    **주기적 안전망**이다. 정상 job은 자신의 타임아웃(genut_run_timeout/git_timeout) 안에
+    끝나므로, 이 상한을 넘긴 건 워커 스레드가 finish 없이 사라져 고착된 경우로 본다. FAILED로
+    종료하고 락/워커를 회수한다. 상한은 정상 장기 job을 잘못 죽이지 않도록 넉넉히 잡는다.
+    """
+    now = datetime.now(timezone.utc)
+    stuck_ids: list[int] = []
+    for job in session.scalars(select(Job).where(Job.status.in_(_INFLIGHT))):
+        started = job.started_at
+        if started is None:
+            continue
+        if started.tzinfo is None:  # SQLite 등에서 naive로 돌아오면 UTC로 간주
+            started = started.replace(tzinfo=timezone.utc)
+        if (now - started).total_seconds() > max_runtime_seconds:
+            stuck_ids.append(job.id)
+    for job_id in stuck_ids:
+        finish_job(
+            session,
+            job_id,
+            JobStatus.FAILED,
+            error="실행이 비정상적으로 오래 지속되어 회수됨 (watchdog)",
+        )
+    return len(stuck_ids)
 
 
 def mark_interrupted_jobs(session: Session) -> int:

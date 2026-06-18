@@ -97,9 +97,9 @@ migrations/              # Alembic (env.py + versions/)
 - **claim_jobs(session)**: enabled·idle 워커에 queued job을 배정. **프로덕트 이름당 1개**(중복명 허용에 따라 id가 아닌 이름 기준으로 차단), 락 보유 프로덕트 제외, idle 워커 수만큼. 정렬은 `priority DESC, submitted_at ASC, id ASC`. job→running, 워커→busy, `product_locks` insert.
 - **finish_job(session, job_id, status, ...)**: 종료 상태 기록 + 락 해제 + 워커→idle.
 - **lock.try_acquire_lock / release_lock**: PK 충돌(IntegrityError)이 배타성의 원자적 근거.
-- **loop.Scheduler**(운영): 매 tick `claim_jobs` 후 **비차단 디스패치**(`asyncio.to_thread`로 실행, 완료 대기 안 함) → 워커가 비는 즉시 다음 job을 잡는 롤링 병렬. lifespan에서 `scheduler_autostart`면 기동(테스트는 off). 시작 시 **`mark_interrupted_jobs`(기동 1회) — 이전 프로세스가 남긴 in-flight job을 `interrupted`로 종료** + janitor 1회로 락/워커 회수.
+- **loop.Scheduler**(운영): 매 tick `claim_jobs` 후 **비차단 디스패치**(`asyncio.to_thread`로 실행, 완료 대기 안 함) → 워커가 비는 즉시 다음 job을 잡는 롤링 병렬. lifespan에서 `scheduler_autostart`면 기동(테스트는 off). 시작 시 **`mark_interrupted_jobs`(기동 1회) — 이전 프로세스가 남긴 in-flight job을 `interrupted`로 종료** + janitor 1회로 락/워커 회수. 운영 루프는 약 30초마다 **`release_stale_locks` + `reap_stuck_jobs`(상한 초과 고착 job 회수) 안전망 sweep**도 돈다.
 - **loop.run_pending(session, process)**: 결정론적(동기) — E2E/테스트에서 사용.
-- **janitor.release_stale_locks**: 종료/소실 job의 락 해제 + 해당 busy 워커 idle 복구.
+- **janitor.release_stale_locks**: 종료/소실 job의 락 해제 + 해당 busy 워커 idle 복구. **reap_stuck_jobs**: started_at가 상한(genut/git 타임아웃 합보다 넉넉히 큼)을 넘긴 in-flight job을 FAILED로 회수(워커 사망 등 고착 안전망, 주기 호출).
 
 **불변식**(테스트로 보장):
 1. 동일 프로덕트(동명 포함) 동시 처리 금지
@@ -128,10 +128,11 @@ migrations/              # Alembic (env.py + versions/)
 `runner/worker.process_job`: 배정 job 실행 → 각 단계/출력 이벤트를 **DB(JobEvent)와 파일(`<workspace>/job_<id>/job.log`)에 동시 기록**(시작~끝) → DONE/FAILED(`finish_job`). patch/git/임의 예외는 그 job만 FAILED(격리).
 
 **작업 강제 종료/취소**(신규): 인앱 스케줄러라 API 스레드와 워커 스레드가 같은 프로세스를 공유한다. `runner/process_registry`(스레드 안전)가 `job_id → 현재 subprocess(Popen)`를 보유한다.
-- `POST /api/jobs/{id}/cancel`(status==RUNNING 아니면 409·없으면 404) → `process_registry.cancel(job_id)`: `_canceled` set에 추가 + 등록된 Popen 있으면 `terminate → kill`. API는 즉시 RUNNING을 반환하고 **상태 확정은 워커에 위임**한다.
-- subprocess는 `subprocess_util.run_streaming`이 `on_start`로 노출 → 워커의 `on_process`가 `register(job_id, proc)`. 새 phase(venv 생성·pip·GENUT 실행)마다 덮어써 **현재 subprocess만** 추적. `register` 시점에 이미 취소 요청돼 있으면 즉시 kill(**레이스 방어**).
-- **워커가 CANCELED로 확정**: `worker.process_job`이 정상/예외 어느 경로든 `is_canceled(job_id)`를 **예외 분류보다 먼저** 검사 → 취소면 `FAILED`가 아니라 **`CANCELED`** 로 종료(venv 도중 kill→VenvError가 나도 CANCELED). 종료 시 `unregister`로 Popen·취소 플래그 정리.
-- Docker일 때 등록 Popen은 `docker run` 클라이언트 프로세스이며, 컨테이너 정리는 `--rm`에 의존(직접 `docker kill` 미사용).
+- `POST /api/jobs/{id}/cancel`(status==RUNNING 아니면 409·없으면 404) → `process_registry.cancel(job_id)`: `_canceled` set에 추가 + 등록된 Popen 있으면 `terminate → kill`. **API는 finish_job을 직접 호출하지 않는다** — 살아있는 워커와 동시에 락/워커를 해제하면 같은 프로덕트 재배정·이중 finish 경합이 나므로, **종료(상태 전이·락 해제)는 그 job을 돌리는 워커 스레드만 수행**(단일 소유자)한다.
+- **subprocess 등록·트리 kill**: venv/pip/GENUT 실행은 물론 **git 작업(clone/fetch/reset/patch)도 `on_start`로 등록**(`git_ops`가 `subprocess_util` 경유) → cancel이 긴 clone/checkout도 즉시 죽일 수 있다. `_terminate`는 `subprocess_util.kill_tree`로 **프로세스 트리 전체**를 종료(POSIX killpg / Windows `taskkill /T`; `run_streaming`이 `start_new_session`으로 띄움)해 자식 빌드/컴파일러까지 정리. `register` 시점에 이미 취소 요청돼 있으면 즉시 kill(**레이스 방어**).
+- **협조적 취소**: `genut_runner.run(should_cancel=…)`가 각 단계 경계(체크아웃/patch/.env/venv/실행 직전)에서 취소를 확인해 `Canceled`로 빠져나온다 → 서브프로세스 없는 구간에서도 워커가 다음 경계에서 즉시 멈춘다.
+- **워커가 CANCELED로 확정**: `worker.process_job`이 정상/예외 어느 경로든 `is_canceled(job_id)`를 (unregister 전에 1회 캡처해) **예외 분류보다 먼저** 검사 → 취소면 **`CANCELED`** 로 종료(venv 도중 kill→VenvError, git kill→GitError여도 CANCELED). finish 처리 자체가 실패하면 `_force_finish_failed`가 새 세션으로 재시도(취소 상태 보존).
+- Docker일 때 등록 Popen은 `docker run` 클라이언트이며 컨테이너 정리는 `--rm` 의존(직접 `docker kill`은 `doc/docker-architecture.md` §4.2의 추후 과제).
 
 **Docker**: `DockerExecutor`가 job 워크스페이스를 `/work`에 bind-mount, `docker run --rm -v <job>:/work -w ... <image> <argv>`. `Dockerfile.runner`(gcc/clang/cmake/ninja/git/python). docker 미설치 환경에서는 docker-마커 테스트 자동 skip.
 
@@ -164,7 +165,7 @@ migrations/              # Alembic (env.py + versions/)
 - **레이어**: unit(paths/compile_db/env_builder/마스킹) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash·스트리밍 이벤트) · subprocess(run_streaming) · 로그 다운로드(전체 내용·키 마스킹·404) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip). fake `sleep_seconds`/진행 라인.
 - **강제 종료/취소 검증(신규)**: `process_registry`(등록/취소/레이스/플래그 4종) · runner(`on_process`로 live subprocess kill) · API(cancel 404/409/200 + `is_canceled`) · E2E(취소 후 runner가 raise해도 CANCELED). venv python 경로가 symlink resolve로 base 인터프리터로 새지 않는지 회귀 가드.
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
-- 현재 **백엔드 105 passed, 1 deselected(docker)**(총 106 테스트 함수·19 파일) **· 프론트 40 passed**(13 파일). (재실측 2026-06-18)
+- 현재 **백엔드 110 passed, 1 deselected(docker)**(총 111 테스트 함수·19 파일) **· 프론트 40 passed**(13 파일). (재실측 2026-06-18)
 
 ---
 

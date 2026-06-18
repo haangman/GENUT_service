@@ -27,12 +27,25 @@ def run_pending(session: Session, process: Callable = process_job) -> int:
 class Scheduler:
     """운영용 백그라운드 스케줄러."""
 
-    def __init__(self, session_factory, process: Callable = process_job, interval: float = 1.0):
+    def __init__(
+        self,
+        session_factory,
+        process: Callable = process_job,
+        interval: float = 1.0,
+        stuck_timeout: float | None = None,
+    ):
         self._session_factory = session_factory
         self._process = process
         self._interval = interval
         self._task: asyncio.Task | None = None
         self._stop: asyncio.Event | None = None
+        if stuck_timeout is None:
+            from genut_service.config import get_settings
+
+            s = get_settings()
+            # 정상 job의 최대 실행 시간보다 넉넉히 큰 상한 — 이를 넘기면 고착으로 보고 회수한다.
+            stuck_timeout = s.genut_run_timeout + s.git_timeout * 5 + 300
+        self._stuck_timeout = stuck_timeout
 
     def _run_one(self, job_id: int) -> None:
         with self._session_factory() as session:
@@ -40,7 +53,12 @@ class Scheduler:
 
     async def _loop(self) -> None:
         assert self._stop is not None
+        from genut_service.scheduler.janitor import reap_stuck_jobs, release_stale_locks
+
         running: set[asyncio.Task] = set()
+        # 약 30초마다 안전망 sweep을 돈다(tick 간격 기준 환산).
+        sweep_every = max(1, round(30.0 / max(self._interval, 0.1)))
+        tick = 0
         while not self._stop.is_set():
             try:
                 # 매 tick마다 idle 워커만큼 배정하고, 완료를 기다리지 않고 즉시 디스패치한다.
@@ -51,6 +69,12 @@ class Scheduler:
                     task = asyncio.create_task(asyncio.to_thread(self._run_one, job_id))
                     running.add(task)
                     task.add_done_callback(running.discard)
+                # 주기적 안전망: 누수된 락 해제 + 상한 초과로 고착된 job 회수(워커 사망 등).
+                tick += 1
+                if tick % sweep_every == 0:
+                    with self._session_factory() as session:
+                        release_stale_locks(session)
+                        reap_stuck_jobs(session, self._stuck_timeout)
             except Exception:  # noqa: BLE001 - 루프는 어떤 오류에도 죽지 않는다
                 pass
             try:

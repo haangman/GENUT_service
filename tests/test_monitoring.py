@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
 from genut_service.enums import JobStatus, WorkerStatus
 from genut_service.scheduler.engine import claim_jobs
-from genut_service.scheduler.janitor import mark_interrupted_jobs, release_stale_locks
+from genut_service.scheduler.janitor import (
+    mark_interrupted_jobs,
+    reap_stuck_jobs,
+    release_stale_locks,
+)
 
 
 def _product(session: Session, name: str = "P") -> Product:
@@ -101,4 +105,37 @@ def test_mark_interrupted_jobs_marks_inflight_and_recovers(db_session: Session) 
     release_stale_locks(db_session)
     assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
     db_session.expire_all()
+    assert db_session.get(GenutInstance, worker.id).worker_status == WorkerStatus.IDLE.value
+
+
+def test_reap_stuck_jobs_recovers_overlong_running(db_session: Session) -> None:
+    """상한을 넘겨 고착된 running job은 회수(FAILED+락 해제+워커 idle)되고, 최근 건은 보존된다."""
+    from datetime import datetime, timedelta, timezone
+
+    product = _product(db_session)
+    worker = _worker(db_session)
+    old = Job(
+        product_id=product.id,
+        status=JobStatus.RUNNING.value,
+        genut_instance_id=worker.id,
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=10_000),
+    )
+    fresh = Job(
+        product_id=product.id,
+        status=JobStatus.RUNNING.value,
+        started_at=datetime.now(timezone.utc),
+    )
+    db_session.add_all([old, fresh])
+    db_session.flush()
+    worker.worker_status = WorkerStatus.BUSY.value
+    worker.current_job_id = old.id
+    db_session.add(ProductLock(product_id=product.id, job_id=old.id, genut_instance_id=worker.id))
+    db_session.commit()
+
+    reaped = reap_stuck_jobs(db_session, max_runtime_seconds=3600)
+    assert reaped == 1  # old만 회수
+    db_session.expire_all()
+    assert db_session.get(Job, old.id).status == JobStatus.FAILED.value
+    assert db_session.get(Job, fresh.id).status == JobStatus.RUNNING.value  # 최근 건은 보존
+    assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
     assert db_session.get(GenutInstance, worker.id).worker_status == WorkerStatus.IDLE.value
