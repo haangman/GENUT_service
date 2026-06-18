@@ -5,8 +5,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
+
+from genut_service.runner import subprocess_util
 
 
 class GitError(Exception):
@@ -17,27 +19,49 @@ class PatchError(Exception):
     """patch 적용 실패."""
 
 
-def _run_git(args: list[str], cwd: str | None = None, timeout: int = 300) -> None:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-    )
-    if result.returncode != 0:
-        raise GitError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+def _git(
+    args: list[str],
+    cwd: str | None = None,
+    timeout: int = 300,
+    on_start: Callable[[object], None] | None = None,
+) -> dict:
+    """git 명령을 실행하고 {success, returncode, stdout, stderr}를 반환한다.
+
+    on_start가 주어지면 run_streaming으로 실행해 생성된 Popen을 콜백에 노출한다(강제 종료
+    등록용 → cancel이 clone/fetch/reset 등 긴 git 작업도 즉시 죽일 수 있게 한다).
+    없으면 일반 capture 실행(기존 동작과 동일).
+    """
+    argv = ["git", *args]
+    if on_start is not None:
+        return subprocess_util.run_streaming(argv, cwd=cwd, timeout=timeout, on_start=on_start)
+    return subprocess_util.run(argv, cwd=cwd, timeout=timeout)
 
 
-def clone(src: str, ref: str, dest: Path, timeout: int = 300) -> None:
+def _run_git(
+    args: list[str],
+    cwd: str | None = None,
+    timeout: int = 300,
+    on_start: Callable[[object], None] | None = None,
+) -> None:
+    res = _git(args, cwd=cwd, timeout=timeout, on_start=on_start)
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git {' '.join(args)} failed: {detail}")
+
+
+def clone(
+    src: str,
+    ref: str,
+    dest: Path,
+    timeout: int = 300,
+    on_start: Callable[[object], None] | None = None,
+) -> None:
     """src를 dest로 clone하고 가능하면 ref를 checkout한다(실패 시 기본 브랜치 유지)."""
     Path(dest).parent.mkdir(parents=True, exist_ok=True)
-    _run_git(["clone", src, str(dest)], timeout=timeout)
+    _run_git(["clone", src, str(dest)], timeout=timeout, on_start=on_start)
     if ref:
         try:
-            _run_git(["checkout", ref], cwd=str(dest), timeout=timeout)
+            _run_git(["checkout", ref], cwd=str(dest), timeout=timeout, on_start=on_start)
         except GitError:
             pass
 
@@ -83,6 +107,7 @@ def ensure_checkout(
     dest: Path,
     timeout: int = 300,
     preserve: Iterable[str] = (),
+    on_start: Callable[[object], None] | None = None,
 ) -> None:
     """dest에 repo를 제자리 업데이트하거나(없으면) clone한다.
 
@@ -97,21 +122,19 @@ def ensure_checkout(
     """
     dest = Path(dest)
     if (dest / ".git").is_dir():
-        fetch = subprocess.run(
-            ["git", "-C", str(dest), "fetch", "origin"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-        )
-        if fetch.returncode == 0:
+        fetch = _git(["-C", str(dest), "fetch", "origin"], timeout=timeout, on_start=on_start)
+        if fetch["returncode"] == 0:
             saved = _backup_preserved(dest, preserve)
-            subprocess.run(
-                ["git", "-C", str(dest), "reset", "--hard", f"origin/{ref}" if ref else "@{u}"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+            _git(
+                ["-C", str(dest), "reset", "--hard", f"origin/{ref}" if ref else "@{u}"],
+                timeout=timeout,
+                on_start=on_start,
             )
             _restore_preserved(dest, saved)
         return
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
-    clone(url, ref, dest, timeout=timeout)
+    clone(url, ref, dest, timeout=timeout, on_start=on_start)
 
 
 def recent_log(repo_dir: str | Path, count: int = 5, timeout: int = 30) -> str:
@@ -139,7 +162,12 @@ def recent_log(repo_dir: str | Path, count: int = 5, timeout: int = 30) -> str:
     return f"(git log 조회 실패: {(result.stderr or '').strip()[:200]})"
 
 
-def apply_patch(repo_dir: str, patch_text: str, timeout: int = 120) -> None:
+def apply_patch(
+    repo_dir: str,
+    patch_text: str,
+    timeout: int = 120,
+    on_start: Callable[[object], None] | None = None,
+) -> None:
     """unified diff 텍스트를 git apply로 적용한다(멱등). 실패 시 PatchError.
 
     이미 적용된 패치(`git apply --reverse --check` 성공)는 건너뛴다 →
@@ -152,27 +180,17 @@ def apply_patch(repo_dir: str, patch_text: str, timeout: int = 120) -> None:
         patch_path = handle.name
     try:
         # 이미 적용되어 있으면(역적용이 가능하면) 건너뛴다
-        reverse_check = subprocess.run(
-            ["git", "apply", "--reverse", "--check", patch_path],
+        reverse_check = _git(
+            ["apply", "--reverse", "--check", patch_path],
             cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=timeout,
+            on_start=on_start,
         )
-        if reverse_check.returncode == 0:
+        if reverse_check["returncode"] == 0:
             return
-        result = subprocess.run(
-            ["git", "apply", patch_path],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-        )
-        if result.returncode != 0:
-            raise PatchError(result.stderr.strip() or "patch 적용 실패")
+        result = _git(["apply", patch_path], cwd=repo_dir, timeout=timeout, on_start=on_start)
+        if not result["success"]:
+            detail = (result.get("stderr") or result.get("stdout") or "").strip()
+            raise PatchError(detail or "patch 적용 실패")
     finally:
         Path(patch_path).unlink(missing_ok=True)

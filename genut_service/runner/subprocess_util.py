@@ -2,9 +2,41 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import threading
 from collections.abc import Callable
+
+
+def kill_tree(proc: object) -> None:
+    """Popen과 그 자식 프로세스 트리를 강제 종료한다(best-effort, 크로스플랫폼).
+
+    run_streaming이 start_new_session=True로 띄우므로 POSIX에서는 프로세스 그룹(setsid)을
+    통째로 죽일 수 있고(빌드/컴파일러 등 손자 프로세스 포함), Windows에서는 `taskkill /T`로
+    자식 트리까지 정리한다. pid가 없거나 실패하면 부모만 terminate/kill로 폴백한다.
+    """
+    if proc is None:
+        return
+    pid = getattr(proc, "pid", None)
+    if pid is not None:
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                    timeout=10,
+                )
+                return
+            os.killpg(os.getpgid(pid), getattr(signal, "SIGKILL", 9))
+            return
+        except Exception:  # noqa: BLE001 - 이미 죽었거나 권한/플랫폼 문제면 폴백
+            pass
+    for method in ("terminate", "kill"):
+        try:
+            getattr(proc, method)()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def run(
@@ -67,6 +99,9 @@ def run_streaming(
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            # 새 세션/프로세스 그룹으로 띄워 kill_tree가 자식까지 통째로 종료할 수 있게 한다.
+            # (POSIX: setsid. Windows에서는 무시되며 taskkill /T가 트리를 정리)
+            start_new_session=True,
         )
     except FileNotFoundError as exc:
         return {"success": False, "returncode": None, "stdout": "", "stderr": str(exc)}

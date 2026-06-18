@@ -24,12 +24,10 @@ _canceled: set[int] = set()
 
 
 def _terminate(proc: _Killable) -> None:
-    # 강제 종료: SIGTERM 후 SIGKILL(윈도우는 둘 다 TerminateProcess). 예외는 무시.
-    for method in ("terminate", "kill"):
-        try:
-            getattr(proc, method)()
-        except Exception:  # noqa: BLE001
-            pass
+    # 프로세스 트리 전체를 강제 종료한다(자식 빌드/컴파일러/툴 프로세스까지). 예외는 무시.
+    from genut_service.runner import subprocess_util
+
+    subprocess_util.kill_tree(proc)
 
 
 def register(job_id: int, proc: _Killable) -> None:
@@ -56,9 +54,9 @@ def is_canceled(job_id: int) -> bool:
 
 
 def has_process(job_id: int) -> bool:
+    """현재 등록된 (살아있다고 가정되는) 서브프로세스가 있는지."""
     with _lock:
         return job_id in _procs
-    
 
 def cancel(job_id: int) -> bool:
     """job을 강제 종료 요청. 실행 중 서브프로세스가 있으면 죽이고 True, 없으면 False.

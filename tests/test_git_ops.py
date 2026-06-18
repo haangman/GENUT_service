@@ -70,6 +70,16 @@ def test_recent_log_tolerates_non_repo(tmp_path: Path) -> None:
     assert "git log 조회 실패" in out
 
 
+def test_git_ops_clone_invokes_on_start_for_cancellation(tmp_path: Path) -> None:
+    """on_start가 주어지면 git이 등록 가능한 Popen으로 실행된다(취소 시 kill 대상)."""
+    origin = tmp_path / "origin"
+    _init_repo(origin)
+    procs: list[object] = []
+    git_ops.clone(str(origin), "main", tmp_path / "work", on_start=lambda p: procs.append(p))
+    assert procs  # clone이 Popen을 콜백에 노출 → process_registry 등록이 가능
+    assert (tmp_path / "work" / ".git").is_dir()
+
+
 def test_ensure_checkout_preserve_keeps_staged_output(tmp_path: Path) -> None:
     """reset --hard는 staged 신규 파일을 지우지만 preserve로 지정한 폴더는 보존된다."""
     origin = tmp_path / "origin"

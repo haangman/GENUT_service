@@ -401,7 +401,10 @@ def test_runner_on_process_can_kill(db_session, make_virtual_product, fake_genut
     product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
 
     def on_process(proc):
-        proc.kill()  # 시작하자마자 강제 종료
+        # 이제 git 준비 단계도 등록되므로, git이 아닌 GENUT 실행 프로세스만 강제 종료한다.
+        head = proc.args[0] if isinstance(proc.args, (list, tuple)) else proc.args
+        if os.path.basename(str(head)) not in ("git", "git.exe"):
+            proc.kill()
 
     result = genut_runner.run(
         job,
