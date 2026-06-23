@@ -85,8 +85,9 @@ migrations/              # Alembic (env.py + versions/)
 - **jobs**: product_id, genut_instance_id, status(실제 전이: `queued → running → done|failed|`**`canceled`**`|`**`interrupted`**; 서버 재시작 시 남은 in-flight job은 기동 janitor가 `interrupted`로 종료; enum엔 `assigned/preparing/collecting/retrying`도 정의돼 있으나 현재 미사용), function_name, `file_list`(JSON, included), `excluded_files`(JSON), priority, attempt, submitted/started/finished_at, result_summary, error.
 - **job_events**: job_id, ts, level, phase, message, payload(JSON) — append-only 로그.
 - **product_locks**: `product_id`(PK), job_id, genut_instance_id, acquired_at — **PK가 프로덕트당 락 1개 보장**.
+- **product_test_files**: id, `product_name`(index), `rel_path` — 등록 탭에서 고른 프로덕트별 테스트 파일 목록. **동명 프로덕트는 코드를 공유하므로 product_id가 아닌 이름으로 그룹핑**. UNIQUE(product_name, rel_path).
 
-마이그레이션(5개, head=`20e9e4efaf2c`): `f944f16d574a`(core tables) → `38fc35ad54d5`(products·genut에 `code_path`) → `fe55b4bebf19`(`ds_assist_user_id`) → `406e1798f687`(`assure_repo_url`) → `20e9e4efaf2c`(products.name unique 제약 제거). `alembic check` drift 없음.
+마이그레이션(6개, head=`a04dc0b5b0af`): `f944f16d574a`(core tables) → `38fc35ad54d5`(products·genut에 `code_path`) → `fe55b4bebf19`(`ds_assist_user_id`) → `406e1798f687`(`assure_repo_url`) → `20e9e4efaf2c`(products.name unique 제약 제거) → `a04dc0b5b0af`(`product_test_files` 테이블). `alembic check` drift 없음.
 
 `JobStatus`에 `canceled`(강제 종료)·`interrupted`(서버 재시작 중단) 추가 — `TERMINAL_STATUSES = {done, failed, canceled, interrupted}`. `WorkerStatus`는 idle|busy|error|disabled.
 
@@ -145,16 +146,21 @@ migrations/              # Alembic (env.py + versions/)
 - Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, **`POST /jobs/{id}/cancel`**(실행 중 job 강제 종료; RUNNING 아니면 409·없으면 404, 즉시 RUNNING 반환·워커가 CANCELED 확정), **`POST /jobs/{id}/rerun`**(동일 입력으로 새 queued job 생성·201; terminal(done/failed/canceled) 아니면 409·원본/프로덕트 없으면 404; file_list·excluded_files·function_name을 그대로 복사, genut/timestamps는 미복사해 스케줄러가 재배정), `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹·파일 없으면 DB 이벤트로 재구성)
 - GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`ds_assist_user_id`·`assure_repo_url`·`code_path` 선택)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
+- Test files(프로덕트별 테스트 파일 등록/다운로드): `GET /test-files?product_name=`(등록 목록), `POST /test-files {product_name,rel_paths}`(추가·중복 무시·`..` 거부·201), `DELETE /test-files {product_name,rel_paths}`(제거), `POST /test-files/download {product_id,rel_paths}`(선택 파일 zip; product_id로 대표 체크아웃 해석, 트래버설/없는 파일 skip, 유효 0개면 404, 한글 파일명은 RFC 5987로 안전 전달). **product_name은 path가 아닌 query/body로 받아 인코딩 함정 회피**.
 - 정적: 비-API 경로는 `frontend/dist/index.html`로 SPA fallback
 
 ---
 
-## 9. 프론트엔드 (4 페이지)
+## 9. 프론트엔드 (6 페이지)
 
 1. **테스트 요청**: 프로덕트 선택(옵션 라벨 `name(id)`로 동명 구분) → 지연 파일트리(폴더 일괄 가져오기, 확장자 allowlist by mode) → compile_commands 검사로 included/excluded 분리(미포함 별도 표시·제출 제외) → 함수명(선택) → 제출. 선택 변경 시 stale → 재검사 전 제출 차단. **제출 성공·탭 이탈 시 빌더 리셋**(접수 배너의 job #N만 보존).
 2. **프로덕트**: 목록 + 등록 폼(patch field-array) + **수정**(PUT, 기존값 프리필) + 삭제.
 3. **GENUT**: 목록 + 등록 폼(키 write-only) + **수정**(키 비우면 기존 유지) + 삭제.
 4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력(**제출 시각·시작 시간·종료 시간·총 수행 시간** 컬럼 — `submitted_at`/`started_at`/`finished_at` 기준, 총 수행 시간은 종료 전이면 경과를 **1초마다 실시간 갱신**+`(진행 중)`; **결과 컬럼은 짧은 요약/간단 설명만** — 긴 에러 원문 대신 상태 기반 문구, 원문은 로그 뷰어/다운로드에서). 작업 클릭 시 **실시간 로그 뷰어**(`?since=` 커서로 증분 누적, 종료 시 폴링 중단, 자동 스크롤) + **로그 파일 다운로드** + **`재수행`**(완료 job만; 동일 입력으로 새 job을 큐에 추가) 버튼. 실행 중 job 행에는 **`강제 종료` 버튼**(클릭 즉시 `종료 중…`으로 낙관적 표시 후 cancel POST, 이력 2s 폴링으로 canceled 반영).
+5. **테스트 등록**: 프로덕트 선택(**동명은 1개로 그룹핑**·대표 id 기준) → 코드 파일트리(요청 탭과 동일 UX의 store 비결합 트리)에서 파일 체크 또는 **폴더 가져오기**(하위 모든 파일 재귀 수집, `result.json` 제외) → `등록`으로 프로덕트(이름)별 테스트 리스트에 누적(서버 DB 영속).
+6. **테스트 다운로드**: 프로덕트(이름) 선택 → 등록된 테스트 파일 목록(전체/개별 체크) → `다운로드 (zip)`(대표 체크아웃에서 선택 파일을 zip으로 저장) · `선택 삭제`(등록 리스트에서 제거).
+
+> 그룹핑/대표 선택은 `features/test-registry/groupByName.ts`(이름별 최저 id 대표). 두 탭 공용 피커 `ProductGroupPicker`. zip 다운로드는 `apiFetch`(JSON 전제) 대신 `fetch→blob→anchor`.
 
 ---
 
@@ -165,7 +171,8 @@ migrations/              # Alembic (env.py + versions/)
 - **레이어**: unit(paths/compile_db/env_builder/마스킹) · scheduler(claim/finish 불변식 4종, 결정론) · API(TestClient) · runner-subprocess(오케스트레이션·provenance·file-list·patch 실패·collection·single-fn·hard_fail·crash·스트리밍 이벤트) · subprocess(run_streaming) · 로그 다운로드(전체 내용·키 마스킹·404) · E2E(실 스케줄러 통과·실패 격리) · scheduler-loop(배리어 동시성) · docker(자동 skip). fake `sleep_seconds`/진행 라인.
 - **강제 종료/취소 검증(신규)**: `process_registry`(등록/취소/레이스/플래그 4종) · runner(`on_process`로 live subprocess kill) · API(cancel 404/409/200 + `is_canceled`) · E2E(취소 후 runner가 raise해도 CANCELED). venv python 경로가 symlink resolve로 base 인터프리터로 새지 않는지 회귀 가드.
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
-- 현재 **백엔드 110 passed, 1 deselected(docker)**(총 111 테스트 함수·19 파일) **· 프론트 40 passed**(13 파일). (재실측 2026-06-18)
+- **테스트 파일 등록/다운로드 검증(신규)**: 백엔드 — 등록/조회/삭제·중복 무시·`build_zip` 경로 트래버설 차단·없는 파일 skip·404·zip 내용. 프론트 — `groupByName`(동명 그룹핑·대표 id), 등록 탭 POST, 다운로드 탭 zip 다운로드(`fetch→blob`)·DELETE.
+- 현재 **백엔드 119 passed, 1 deselected(docker)**(총 120 테스트 함수·20 파일) **· 프론트 45 passed**(16 파일). (재실측 2026-06-23)
 
 ---
 

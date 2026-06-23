@@ -5,6 +5,8 @@ const navItems = [
   { to: '/products', label: '프로덕트' },
   { to: '/genuts', label: 'GENUT' },
   { to: '/monitoring', label: '모니터링' },
+  { to: '/test-registry', label: '테스트 등록' },
+  { to: '/test-download', label: '테스트 다운로드' },
 ]
 
 export function AppLayout() {

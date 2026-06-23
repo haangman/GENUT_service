@@ -129,6 +129,12 @@ export interface CompileCheckResult {
   excluded: string[]
 }
 
+export interface ProductTestFile {
+  id: number
+  product_name: string
+  rel_path: string
+}
+
 export interface ProductCreate {
   name: string
   product_code: string
