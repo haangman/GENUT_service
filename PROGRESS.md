@@ -172,7 +172,8 @@ migrations/              # Alembic (env.py + versions/)
 - **강제 종료/취소 검증(신규)**: `process_registry`(등록/취소/레이스/플래그 4종) · runner(`on_process`로 live subprocess kill) · API(cancel 404/409/200 + `is_canceled`) · E2E(취소 후 runner가 raise해도 CANCELED). venv python 경로가 symlink resolve로 base 인터프리터로 새지 않는지 회귀 가드.
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
 - **테스트 파일 등록/다운로드 검증(신규)**: 백엔드 — 등록/조회/삭제·중복 무시·`build_zip` 경로 트래버설 차단·없는 파일 skip·404·zip 내용. 프론트 — `groupByName`(동명 그룹핑·대표 id), 등록 탭 POST, 다운로드 탭 zip 다운로드(`fetch→blob`)·DELETE.
-- 현재 **백엔드 119 passed, 1 deselected(docker)**(총 120 테스트 함수·20 파일) **· 프론트 45 passed**(16 파일). (재실측 2026-06-23)
+- **datetime 직렬화(신규)**: API의 datetime 필드는 `schemas/common.py`의 `UtcDatetime`로 **tz 인식 ISO(`+00:00`)** 로 내보낸다(naive면 UTC로 간주). 표식이 없으면 클라가 로컬로 오해해 실행 중 job의 "총 수행 시간"이 타임존 오프셋만큼 부풀려지던 버그를 차단. JobRead/JobEventRead/QueueItem에 적용.
+- 현재 **백엔드 121 passed, 1 deselected(docker)**(총 122 테스트 함수·20 파일) **· 프론트 45 passed**(16 파일). (재실측 2026-06-23)
 
 ---
 

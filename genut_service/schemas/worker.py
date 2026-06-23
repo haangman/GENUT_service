@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
+
+from genut_service.schemas.common import UtcDatetime
 
 
 class WorkerRead(BaseModel):
@@ -20,5 +20,5 @@ class WorkerRead(BaseModel):
 class QueueItem(BaseModel):
     job_id: int
     product_id: int
-    submitted_at: datetime
+    submitted_at: UtcDatetime
     waiting_on_product: bool

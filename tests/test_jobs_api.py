@@ -183,3 +183,57 @@ def test_job_logs_with_since(
     first_id = logs[0]["id"]
     after = client.get(f"/api/jobs/{job_id}/logs", params={"since": first_id}).json()
     assert [e["message"] for e in after] == ["second"]
+
+
+def test_jobread_serializes_naive_datetime_as_utc() -> None:
+    """naive datetime은 UTC로 간주해 tz 인식(+00:00) ISO로 직렬화한다. None은 그대로."""
+    from datetime import datetime
+
+    from genut_service.schemas.job import JobRead
+
+    model = JobRead(
+        id=1,
+        product_id=1,
+        genut_instance_id=None,
+        status="running",
+        function_name=None,
+        file_list=[],
+        excluded_files=[],
+        attempt=0,
+        submitted_at=datetime(2026, 6, 23, 7, 0, 0),
+        started_at=datetime(2026, 6, 23, 7, 41, 20, 938327),
+        finished_at=None,
+        result_summary=None,
+        error=None,
+    )
+    dumped = model.model_dump(mode="json")
+    assert dumped["submitted_at"] == "2026-06-23T07:00:00+00:00"
+    assert dumped["started_at"] == "2026-06-23T07:41:20.938327+00:00"
+    assert dumped["finished_at"] is None
+
+
+def test_job_api_datetimes_are_tz_aware(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    """GET /jobs/{id}의 datetime은 tz 인식으로 나와 클라가 로컬로 오해하지 않는다."""
+    from datetime import datetime, timezone
+
+    from genut_service.db.models import Job
+    from genut_service.enums import JobStatus
+
+    product_id = _create_product(client)
+    job_id = client.post(
+        "/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]}
+    ).json()["id"]
+
+    body = client.get(f"/api/jobs/{job_id}").json()
+    assert body["submitted_at"].endswith("+00:00")  # 제출 시각은 tz 인식
+    assert body["started_at"] is None
+
+    # 시작 시각을 채우면 그것도 tz 인식으로 직렬화된다(실행 중 경과 계산이 어긋나지 않도록)
+    job = db_session.get(Job, job_id)
+    job.status = JobStatus.RUNNING.value
+    job.started_at = datetime(2026, 6, 23, 7, 41, 20, tzinfo=timezone.utc)
+    db_session.commit()
+    body = client.get(f"/api/jobs/{job_id}").json()
+    assert body["started_at"] == "2026-06-23T07:41:20+00:00"

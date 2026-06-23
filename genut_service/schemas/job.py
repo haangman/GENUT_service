@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
+
+from genut_service.schemas.common import UtcDatetime
 
 
 class JobCreate(BaseModel):
@@ -24,9 +24,9 @@ class JobRead(BaseModel):
     file_list: list[str]
     excluded_files: list[str]
     attempt: int
-    submitted_at: datetime
-    started_at: datetime | None
-    finished_at: datetime | None
+    submitted_at: UtcDatetime
+    started_at: UtcDatetime | None
+    finished_at: UtcDatetime | None
     result_summary: str | None
     error: str | None
 
@@ -36,7 +36,7 @@ class JobEventRead(BaseModel):
 
     id: int
     job_id: int
-    ts: datetime
+    ts: UtcDatetime
     level: str
     phase: str | None
     message: str
