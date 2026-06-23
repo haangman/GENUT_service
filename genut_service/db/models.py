@@ -195,3 +195,22 @@ class ProductLock(Base):
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
+
+
+class ProductTestFile(TimestampMixin, Base):
+    """등록 탭에서 사용자가 골라 둔 프로덕트별 테스트 파일 목록.
+
+    이름이 같은 프로덕트는 (서로 다른 id로 등록돼도) 같은 코드를 공유하므로
+    product_id가 아니라 **product_name** 으로 그룹핑한다. rel_path는 프로덕트 코드
+    체크아웃 루트 기준 상대경로(POSIX)다. (product_name, rel_path) 유일 제약으로
+    중복 등록을 막는다.
+    """
+
+    __tablename__ = "product_test_files"
+    __table_args__ = (
+        UniqueConstraint("product_name", "rel_path", name="uq_product_test_file"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_name: Mapped[str] = mapped_column(String(255), index=True)
+    rel_path: Mapped[str] = mapped_column(String(1024))
