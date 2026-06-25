@@ -287,4 +287,19 @@ describe('JobLogs (증분 폴링)', () => {
     expect(await screen.findByRole('button', { name: '로그 저장' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '재수행' })).toBeNull()
   })
+
+  it('로그 패널은 박스 안에서 스크롤·줄바꿈된다 (테이블 컬럼을 밀지 않도록)', async () => {
+    server.use(
+      http.get('/api/jobs/7/logs', () =>
+        HttpResponse.json([ev(1, 'run', 'C:/very/long/path/'.repeat(30))]),
+      ),
+    )
+    renderWithProviders(<JobLogs jobId={7} status="done" />)
+    const log = await screen.findByTestId('job-log')
+    // 세로로 길면 박스 내부에서만 스크롤하고, 긴 한 줄은 줄바꿈되어 가로로 늘어나지 않는다.
+    expect(log.className).toContain('max-h-64')
+    expect(log.className).toContain('overflow-y-auto')
+    expect(log.className).toContain('whitespace-pre-wrap')
+    expect(log.className).toContain('[overflow-wrap:anywhere]')
+  })
 })

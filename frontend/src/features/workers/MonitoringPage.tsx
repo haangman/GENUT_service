@@ -218,7 +218,11 @@ export function JobLogs({
       </div>
       <pre
         ref={preRef}
-        className="max-h-64 overflow-auto rounded bg-gray-900 p-2 text-xs text-gray-100"
+        data-testid="job-log"
+        // 긴 로그 한 줄이 테이블 컬럼 폭을 밀어내지 않도록 박스 안에서 줄바꿈한다.
+        // (overflow-wrap:anywhere는 min-content를 줄여 table-layout:auto 확장을 막는다)
+        // 세로로 길면 max-h + overflow-y-auto로 박스 내부에서만 스크롤한다.
+        className="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded bg-gray-900 p-2 text-xs text-gray-100"
       >
         {events.map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n') ||
           '로그 없음'}
