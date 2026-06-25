@@ -55,6 +55,11 @@ describe('MonitoringPage', () => {
     expect(await screen.findByText('대기(프로덕트 사용 중)')).toBeInTheDocument()
     const resultCell = await screen.findByText('status=success total=4 pos=2 neg=2')
 
+    // 고정 폭 테이블 + min-width: 좁은 화면에선 래퍼(overflow-x-auto)가 전체 좌우 스크롤을 준다.
+    const table = resultCell.closest('table')
+    expect(table?.className).toContain('table-fixed')
+    expect(table?.className).toContain('min-w-[1120px]')
+
     // 행을 클릭하면 바로 그 행 아래에 로그 패널이 펼쳐진다(인라인)
     fireEvent.click(resultCell)
     expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
@@ -288,7 +293,7 @@ describe('JobLogs (증분 폴링)', () => {
     expect(screen.queryByRole('button', { name: '재수행' })).toBeNull()
   })
 
-  it('로그 패널은 박스 안에서 스크롤·줄바꿈된다 (테이블 컬럼을 밀지 않도록)', async () => {
+  it('로그 패널은 박스 안에서 상하·좌우로 스크롤된다 (줄바꿈하지 않음)', async () => {
     server.use(
       http.get('/api/jobs/7/logs', () =>
         HttpResponse.json([ev(1, 'run', 'C:/very/long/path/'.repeat(30))]),
@@ -296,10 +301,11 @@ describe('JobLogs (증분 폴링)', () => {
     )
     renderWithProviders(<JobLogs jobId={7} status="done" />)
     const log = await screen.findByTestId('job-log')
-    // 세로로 길면 박스 내부에서만 스크롤하고, 긴 한 줄은 줄바꿈되어 가로로 늘어나지 않는다.
+    // 줄바꿈하지 않고(whitespace-pre) 박스 내부에서 양방향 스크롤(overflow-auto + max-h)한다.
+    // (테이블은 table-fixed라 이 긴 로그가 데이터 컬럼을 밀지 않는다.)
     expect(log.className).toContain('max-h-64')
-    expect(log.className).toContain('overflow-y-auto')
-    expect(log.className).toContain('whitespace-pre-wrap')
-    expect(log.className).toContain('[overflow-wrap:anywhere]')
+    expect(log.className).toContain('overflow-auto')
+    expect(log.className).toContain('whitespace-pre')
+    expect(log.className).not.toContain('whitespace-pre-wrap')
   })
 })

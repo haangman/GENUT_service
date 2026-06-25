@@ -219,10 +219,9 @@ export function JobLogs({
       <pre
         ref={preRef}
         data-testid="job-log"
-        // 긴 로그 한 줄이 테이블 컬럼 폭을 밀어내지 않도록 박스 안에서 줄바꿈한다.
-        // (overflow-wrap:anywhere는 min-content를 줄여 table-layout:auto 확장을 막는다)
-        // 세로로 길면 max-h + overflow-y-auto로 박스 내부에서만 스크롤한다.
-        className="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded bg-gray-900 p-2 text-xs text-gray-100"
+        // 로그는 줄바꿈하지 않고(whitespace-pre) 박스 안에서 상하·좌우로 스크롤한다.
+        // 테이블은 table-fixed라 이 긴 로그가 데이터 컬럼 폭을 밀지 않는다.
+        className="max-h-64 overflow-auto whitespace-pre rounded bg-gray-900 p-2 text-xs text-gray-100"
       >
         {events.map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n') ||
           '로그 없음'}
@@ -262,7 +261,20 @@ function JobHistory() {
     <section>
       <h2 className="mb-2 text-sm font-semibold">Job 이력</h2>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
+            min-w로 좁은 화면에선 위 overflow-x-auto가 전체 좌우 스크롤을 제공한다. */}
+        <table className="w-full min-w-[1120px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[56px]" />
+            <col className="w-[84px]" />
+            <col className="w-[90px]" />
+            <col className="w-[160px]" />
+            <col className="w-[160px]" />
+            <col className="w-[160px]" />
+            <col className="w-[150px]" />
+            <col className="w-[180px]" />
+            <col className="w-[80px]" />
+          </colgroup>
           <thead>
             <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-600">
               <th className="border border-gray-200 px-3 py-2">#</th>
