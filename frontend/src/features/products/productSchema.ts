@@ -17,6 +17,8 @@ export const productFormSchema = z.object({
   test_run_cmd: z.string().min(1, 'test 실행 명령을 입력하세요'),
   test_generation_mode: z.enum(['c', 'cpp', 'kunit']),
   code_path: z.string(),
+  // 제외 패턴: 한 줄에 하나(예: *test*). 제출 시 줄 분리해 string[]로 변환한다.
+  exclude_patterns: z.string(),
   patches: z.array(patchSchema),
 })
 
@@ -34,5 +36,6 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   test_run_cmd: '',
   test_generation_mode: 'cpp',
   code_path: '',
+  exclude_patterns: '',
   patches: [],
 }

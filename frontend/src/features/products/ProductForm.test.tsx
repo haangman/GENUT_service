@@ -16,6 +16,7 @@ const VALID: ProductFormValues = {
   test_run_cmd: 'ctest',
   test_generation_mode: 'cpp',
   code_path: '',
+  exclude_patterns: '',
   patches: [],
 }
 

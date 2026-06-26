@@ -36,6 +36,7 @@ export interface Product {
   test_generation_mode: TestGenerationMode
   active: boolean
   code_path: string | null
+  exclude_globs: string[]
   patches: Patch[]
 }
 
@@ -129,12 +130,6 @@ export interface CompileCheckResult {
   excluded: string[]
 }
 
-export interface ProductTestFile {
-  id: number
-  product_name: string
-  rel_path: string
-}
-
 export interface ProductCreate {
   name: string
   product_code: string
@@ -147,5 +142,19 @@ export interface ProductCreate {
   test_run_cmd: string
   test_generation_mode: TestGenerationMode
   code_path?: string
+  exclude_globs: string[]
   patches: PatchIn[]
+}
+
+// 테스트 현황: 대상 파일 1건과 그에 매칭된 테스트 파일들
+export interface TestFileInfo {
+  name: string
+  path: string
+}
+
+export interface TargetFileStatus {
+  name: string
+  path: string
+  test_count: number
+  test_files: TestFileInfo[]
 }

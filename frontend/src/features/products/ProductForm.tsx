@@ -80,6 +80,21 @@ export function ProductForm({ onSubmit, submitting, defaultValues }: ProductForm
         </div>
       </div>
 
+      <div>
+        <label htmlFor="exclude_patterns" className="label">
+          테스트 대상 제외 패턴 (한 줄에 하나, 예: <code className="font-mono">*test*</code>)
+        </label>
+        <textarea
+          id="exclude_patterns"
+          className={`${inputClass} min-h-[72px] font-mono`}
+          placeholder={'*test*\n*/legacy/*'}
+          {...register('exclude_patterns')}
+        />
+        <p className="mt-1 text-xs text-subtle">
+          compile_commands.json 대상 파일 중 path가 이 글롭에 맞으면 현황에서 제외됩니다.
+        </p>
+      </div>
+
       <fieldset className="rounded-lg border border-border p-4">
         <legend className="px-1.5 text-sm font-medium text-fg">패치 (순서대로 적용)</legend>
         {fields.map((field, index) => (
