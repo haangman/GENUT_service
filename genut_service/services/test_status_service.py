@@ -102,3 +102,9 @@ def build_status(root: Path, product: Product) -> list[dict]:
             }
         )
     return status
+
+
+def summarize(root: Path, product: Product) -> tuple[int, int]:
+    """프로덕트의 (테스트 대상 파일 수, 총 테스트 수)를 반환한다."""
+    rows = build_status(root, product)
+    return len(rows), sum(row["test_count"] for row in rows)

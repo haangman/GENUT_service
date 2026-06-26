@@ -19,3 +19,15 @@ class TargetFileStatus(BaseModel):
     path: str
     test_count: int
     test_files: list[TestFileInfo]
+
+
+class ProductTestSummary(BaseModel):
+    """프로덕트 1건의 테스트 현황 요약(목록 페이지용)."""
+
+    product_id: int
+    name: str
+    product_code: str
+    test_generation_mode: str
+    code_path: str | None = None
+    target_file_count: int
+    total_test_count: int

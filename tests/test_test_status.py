@@ -132,3 +132,18 @@ def test_test_status_api_applies_exclude_globs(
 
 def test_test_status_missing_product_404(client: TestClient) -> None:
     assert client.get("/api/products/9999/test-status").status_code == 404
+
+
+def test_test_status_summary_lists_per_product_counts(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    pid = _create_product(client)
+
+    body = client.get("/api/test-status").json()
+    row = next(r for r in body if r["product_id"] == pid)
+    # 대상 파일 2개(calc.c, util.c), 총 테스트 3개(calc 2 + util 1)
+    assert row["target_file_count"] == 2
+    assert row["total_test_count"] == 3
+    assert row["name"] == "demo"

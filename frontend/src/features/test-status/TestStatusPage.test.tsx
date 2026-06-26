@@ -6,35 +6,22 @@ import { server } from '../../test/msw/server'
 import { renderWithProviders } from '../../test/utils'
 import { TestStatusPage } from './TestStatusPage'
 
-function productsPage(items: Array<{ id: number; name: string }>) {
-  return {
-    items: items.map((p) => ({
-      id: p.id,
-      name: p.name,
-      product_code: `${p.name}-1`,
-      git_url: 'u',
-      git_ref: 'main',
-      compile_db_rel: 'build',
-      out_tests_rel: 'tests/generated',
-      cmake_configure_cmd: 'c',
-      cmake_build_cmd: 'b',
-      test_run_cmd: 'r',
-      test_generation_mode: 'cpp',
-      active: true,
-      code_path: null,
-      exclude_globs: [],
-      patches: [],
-    })),
-    total: items.length,
-    page: 1,
-    page_size: 50,
-  }
-}
-
 describe('TestStatusPage', () => {
-  it('drills products → target files → test files', async () => {
+  it('shows per-product counts then drills products → target files → test files', async () => {
     server.use(
-      http.get('/api/products', () => HttpResponse.json(productsPage([{ id: 1, name: 'AA' }]))),
+      http.get('/api/test-status', () =>
+        HttpResponse.json([
+          {
+            product_id: 1,
+            name: 'AA',
+            product_code: 'AA-1',
+            test_generation_mode: 'cpp',
+            code_path: null,
+            target_file_count: 2,
+            total_test_count: 3,
+          },
+        ]),
+      ),
       http.get('/api/products/1/test-status', () =>
         HttpResponse.json([
           {
@@ -46,24 +33,28 @@ describe('TestStatusPage', () => {
               { name: 'calc_Test_1.cpp', path: 'tests/generated/S1/calc/calc_Test_1.cpp' },
             ],
           },
-          { name: 'util.c', path: 'src/util.c', test_count: 0, test_files: [] },
+          { name: 'util.c', path: 'src/util.c', test_count: 1, test_files: [
+            { name: 'util_Test_0.cpp', path: 'tests/generated/S1/util/util_Test_0.cpp' },
+          ] },
         ]),
       ),
     )
 
     renderWithProviders(<TestStatusPage />)
 
-    // L1: 프로덕트 선택
-    await userEvent.click(await screen.findByText('AA'))
+    // L1: 프로덕트 행에 대상 파일 수(2)·총 테스트 수(3)가 보인다
+    expect(await screen.findByText('AA')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
 
-    // L2: 대상 파일과 테스트 개수
+    // L2: 프로덕트 선택 → 대상 파일 + 합계(총 테스트 3)
+    await userEvent.click(screen.getByText('AA'))
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
     expect(screen.getByText('src/calc.c')).toBeInTheDocument()
-    expect(screen.getByText('util.c')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 3')).toBeInTheDocument()
 
-    // calc.c 파일 선택 → L3: 테스트 파일 목록
+    // L3: calc.c 선택 → 테스트 파일 목록
     await userEvent.click(screen.getByText('calc.c'))
     expect(await screen.findByText('calc_Test_0.cpp')).toBeInTheDocument()
-    expect(screen.getByText('calc_Test_1.cpp')).toBeInTheDocument()
   })
 })

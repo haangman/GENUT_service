@@ -14,5 +14,6 @@ export const handlers = [
   ),
   http.get('/api/workers', () => HttpResponse.json([])),
   http.get('/api/queue', () => HttpResponse.json([])),
+  http.get('/api/test-status', () => HttpResponse.json([])),
   http.get('/api/products/:id/test-status', () => HttpResponse.json([])),
 ]

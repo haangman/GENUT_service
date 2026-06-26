@@ -158,3 +158,13 @@ export interface TargetFileStatus {
   test_count: number
   test_files: TestFileInfo[]
 }
+
+export interface ProductTestSummary {
+  product_id: number
+  name: string
+  product_code: string
+  test_generation_mode: TestGenerationMode
+  code_path: string | null
+  target_file_count: number
+  total_test_count: number
+}
