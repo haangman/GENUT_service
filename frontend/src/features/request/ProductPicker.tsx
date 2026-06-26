@@ -10,12 +10,12 @@ export function ProductPicker() {
 
   return (
     <div>
-      <label htmlFor="product-picker" className="text-sm font-medium">
+      <label htmlFor="product-picker" className="label">
         프로덕트
       </label>
       <select
         id="product-picker"
-        className="mt-1 block w-72 rounded border border-gray-300 px-2 py-1 text-sm"
+        className="input max-w-xs"
         value={productId ?? ''}
         onChange={(event) => {
           const id = Number(event.target.value)

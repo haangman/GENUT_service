@@ -34,39 +34,37 @@ export function RequestActions() {
     !!compileResult && !compileStale && compileResult.included.length > 0 && !submitMut.isPending
 
   return (
-    <div className="mt-4 space-y-3 rounded border bg-white p-3 text-sm">
-      <div>
-        <label htmlFor="function-name" className="text-sm font-medium">
+    <div className="card mt-4 space-y-4 p-4 text-sm">
+      <div className="max-w-xs">
+        <label htmlFor="function-name" className="label">
           함수명 (선택)
         </label>
         <input
           id="function-name"
-          className="mt-1 block w-64 rounded border border-gray-300 px-2 py-1"
+          className="input"
           value={functionName}
           onChange={(event) => setFunctionName(event.target.value)}
         />
       </div>
 
-      <button
-        className="rounded border px-3 py-1.5 font-medium disabled:opacity-50"
-        disabled={!canCheck}
-        onClick={() => checkMut.mutate()}
-      >
+      <button className="btn" disabled={!canCheck} onClick={() => checkMut.mutate()}>
         compile_commands 검사
       </button>
 
       {compileResult ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {compileStale ? (
-            <p role="alert" className="text-amber-700">
+            <p role="alert" className="text-sm font-medium text-warn-fg">
               선택이 변경되었습니다. 다시 검사하세요.
             </p>
           ) : null}
           <div>
-            <h4 className="font-medium text-green-700">포함 ({compileResult.included.length})</h4>
-            <ul className="list-inside list-disc">
+            <h4 className="mb-1 font-semibold text-success-fg">
+              포함 ({compileResult.included.length})
+            </h4>
+            <ul className="space-y-0.5">
               {compileResult.included.map((file) => (
-                <li key={file} className="text-green-700">
+                <li key={file} className="font-mono text-xs text-success-fg">
                   {file}
                 </li>
               ))}
@@ -74,12 +72,12 @@ export function RequestActions() {
           </div>
           {compileResult.excluded.length > 0 ? (
             <div>
-              <h4 className="font-medium text-amber-700">
+              <h4 className="mb-1 font-semibold text-warn-fg">
                 제외 — compile_commands.json에 없음 ({compileResult.excluded.length})
               </h4>
-              <ul className="list-inside list-disc">
+              <ul className="space-y-0.5">
                 {compileResult.excluded.map((file) => (
-                  <li key={file} className="text-amber-700">
+                  <li key={file} className="font-mono text-xs text-warn-fg">
                     {file}
                   </li>
                 ))}
@@ -89,15 +87,11 @@ export function RequestActions() {
         </div>
       ) : null}
 
-      <button
-        className="rounded bg-gray-900 px-4 py-1.5 font-medium text-white disabled:opacity-50"
-        disabled={!canSubmit}
-        onClick={() => submitMut.mutate()}
-      >
+      <button className="btn btn-primary px-4" disabled={!canSubmit} onClick={() => submitMut.mutate()}>
         제출
       </button>
       {submitMut.isError ? (
-        <p role="alert" className="text-red-600">
+        <p role="alert" className="text-sm font-medium text-danger-fg">
           제출에 실패했습니다.
         </p>
       ) : null}

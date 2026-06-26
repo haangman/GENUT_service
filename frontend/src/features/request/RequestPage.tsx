@@ -20,21 +20,21 @@ export function RequestPage() {
         description="프로덕트를 선택하고 소스 파일을 구성해 GENUT 테스트 생성을 요청한다."
       />
       {lastSubmittedJobId ? (
-        <p className="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p className="mb-5 rounded-lg border border-success bg-success-soft px-4 py-2.5 text-sm font-medium text-success-fg">
           요청이 접수되었습니다. job #{lastSubmittedJobId}
         </p>
       ) : null}
       <ProductPicker />
       {productId ? (
         <>
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
             <FileTreePanel productId={productId} />
             <SelectedFilesPanel />
           </div>
           <RequestActions />
         </>
       ) : (
-        <p className="mt-4 text-sm text-gray-500">프로덕트를 선택하세요.</p>
+        <p className="mt-5 text-sm text-muted">프로덕트를 선택하세요.</p>
       )}
     </div>
   )

@@ -1,3 +1,172 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* ── 라이트 테마 토큰 ───────────────────────────────────────── */
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --surface-hover: #f2f4f7;
+    --border: #e4e7ec;
+    --border-strong: #cdd2da;
+    --fg: #14161a;
+    --muted: #5a616c;
+    --subtle: #8b919c;
+
+    --primary: #2f6df6;
+    --primary-hover: #1f5fe0;
+    --primary-fg: #ffffff;
+    --primary-soft: #e9f0fe;
+    --ring: rgba(47, 109, 246, 0.35);
+
+    --success: #16a34a;
+    --success-soft: #e7f6ed;
+    --success-fg: #15803d;
+    --warn: #d97706;
+    --warn-soft: #fbf0dd;
+    --warn-fg: #b45309;
+    --danger: #dc2626;
+    --danger-soft: #fdecec;
+    --danger-fg: #b91c1c;
+
+    --code-bg: #0f1218;
+    --code-fg: #e6e9ef;
+
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+    --shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.08);
+  }
+
+  /* ── 다크 테마 토큰 ─────────────────────────────────────────── */
+  .dark {
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-2: #1c212a;
+    --surface-hover: #20262f;
+    --border: #262c36;
+    --border-strong: #353d49;
+    --fg: #e6e9ee;
+    --muted: #9aa3b0;
+    --subtle: #6b7382;
+
+    --primary: #5b8cff;
+    --primary-hover: #74a0ff;
+    --primary-fg: #0b1220;
+    --primary-soft: #18233a;
+    --ring: rgba(91, 140, 255, 0.4);
+
+    --success: #34d399;
+    --success-soft: #122a22;
+    --success-fg: #6ee7b7;
+    --warn: #fbbf24;
+    --warn-soft: #2b2110;
+    --warn-fg: #fcd34d;
+    --danger: #f87171;
+    --danger-soft: #2c1618;
+    --danger-fg: #fca5a5;
+
+    --code-bg: #0a0d12;
+    --code-fg: #e6e9ef;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-family: theme('fontFamily.sans');
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+
+  /* 정제된 얇은 스크롤바 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--subtle);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-border bg-surface;
+    box-shadow: var(--shadow-card);
+  }
+
+  .label {
+    @apply text-sm font-medium text-fg;
+  }
+
+  .input {
+    @apply mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg transition
+      placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring;
+  }
+
+  /* 버튼: 기본(보조) */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface
+      px-3.5 py-2 text-sm font-medium text-fg transition hover:bg-surface-hover
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+      disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-transparent bg-primary text-primary-fg shadow-card hover:bg-primary-hover;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-surface-hover;
+  }
+  .btn-danger {
+    @apply border-danger bg-transparent text-danger hover:bg-danger-soft;
+  }
+  .btn-sm {
+    @apply rounded-md px-2.5 py-1 text-xs;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply border-border bg-surface-2 text-muted;
+  }
+  .badge-primary {
+    @apply border-transparent bg-primary-soft text-primary;
+  }
+  .badge-success {
+    @apply border-transparent bg-success-soft text-success-fg;
+  }
+  .badge-warn {
+    @apply border-transparent bg-warn-soft text-warn-fg;
+  }
+  .badge-danger {
+    @apply border-transparent bg-danger-soft text-danger-fg;
+  }
+
+  .link {
+    @apply font-medium text-primary transition hover:opacity-80;
+  }
+}

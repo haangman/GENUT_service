@@ -61,6 +61,35 @@ function jobResultLabel(job: Job): string {
   }
 }
 
+function jobBadgeClass(status: string): string {
+  switch (status) {
+    case 'done':
+      return 'badge badge-success'
+    case 'running':
+      return 'badge badge-primary'
+    case 'failed':
+    case 'canceled':
+      return 'badge badge-danger'
+    case 'interrupted':
+      return 'badge badge-warn'
+    default:
+      return 'badge badge-neutral'
+  }
+}
+
+function workerBadgeClass(status: string): string {
+  switch (status) {
+    case 'idle':
+      return 'badge badge-success'
+    case 'busy':
+      return 'badge badge-primary'
+    case 'error':
+      return 'badge badge-danger'
+    default:
+      return 'badge badge-neutral'
+  }
+}
+
 function WorkerGrid() {
   const { data } = useQuery({
     queryKey: ['workers'],
@@ -69,14 +98,16 @@ function WorkerGrid() {
   })
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold">워커</h2>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+      <h2 className="mb-3 text-sm font-semibold text-fg">워커</h2>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         {(data ?? []).map((worker) => (
-          <div key={worker.id} className="rounded border bg-white p-2 text-sm">
-            <div className="font-medium">{worker.name}</div>
-            <div className="text-gray-500">상태: {worker.worker_status}</div>
+          <div key={worker.id} className="card p-3.5 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-semibold text-fg">{worker.name}</span>
+              <span className={workerBadgeClass(worker.worker_status)}>{worker.worker_status}</span>
+            </div>
             {worker.current_job_id ? (
-              <div className="text-gray-500">job #{worker.current_job_id}</div>
+              <div className="mt-1.5 font-mono text-xs text-muted">job #{worker.current_job_id}</div>
             ) : null}
           </div>
         ))}
@@ -93,17 +124,20 @@ function QueuePanel() {
   })
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold">요청 큐</h2>
+      <h2 className="mb-3 text-sm font-semibold text-fg">요청 큐</h2>
       {(data ?? []).length === 0 ? (
-        <p className="text-sm text-gray-400">대기 중인 요청이 없습니다.</p>
+        <p className="text-sm text-subtle">대기 중인 요청이 없습니다.</p>
       ) : (
-        <ul className="space-y-1 text-sm">
+        <ul className="space-y-2 text-sm">
           {data?.map((item) => (
-            <li key={item.job_id} className="flex gap-2">
-              <span>job #{item.job_id}</span>
-              <span className="text-gray-500">product {item.product_id}</span>
+            <li
+              key={item.job_id}
+              className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2"
+            >
+              <span className="font-semibold text-fg">job #{item.job_id}</span>
+              <span className="text-muted">product {item.product_id}</span>
               {item.waiting_on_product ? (
-                <span className="text-amber-700">대기(프로덕트 사용 중)</span>
+                <span className="badge badge-warn ml-auto">대기(프로덕트 사용 중)</span>
               ) : null}
             </li>
           ))}
@@ -194,15 +228,11 @@ export function JobLogs({
 
   return (
     <div>
-      <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
-        <span>
+      <div className="mb-2 flex items-center gap-2 text-xs text-muted">
+        <span className="mr-auto font-medium">
           job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
         </span>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="rounded border px-2 py-0.5 text-blue-600"
-        >
+        <button type="button" onClick={handleSave} className="btn btn-sm">
           로그 저장
         </button>
         {terminal ? (
@@ -210,7 +240,7 @@ export function JobLogs({
             type="button"
             onClick={() => rerunMut.mutate()}
             disabled={rerunMut.isPending}
-            className="rounded border px-2 py-0.5 text-blue-600 disabled:opacity-50"
+            className="btn btn-sm"
           >
             {rerunMut.isPending ? '재수행 중…' : '재수행'}
           </button>
@@ -221,7 +251,8 @@ export function JobLogs({
         data-testid="job-log"
         // 로그는 줄바꿈하지 않고(whitespace-pre) 박스 안에서 상하·좌우로 스크롤한다.
         // 테이블은 table-fixed라 이 긴 로그가 데이터 컬럼 폭을 밀지 않는다.
-        className="max-h-64 overflow-auto whitespace-pre rounded bg-gray-900 p-2 text-xs text-gray-100"
+        className="max-h-64 overflow-auto whitespace-pre rounded-lg p-3 font-mono text-xs leading-relaxed"
+        style={{ background: 'var(--code-bg)', color: 'var(--code-fg)' }}
       >
         {events.map((event) => `[${event.phase ?? '-'}] ${event.message}`).join('\n') ||
           '로그 없음'}
@@ -257,17 +288,18 @@ function JobHistory() {
     setCanceling((prev) => new Set(prev).add(jobId))
     cancelMut.mutate(jobId)
   }
+  const cell = 'whitespace-nowrap px-3 py-2.5 text-muted'
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold">Job 이력</h2>
-      <div className="overflow-x-auto">
+      <h2 className="mb-3 text-sm font-semibold text-fg">Job 이력</h2>
+      <div className="card overflow-x-auto">
         {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
             min-w로 좁은 화면에선 위 overflow-x-auto가 전체 좌우 스크롤을 제공한다. */}
-        <table className="w-full min-w-[1120px] table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[1120px] table-fixed text-sm">
           <colgroup>
             <col className="w-[56px]" />
             <col className="w-[84px]" />
-            <col className="w-[90px]" />
+            <col className="w-[96px]" />
             <col className="w-[160px]" />
             <col className="w-[160px]" />
             <col className="w-[160px]" />
@@ -276,63 +308,63 @@ function JobHistory() {
             <col className="w-[80px]" />
           </colgroup>
           <thead>
-            <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-600">
-              <th className="border border-gray-200 px-3 py-2">#</th>
-              <th className="border border-gray-200 px-3 py-2">product</th>
-              <th className="border border-gray-200 px-3 py-2">상태</th>
-              <th className="border border-gray-200 px-3 py-2">제출 시각</th>
-              <th className="border border-gray-200 px-3 py-2">시작 시간</th>
-              <th className="border border-gray-200 px-3 py-2">종료 시간</th>
-              <th className="border border-gray-200 px-3 py-2">총 수행 시간</th>
-              <th className="border border-gray-200 px-3 py-2">결과</th>
-              <th className="border border-gray-200 px-3 py-2"></th>
+            <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <th className="px-3 py-2.5">#</th>
+              <th className="px-3 py-2.5">product</th>
+              <th className="px-3 py-2.5">상태</th>
+              <th className="px-3 py-2.5">제출 시각</th>
+              <th className="px-3 py-2.5">시작 시간</th>
+              <th className="px-3 py-2.5">종료 시간</th>
+              <th className="px-3 py-2.5">총 수행 시간</th>
+              <th className="px-3 py-2.5">결과</th>
+              <th className="px-3 py-2.5"></th>
             </tr>
           </thead>
-        <tbody>
-          {data?.items.map((job) => (
-            <Fragment key={job.id}>
-              <tr
-                className={`cursor-pointer hover:bg-gray-50 ${
-                  selectedJobId === job.id ? 'bg-blue-50' : ''
-                }`}
-                onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
-              >
-                <td className="border border-gray-200 px-3 py-2 font-medium text-gray-700">{job.id}</td>
-                <td className="border border-gray-200 px-3 py-2">{job.product_id}</td>
-                <td className="border border-gray-200 px-3 py-2">{job.status}</td>
-                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.submitted_at)}</td>
-                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.started_at)}</td>
-                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">{formatDateTime(job.finished_at)}</td>
-                <td className="whitespace-nowrap border border-gray-200 px-3 py-2 text-gray-500">
-                  {formatDuration(job.started_at, job.finished_at)}
-                </td>
-                <td className="border border-gray-200 px-3 py-2 text-gray-500">{jobResultLabel(job)}</td>
-                <td className="border border-gray-200 px-3 py-2 text-right">
-                  {job.status === 'running' ? (
-                    <button
-                      type="button"
-                      className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      disabled={canceling.has(job.id)}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        requestCancel(job.id)
-                      }}
-                    >
-                      {canceling.has(job.id) ? '종료 중…' : '강제 종료'}
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-              {selectedJobId === job.id ? (
-                <tr className="bg-gray-50">
-                  <td colSpan={9} className="border border-gray-200 p-3">
-                    <JobLogs jobId={job.id} status={job.status} />
+          <tbody>
+            {data?.items.map((job) => (
+              <Fragment key={job.id}>
+                <tr
+                  className={`cursor-pointer border-t border-border transition hover:bg-surface-hover ${
+                    selectedJobId === job.id ? 'bg-primary-soft' : ''
+                  }`}
+                  onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
+                >
+                  <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
+                  <td className="px-3 py-2.5 text-muted">{job.product_id}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={jobBadgeClass(job.status)}>{job.status}</span>
+                  </td>
+                  <td className={cell}>{formatDateTime(job.submitted_at)}</td>
+                  <td className={cell}>{formatDateTime(job.started_at)}</td>
+                  <td className={cell}>{formatDateTime(job.finished_at)}</td>
+                  <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
+                  <td className="truncate px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    {job.status === 'running' ? (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        disabled={canceling.has(job.id)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          requestCancel(job.id)
+                        }}
+                      >
+                        {canceling.has(job.id) ? '종료 중…' : '강제 종료'}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
-              ) : null}
-            </Fragment>
-          ))}
-        </tbody>
+                {selectedJobId === job.id ? (
+                  <tr className="bg-surface-2">
+                    <td colSpan={9} className="border-t border-border p-3">
+                      <JobLogs jobId={job.id} status={job.status} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            ))}
+          </tbody>
         </table>
       </div>
     </section>
@@ -341,7 +373,7 @@ function JobHistory() {
 
 export function MonitoringPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader title="모니터링" description="워커 상태, 요청 큐, job 이력/로그를 본다." />
       <WorkerGrid />
       <QueuePanel />

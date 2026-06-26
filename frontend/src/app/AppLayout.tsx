@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useTheme } from '../lib/useTheme'
 
 const navItems = [
   { to: '/request', label: '테스트 요청' },
@@ -9,20 +10,56 @@ const navItems = [
   { to: '/test-download', label: '테스트 다운로드' },
 ]
 
-export function AppLayout() {
+function ThemeToggle() {
+  const { isDark, toggle } = useTheme()
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
-          <span className="text-lg font-semibold">GENUT_service</span>
-          <nav className="flex gap-1">
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
+      title={isDark ? '라이트 모드' : '다크 모드'}
+      className="btn btn-ghost btn-sm h-9 w-9 !px-0 text-muted hover:text-fg"
+    >
+      {isDark ? (
+        // sun
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg>
+      ) : (
+        // moon
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
+export function AppLayout() {
+  const location = useLocation()
+  return (
+    <div className="min-h-screen bg-bg text-fg">
+      <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-fg shadow-card">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13l0-8z" />
+              </svg>
+            </span>
+            <span className="text-base font-bold tracking-tight text-fg">GENUT_service</span>
+          </div>
+          <nav className="flex flex-1 items-center gap-1 overflow-x-auto">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `rounded px-3 py-1.5 text-sm font-medium ${
-                    isActive ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  `whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    isActive
+                      ? 'bg-primary text-primary-fg shadow-card'
+                      : 'text-muted hover:bg-surface-hover hover:text-fg'
                   }`
                 }
               >
@@ -30,10 +67,13 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
+          <ThemeToggle />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <Outlet />
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <div key={location.pathname} className="animate-fade-in-up">
+          <Outlet />
+        </div>
       </main>
     </div>
   )

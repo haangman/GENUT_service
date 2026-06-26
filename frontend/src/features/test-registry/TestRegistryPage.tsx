@@ -57,23 +57,26 @@ export function TestRegistryPage() {
       />
       <ProductGroupPicker value={group?.name ?? null} onChange={onSelectGroup} />
       {group ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           <TestFileTree
             productId={group.representativeId}
             selected={selected}
             onToggle={toggle}
             onImportFolder={importFolderPaths}
           />
-          <div className="rounded border bg-white p-3 text-sm">
-            <div className="mb-2 font-medium">선택한 파일 ({selected.size})</div>
+          <div className="card flex flex-col p-3 text-sm">
+            <div className="mb-2 font-semibold text-fg">선택한 파일 ({selected.size})</div>
             {selected.size === 0 ? (
-              <p className="text-gray-400">아직 선택한 파일이 없습니다.</p>
+              <p className="text-subtle">아직 선택한 파일이 없습니다.</p>
             ) : (
               <ul className="space-y-1">
                 {[...selected].map((path) => (
                   <li key={path} className="flex items-center justify-between gap-2">
-                    <span className="truncate">{path}</span>
-                    <button className="text-xs text-red-600" onClick={() => toggle(path)}>
+                    <span className="truncate font-mono text-xs text-muted">{path}</span>
+                    <button
+                      className="text-xs font-medium text-danger-fg transition hover:opacity-80"
+                      onClick={() => toggle(path)}
+                    >
                       제거
                     </button>
                   </li>
@@ -82,7 +85,7 @@ export function TestRegistryPage() {
             )}
             <button
               type="button"
-              className="mt-3 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              className="btn btn-primary mt-4 self-start"
               disabled={selected.size === 0 || registerMut.isPending}
               onClick={() => registerMut.mutate()}
             >
@@ -91,7 +94,7 @@ export function TestRegistryPage() {
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-sm text-gray-500">프로덕트를 선택하세요.</p>
+        <p className="mt-5 text-sm text-muted">프로덕트를 선택하세요.</p>
       )}
     </div>
   )

@@ -45,7 +45,7 @@ function DirNode(props: NodeProps) {
         </button>
         <button
           type="button"
-          className="text-xs text-blue-600"
+          className="link text-xs"
           onClick={() => onImportFolder(entry.path)}
         >
           폴더 가져오기
@@ -58,7 +58,7 @@ function DirNode(props: NodeProps) {
 
 function DirChildren({ path, ...props }: TreeProps & { path: string }) {
   const { data, isLoading } = useTree(props.productId, path)
-  if (isLoading) return <div className="pl-5 text-xs text-gray-400">…</div>
+  if (isLoading) return <div className="pl-5 text-xs text-subtle">…</div>
   return (
     <div>
       {(data ?? []).map((entry) => (
@@ -75,16 +75,16 @@ function TreeNode(props: NodeProps) {
 export function TestFileTree(props: TreeProps) {
   const { data, isLoading, isError } = useTree(props.productId, '')
 
-  if (isLoading) return <p className="text-sm text-gray-500">트리 로딩…</p>
+  if (isLoading) return <p className="text-sm text-muted">트리 로딩…</p>
   if (isError)
     return (
-      <p role="alert" className="text-sm text-red-600">
+      <p role="alert" className="text-sm text-danger-fg">
         트리를 불러오지 못했습니다.
       </p>
     )
 
   return (
-    <div className="rounded border bg-white p-3 text-sm">
+    <div className="card max-h-[28rem] overflow-auto p-3 text-sm">
       {(data ?? []).map((entry) => (
         <TreeNode key={entry.path} {...props} entry={entry} />
       ))}

@@ -47,7 +47,7 @@ function DirNode({ productId, entry, onImport }: NodeProps) {
         </button>
         <button
           type="button"
-          className="text-xs text-blue-600"
+          className="link text-xs"
           onClick={() => onImport(entry.path)}
         >
           폴더 가져오기
@@ -60,7 +60,7 @@ function DirNode({ productId, entry, onImport }: NodeProps) {
 
 function DirChildren({ productId, path, onImport }: { productId: number; path: string; onImport: (p: string) => void }) {
   const { data, isLoading } = useTree(productId, path)
-  if (isLoading) return <div className="pl-5 text-xs text-gray-400">…</div>
+  if (isLoading) return <div className="pl-5 text-xs text-subtle">…</div>
   return (
     <div>
       {(data ?? []).map((entry) => (
@@ -91,16 +91,16 @@ export function FileTreePanel({ productId }: { productId: number }) {
     addPaths(files)
   }
 
-  if (isLoading) return <p className="text-sm text-gray-500">트리 로딩…</p>
+  if (isLoading) return <p className="text-sm text-muted">트리 로딩…</p>
   if (isError)
     return (
-      <p role="alert" className="text-sm text-red-600">
+      <p role="alert" className="text-sm text-danger-fg">
         트리를 불러오지 못했습니다.
       </p>
     )
 
   return (
-    <div className="rounded border bg-white p-3 text-sm">
+    <div className="card max-h-[28rem] overflow-auto p-3 text-sm">
       {(data ?? []).map((entry) => (
         <TreeNode key={entry.path} productId={productId} entry={entry} onImport={onImport} />
       ))}

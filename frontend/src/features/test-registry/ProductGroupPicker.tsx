@@ -14,12 +14,12 @@ export function ProductGroupPicker({ value, onChange }: PickerProps) {
 
   return (
     <div>
-      <label htmlFor="product-group-picker" className="text-sm font-medium">
+      <label htmlFor="product-group-picker" className="label">
         프로덕트
       </label>
       <select
         id="product-group-picker"
-        className="mt-1 block w-72 rounded border border-gray-300 px-2 py-1 text-sm"
+        className="input max-w-xs"
         value={value ?? ''}
         onChange={(event) => {
           const group = groups.find((g) => g.name === event.target.value)

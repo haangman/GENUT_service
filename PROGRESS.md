@@ -162,6 +162,8 @@ migrations/              # Alembic (env.py + versions/)
 
 > 그룹핑/대표 선택은 `features/test-registry/groupByName.ts`(이름별 최저 id 대표). 두 탭 공용 피커 `ProductGroupPicker`. zip 다운로드는 `apiFetch`(JSON 전제) 대신 `fetch→blob→anchor`.
 
+**디자인 시스템 / 다크모드(신규)**: Google Stitch 풍의 모던·정제 UI. `index.css`에 **CSS 변수 시맨틱 토큰**(`--bg/surface/fg/muted/primary/success/warn/danger/...`)을 `:root`(라이트)·`.dark`(다크)로 정의하고, `tailwind.config.js`(`darkMode:'class'`)가 이를 `bg-surface`·`text-muted`·`bg-primary` 등으로 매핑 → 다크모드는 **변수 교체로 자동 전환**(컴포넌트에 `dark:` 중복 없음). 재사용 클래스 `.card/.btn(.btn-primary/.btn-danger/.btn-ghost/.btn-sm)/.input/.label/.badge(.badge-*)/.link`. 폰트는 **Plus Jakarta Sans**(본문)+**JetBrains Mono**(로그). 헤더에 로고 마크·pill 네비·**테마 토글**(`lib/useTheme.ts`, `<html>.dark`+`localStorage('theme')`; `index.html`의 무깜빡임 인라인 스크립트로 초기 테마를 페인트 전 적용). 라우트 전환 시 본문 `fade-in-up`. 상태는 배지로 표시(job: done→success/running→primary/failed·canceled→danger/interrupted→warn).
+
 ---
 
 ## 10. 테스트 전략
@@ -173,7 +175,7 @@ migrations/              # Alembic (env.py + versions/)
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
 - **테스트 파일 등록/다운로드 검증(신규)**: 백엔드 — 등록/조회/삭제·중복 무시·`build_zip` 경로 트래버설 차단·없는 파일 skip·404·zip 내용. 프론트 — `groupByName`(동명 그룹핑·대표 id), 등록 탭 POST, 다운로드 탭 zip 다운로드(`fetch→blob`)·DELETE.
 - **datetime 직렬화(신규)**: API의 datetime 필드는 `schemas/common.py`의 `UtcDatetime`로 **tz 인식 ISO(`+00:00`)** 로 내보낸다(naive면 UTC로 간주). 표식이 없으면 클라가 로컬로 오해해 실행 중 job의 "총 수행 시간"이 타임존 오프셋만큼 부풀려지던 버그를 차단. JobRead/JobEventRead/QueueItem에 적용.
-- 현재 **백엔드 121 passed, 1 deselected(docker)**(총 122 테스트 함수·20 파일) **· 프론트 46 passed**(16 파일). (재실측 2026-06-25)
+- 현재 **백엔드 121 passed, 1 deselected(docker)**(총 122 테스트 함수·20 파일) **· 프론트 47 passed**(16 파일; 테마 토글 다크모드 전환 테스트 포함). (재실측 2026-06-26)
 
 ---
 

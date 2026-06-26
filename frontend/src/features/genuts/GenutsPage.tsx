@@ -83,15 +83,15 @@ export function GenutsPage() {
       <PageHeader title="GENUT" description="GENUT 인스턴스(=워커)를 등록/관리한다." />
 
       <button
-        className="mb-4 rounded border px-3 py-1.5 text-sm font-medium"
+        className={`mb-5 ${showForm ? 'btn' : 'btn btn-primary'}`}
         onClick={showForm ? closeForm : openCreate}
       >
-        {showForm ? '닫기' : '새 GENUT'}
+        {showForm ? '닫기' : '+ 새 GENUT'}
       </button>
 
       {showForm ? (
-        <div className="mb-4">
-          <h3 className="mb-2 text-sm font-semibold">
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-semibold text-fg">
             {editing ? `수정: ${editing.name}` : '새 GENUT'}
           </h3>
           <GenutForm
@@ -102,44 +102,55 @@ export function GenutsPage() {
             submitting={saveMut.isPending}
           />
           {saveMut.isError ? (
-            <p role="alert" className="mt-2 text-sm text-red-600">
+            <p role="alert" className="mt-2 text-sm text-danger-fg">
               저장에 실패했습니다.
             </p>
           ) : null}
         </div>
       ) : null}
 
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b text-left text-gray-500">
-            <th className="py-2">이름</th>
-            <th>repo</th>
-            <th>시스템</th>
-            <th>max</th>
-            <th>상태</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.items.map((genut) => (
-            <tr key={genut.id} className="border-b">
-              <td className="py-2 font-medium">{genut.name}</td>
-              <td className="text-gray-500">{genut.repo_url}</td>
-              <td>{genut.ds_assist_send_system_name}</td>
-              <td>{genut.max_attempts}</td>
-              <td>{genut.worker_status}</td>
-              <td className="space-x-2 whitespace-nowrap">
-                <button className="text-xs text-blue-600" onClick={() => openEdit(genut)}>
-                  수정
-                </button>
-                <button className="text-xs text-red-600" onClick={() => deleteMut.mutate(genut.id)}>
-                  삭제
-                </button>
-              </td>
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <th className="px-4 py-3">이름</th>
+              <th className="px-4 py-3">repo</th>
+              <th className="px-4 py-3">시스템</th>
+              <th className="px-4 py-3">max</th>
+              <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data?.items.map((genut) => (
+              <tr key={genut.id} className="border-t border-border transition hover:bg-surface-hover">
+                <td className="px-4 py-3 font-medium text-fg">{genut.name}</td>
+                <td className="max-w-[260px] truncate px-4 py-3 text-muted">{genut.repo_url}</td>
+                <td className="px-4 py-3 text-muted">{genut.ds_assist_send_system_name}</td>
+                <td className="px-4 py-3 text-muted">{genut.max_attempts}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`badge ${genut.worker_status === 'idle' ? 'badge-success' : genut.worker_status === 'busy' ? 'badge-primary' : 'badge-neutral'}`}
+                  >
+                    {genut.worker_status}
+                  </span>
+                </td>
+                <td className="space-x-3 whitespace-nowrap px-4 py-3 text-right">
+                  <button className="link text-xs" onClick={() => openEdit(genut)}>
+                    수정
+                  </button>
+                  <button
+                    className="text-xs font-medium text-danger-fg transition hover:opacity-80"
+                    onClick={() => deleteMut.mutate(genut.id)}
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

@@ -75,15 +75,15 @@ export function ProductsPage() {
       <PageHeader title="프로덕트" description="테스트 생성 대상 프로덕트를 등록/관리한다." />
 
       <button
-        className="mb-4 rounded border px-3 py-1.5 text-sm font-medium"
+        className={`mb-5 ${showForm ? 'btn' : 'btn btn-primary'}`}
         onClick={showForm ? closeForm : openCreate}
       >
-        {showForm ? '닫기' : '새 프로덕트'}
+        {showForm ? '닫기' : '+ 새 프로덕트'}
       </button>
 
       {showForm ? (
-        <div className="mb-4">
-          <h3 className="mb-2 text-sm font-semibold">
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-semibold text-fg">
             {editing ? `수정: ${editing.name}` : '새 프로덕트'}
           </h3>
           <ProductForm
@@ -93,49 +93,56 @@ export function ProductsPage() {
             submitting={saveMut.isPending}
           />
           {saveMut.isError ? (
-            <p role="alert" className="mt-2 text-sm text-red-600">
+            <p role="alert" className="mt-2 text-sm text-danger-fg">
               저장에 실패했습니다.
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {isLoading ? <p className="text-sm text-gray-500">불러오는 중…</p> : null}
+      {isLoading ? <p className="text-sm text-muted">불러오는 중…</p> : null}
       {isError ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger-fg">
           목록을 불러오지 못했습니다.
         </p>
       ) : null}
 
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b text-left text-gray-500">
-            <th className="py-2">이름</th>
-            <th>프로덕트 ID</th>
-            <th>모드</th>
-            <th>repo</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.items.map((product) => (
-            <tr key={product.id} className="border-b">
-              <td className="py-2 font-medium">{product.name}</td>
-              <td>{product.product_code}</td>
-              <td>{product.test_generation_mode}</td>
-              <td className="text-gray-500">{product.git_url}</td>
-              <td className="space-x-2 whitespace-nowrap">
-                <button className="text-xs text-blue-600" onClick={() => openEdit(product)}>
-                  수정
-                </button>
-                <button className="text-xs text-red-600" onClick={() => deleteMut.mutate(product.id)}>
-                  삭제
-                </button>
-              </td>
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <th className="px-4 py-3">이름</th>
+              <th className="px-4 py-3">프로덕트 ID</th>
+              <th className="px-4 py-3">모드</th>
+              <th className="px-4 py-3">repo</th>
+              <th className="px-4 py-3"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data?.items.map((product) => (
+              <tr key={product.id} className="border-t border-border transition hover:bg-surface-hover">
+                <td className="px-4 py-3 font-medium text-fg">{product.name}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted">{product.product_code}</td>
+                <td className="px-4 py-3">
+                  <span className="badge badge-neutral">{product.test_generation_mode}</span>
+                </td>
+                <td className="max-w-[280px] truncate px-4 py-3 text-muted">{product.git_url}</td>
+                <td className="space-x-3 whitespace-nowrap px-4 py-3 text-right">
+                  <button className="link text-xs" onClick={() => openEdit(product)}>
+                    수정
+                  </button>
+                  <button
+                    className="text-xs font-medium text-danger-fg transition hover:opacity-80"
+                    onClick={() => deleteMut.mutate(product.id)}
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
