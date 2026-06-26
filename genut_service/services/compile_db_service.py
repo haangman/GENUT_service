@@ -46,6 +46,12 @@ def load_compile_db(root: Path, compile_db_rel: str) -> tuple[set[str], set[str]
     return rels, bases
 
 
+def list_files(root: Path, compile_db_rel: str) -> list[str]:
+    """compile_commands.json에 등록된 모든 소스 파일을 root 기준 상대경로(POSIX)로 정렬 반환."""
+    rels, _ = load_compile_db(root, compile_db_rel)
+    return sorted(rels)
+
+
 def split_inclusion(
     root: Path, compile_db_rel: str, files: list[str]
 ) -> tuple[list[str], list[str]]:

@@ -46,6 +46,7 @@ class ProductBase(BaseModel):
     test_generation_mode: TestGenerationMode = TestGenerationMode.CPP
     active: bool = True
     code_path: str | None = None
+    exclude_globs: list[str] = []
 
     @field_validator("compile_db_rel", "out_tests_rel")
     @classmethod
@@ -56,6 +57,11 @@ class ProductBase(BaseModel):
     @classmethod
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
+
+    @field_validator("exclude_globs")
+    @classmethod
+    def _clean_globs(cls, value: list[str]) -> list[str]:
+        return [g.strip() for g in value if g and g.strip()]
 
 
 class ProductCreate(ProductBase):
@@ -77,6 +83,7 @@ class ProductUpdate(BaseModel):
     test_generation_mode: TestGenerationMode | None = None
     active: bool | None = None
     code_path: str | None = None
+    exclude_globs: list[str] | None = None
     patches: list[PatchIn] | None = None
 
     @field_validator("compile_db_rel", "out_tests_rel")
@@ -88,6 +95,11 @@ class ProductUpdate(BaseModel):
     @classmethod
     def _normalize_code_path(cls, value: str | None) -> str | None:
         return _norm_code_path(value)
+
+    @field_validator("exclude_globs")
+    @classmethod
+    def _clean_globs(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else [g.strip() for g in value if g and g.strip()]
 
 
 class ProductRead(ProductBase):

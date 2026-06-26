@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
     from genut_service.api.genuts import router as genuts_router
     from genut_service.api.jobs import router as jobs_router
     from genut_service.api.products import router as products_router
-    from genut_service.api.test_files import router as test_files_router
+    from genut_service.api.test_status import router as test_status_router
     from genut_service.api.workers import router as workers_router
 
     app.include_router(products_router)
@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router)
     app.include_router(genuts_router)
     app.include_router(workers_router)
-    app.include_router(test_files_router)
+    app.include_router(test_status_router)
 
     # 빌드된 프론트엔드가 있으면 정적 서빙(SPA fallback). API 라우터 등록 이후에 한다.
     mount_frontend(app, Path(__file__).resolve().parent.parent / "frontend" / "dist")
