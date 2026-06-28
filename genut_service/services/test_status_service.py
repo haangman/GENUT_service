@@ -104,7 +104,46 @@ def build_status(root: Path, product: Product) -> list[dict]:
     return status
 
 
-def summarize(root: Path, product: Product) -> tuple[int, int]:
-    """프로덕트의 (테스트 대상 파일 수, 총 테스트 수)를 반환한다."""
-    rows = build_status(root, product)
-    return len(rows), sum(row["test_count"] for row in rows)
+def merge_status(pairs: list[tuple[str, list[dict]]]) -> list[dict]:
+    """여러 프로덕트(동명 변이)의 build_status 결과를 path 기준 합집합으로 병합한다.
+
+    입력은 `(product_code, build_status결과)` 쌍 목록. 같은 path의 대상 파일/테스트 파일은
+    한 번만 세고(중복 제거), 각 파일에 그것이 등장한 `product_codes`(프로덕트 id)를 붙인다.
+    반환: [{"name","path","product_codes","test_count","test_files":[{"name","path","product_codes"}]}]
+    (대상 파일 path 오름차순, 각 test_files도 path 오름차순).
+    """
+    # path -> {name, codes:set, tf: {tf_path: {name, codes:set}}}
+    targets: dict[str, dict] = {}
+    for code, status in pairs:
+        for item in status:
+            entry = targets.setdefault(
+                item["path"], {"name": item["name"], "codes": set(), "tf": {}}
+            )
+            entry["codes"].add(code)
+            for tf in item["test_files"]:
+                tf_entry = entry["tf"].setdefault(
+                    tf["path"], {"name": tf["name"], "codes": set()}
+                )
+                tf_entry["codes"].add(code)
+
+    result: list[dict] = []
+    for path in sorted(targets):
+        entry = targets[path]
+        test_files = [
+            {
+                "name": entry["tf"][tf_path]["name"],
+                "path": tf_path,
+                "product_codes": sorted(entry["tf"][tf_path]["codes"]),
+            }
+            for tf_path in sorted(entry["tf"])
+        ]
+        result.append(
+            {
+                "name": entry["name"],
+                "path": path,
+                "product_codes": sorted(entry["codes"]),
+                "test_count": len(test_files),
+                "test_files": test_files,
+            }
+        )
+    return result

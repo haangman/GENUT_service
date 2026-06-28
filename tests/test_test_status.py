@@ -77,10 +77,15 @@ def _make_checkout(base: Path) -> Path:
     return root
 
 
-def _create_product(client: TestClient, exclude_globs: list[str] | None = None) -> int:
+def _create_product(
+    client: TestClient,
+    name: str = "demo",
+    code: str = "P-1",
+    exclude_globs: list[str] | None = None,
+) -> int:
     payload = {
-        "name": "demo",
-        "product_code": "P-1",
+        "name": name,
+        "product_code": code,
         "git_url": "https://example.com/repo.git",
         "compile_db_rel": "build",
         "out_tests_rel": "tests/generated",
@@ -95,55 +100,102 @@ def _create_product(client: TestClient, exclude_globs: list[str] | None = None) 
     return resp.json()["id"]
 
 
-def test_test_status_api_lists_targets_with_counts(
+# --- 단위: merge_status (합집합 + 출처 추적) ------------------------------
+
+
+def test_merge_status_dedupes_and_tracks_codes() -> None:
+    status = [
+        {
+            "name": "calc.c",
+            "path": "src/calc.c",
+            "test_count": 1,
+            "test_files": [{"name": "calc_Test_0.cpp", "path": "t/calc_Test_0.cpp"}],
+        }
+    ]
+    # 동일 데이터를 가진 두 변이 → 합집합=단일, product_codes에 둘 다
+    merged = test_status_service.merge_status([("A-1", status), ("A-2", status)])
+    assert len(merged) == 1
+    assert merged[0]["path"] == "src/calc.c"
+    assert merged[0]["product_codes"] == ["A-1", "A-2"]
+    assert merged[0]["test_count"] == 1  # 2배 아님
+    assert merged[0]["test_files"][0]["product_codes"] == ["A-1", "A-2"]
+
+
+def test_merge_status_unions_distinct_test_files() -> None:
+    s1 = [{"name": "calc.c", "path": "src/calc.c", "test_count": 1,
+           "test_files": [{"name": "a.cpp", "path": "t/a.cpp"}]}]
+    s2 = [{"name": "calc.c", "path": "src/calc.c", "test_count": 1,
+           "test_files": [{"name": "b.cpp", "path": "t/b.cpp"}]}]
+    merged = test_status_service.merge_status([("A-1", s1), ("A-2", s2)])
+    assert merged[0]["test_count"] == 2  # 서로 다른 테스트 → 합쳐서 2
+    by_path = {tf["path"]: tf["product_codes"] for tf in merged[0]["test_files"]}
+    assert by_path == {"t/a.cpp": ["A-1"], "t/b.cpp": ["A-2"]}
+
+
+# --- 통합: 이름 기반 상세/요약 API ---------------------------------------
+
+
+def test_test_status_detail_by_name(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
     monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
-    product_id = _create_product(client)
+    _create_product(client, name="demo", code="P-1")
 
-    resp = client.get(f"/api/products/{product_id}/test-status")
+    resp = client.get("/api/test-status/detail", params={"name": "demo"})
     assert resp.status_code == 200
     body = resp.json()
-    # build/gen.c는 제외, src/calc.c·src/util.c만 대상 (path 오름차순)
-    assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]
-
+    assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]  # build/gen.c 제외
     calc = next(f for f in body if f["path"] == "src/calc.c")
-    assert calc["name"] == "calc.c"
     assert calc["test_count"] == 2
-    assert sorted(t["path"] for t in calc["test_files"]) == [
-        "tests/generated/Scenario1/calc/calc_Test_0.cpp",
-        "tests/generated/Scenario1/calc/calc_Test_1.cpp",
-    ]
-    util = next(f for f in body if f["path"] == "src/util.c")
-    assert util["test_count"] == 1
+    assert calc["product_codes"] == ["P-1"]
+    assert all(t["product_codes"] == ["P-1"] for t in calc["test_files"])
 
 
-def test_test_status_api_applies_exclude_globs(
+def test_test_status_detail_groups_same_name_union(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
     monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
-    product_id = _create_product(client, exclude_globs=["*util*"])
+    # 같은 이름 'A'의 두 변이(A-1, A-2) → 같은 체크아웃 공유 → 합집합(2배 아님)
+    _create_product(client, name="A", code="A-1")
+    _create_product(client, name="A", code="A-2")
 
-    body = client.get(f"/api/products/{product_id}/test-status").json()
+    body = client.get("/api/test-status/detail", params={"name": "A"}).json()
+    assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]
+    calc = next(f for f in body if f["path"] == "src/calc.c")
+    assert calc["test_count"] == 2  # 중복 제거(2배 아님)
+    assert calc["product_codes"] == ["A-1", "A-2"]  # 두 변이 모두 출처
+    assert all(sorted(t["product_codes"]) == ["A-1", "A-2"] for t in calc["test_files"])
+
+
+def test_test_status_detail_applies_exclude_globs(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="demo", code="P-1", exclude_globs=["*util*"])
+
+    body = client.get("/api/test-status/detail", params={"name": "demo"}).json()
     assert [f["path"] for f in body] == ["src/calc.c"]  # util은 글롭으로 제외
 
 
-def test_test_status_missing_product_404(client: TestClient) -> None:
-    assert client.get("/api/products/9999/test-status").status_code == 404
+def test_test_status_detail_missing_name_404(client: TestClient) -> None:
+    assert client.get("/api/test-status/detail", params={"name": "nope"}).status_code == 404
 
 
-def test_test_status_summary_lists_per_product_counts(
+def test_test_status_summary_groups_by_name(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
     monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
-    pid = _create_product(client)
+    _create_product(client, name="A", code="A-1")
+    _create_product(client, name="A", code="A-2")
 
     body = client.get("/api/test-status").json()
-    row = next(r for r in body if r["product_id"] == pid)
-    # 대상 파일 2개(calc.c, util.c), 총 테스트 3개(calc 2 + util 1)
-    assert row["target_file_count"] == 2
-    assert row["total_test_count"] == 3
-    assert row["name"] == "demo"
+    rows = [r for r in body if r["name"] == "A"]
+    assert len(rows) == 1  # 이름 1행으로 합산
+    row = rows[0]
+    assert row["target_file_count"] == 2  # calc.c, util.c (2배 아님)
+    assert row["total_test_count"] == 3  # calc 2 + util 1
+    assert sorted(row["product_codes"]) == ["A-1", "A-2"]
