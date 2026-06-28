@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,7 +19,12 @@ from sqlalchemy.orm import Session
 from genut_service import workspace
 from genut_service.api.deps import get_session
 from genut_service.db.models import Product
-from genut_service.schemas.test_status import NameTestSummary, TargetFileStatus
+from genut_service.paths import PathValidationError, normalize_rel_path
+from genut_service.schemas.test_status import (
+    FileContent,
+    NameTestSummary,
+    TargetFileStatus,
+)
 from genut_service.services import test_status_service
 
 router = APIRouter(prefix="/api/test-status", tags=["test-status"])
@@ -78,3 +85,37 @@ def get_test_status_detail(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
     merged = test_status_service.merge_status(_scan_pairs(group))
     return [TargetFileStatus.model_validate(row) for row in merged]
+
+
+def _within(target: Path, base: Path) -> bool:
+    """target(resolve됨)이 base(resolve됨) 하위인지."""
+    return target == base or target.is_relative_to(base)
+
+
+@router.get("/file", response_model=FileContent)
+def get_test_file(
+    code: str = Query(...),
+    path: str = Query(...),
+    session: Session = Depends(get_session),
+) -> FileContent:
+    """테스트 코드/로그 파일 1건의 내용을 반환한다(뷰어용).
+
+    허용 루트는 프로덕트의 out_tests 폴더와 그 형제 `_Fail`/`_debug_log`뿐이다.
+    경로는 `..`를 거부(400)하고, 허용 루트 밖이거나 없는 파일은 404다.
+    """
+    product = session.scalars(
+        select(Product).where(Product.product_code == code)
+    ).first()
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    try:
+        rel = normalize_rel_path(path)
+    except PathValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "허용되지 않는 경로다") from exc
+
+    root = workspace.ensure_product_checkout(product)
+    target = (root / rel).resolve()
+    allowed = test_status_service.allowed_roots(root, product)
+    if not any(_within(target, base) for base in allowed) or not target.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "파일을 찾을 수 없다")
+    return FileContent(path=rel, content=target.read_text(encoding="utf-8", errors="replace"))

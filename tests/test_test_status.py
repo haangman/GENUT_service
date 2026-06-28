@@ -303,3 +303,75 @@ def test_test_status_summary_groups_by_name(
     assert row["total_test_count"] == 3  # calc 2 + util 1
     assert row["total_fail_count"] == 1  # calc 실패 1
     assert sorted(row["product_codes"]) == ["A-1", "A-2"]
+
+
+# --- 통합: 파일 내용(코드/로그) 엔드포인트 -------------------------------
+
+
+def test_test_status_file_returns_code_and_log(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="demo", code="P-1")
+
+    code = client.get(
+        "/api/test-status/file",
+        params={"code": "P-1", "path": "out/calc/calc_Test_0.cpp"},
+    )
+    assert code.status_code == 200
+    assert code.json() == {"path": "out/calc/calc_Test_0.cpp", "content": "//0"}
+
+    log = client.get(
+        "/api/test-status/file",
+        params={"code": "P-1", "path": "out_debug_log/calc/calc_Test_0.log"},
+    )
+    assert log.status_code == 200
+    assert log.json()["content"] == "log0"
+
+
+def test_test_status_file_unknown_code_404(client: TestClient) -> None:
+    resp = client.get(
+        "/api/test-status/file", params={"code": "ZZ", "path": "out/calc/x.cpp"}
+    )
+    assert resp.status_code == 404
+
+
+def test_test_status_file_missing_file_404(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="demo", code="P-1")
+    resp = client.get(
+        "/api/test-status/file",
+        params={"code": "P-1", "path": "out/calc/nope.cpp"},
+    )
+    assert resp.status_code == 404
+
+
+def test_test_status_file_rejects_traversal_400(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="demo", code="P-1")
+    resp = client.get(
+        "/api/test-status/file",
+        params={"code": "P-1", "path": "../../etc/passwd"},
+    )
+    assert resp.status_code == 400
+
+
+def test_test_status_file_rejects_outside_allowed_404(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="demo", code="P-1")
+    # 체크아웃 안에 실재하지만 허용 루트(out/out_Fail/out_debug_log) 밖 → 404
+    resp = client.get(
+        "/api/test-status/file",
+        params={"code": "P-1", "path": "src/calc.c"},
+    )
+    assert resp.status_code == 404

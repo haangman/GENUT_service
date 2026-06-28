@@ -71,6 +71,19 @@ def _sibling_roots(out_root: Path) -> tuple[Path | None, Path | None]:
     )
 
 
+def allowed_roots(root: Path, product: Product) -> list[Path]:
+    """파일 뷰어가 읽을 수 있는 허용 루트(resolve됨): out_root + 형제 _Fail/_debug_log.
+
+    경로 보안 경계로 사용한다(이 밖의 체크아웃 파일은 읽지 못한다).
+    """
+    out_rel = (product.out_tests_rel or "").replace("\\", "/").strip("/")
+    if not out_rel:
+        return [root.resolve()]
+    out_root = (root / out_rel).resolve()
+    fail_root, log_root = _sibling_roots(out_root)
+    return [r for r in (out_root, fail_root, log_root) if r is not None]
+
+
 def _scan_stem_dir(scan_root: Path | None, product_root: Path) -> dict[str, list[str]]:
     """scan_root 직속 stem 폴더의 `_test` 파일을 {stem: [product_root 기준 POSIX 경로]}로 모은다.
 
