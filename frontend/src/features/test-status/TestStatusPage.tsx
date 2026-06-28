@@ -61,7 +61,7 @@ export function TestStatusPage() {
       {selectedName == null ? (
         <>
           {summaryLoading ? <p className="mb-3 text-sm text-muted">스캔 중…</p> : null}
-          <div className="card overflow-hidden">
+          <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -83,7 +83,10 @@ export function TestStatusPage() {
                     }}
                   >
                     <td className="px-4 py-3 font-medium text-fg">{g.name}</td>
-                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-muted">
+                    <td
+                      className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-muted"
+                      title={g.product_codes.join(', ')}
+                    >
                       {g.product_codes.join(', ')}
                     </td>
                     <td className="px-4 py-3">
@@ -123,7 +126,7 @@ export function TestStatusPage() {
                   총 테스트 {totalTests}
                 </span>
               </div>
-              <div className="card overflow-hidden">
+              <div className="card overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -140,7 +143,7 @@ export function TestStatusPage() {
                         onClick={() => setFilePath(f.path)}
                       >
                         <td className="px-4 py-3 font-medium text-fg">{f.name}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted">{f.path}</td>
+                        <td className="break-all px-4 py-3 font-mono text-xs text-muted">{f.path}</td>
                         <td className="px-4 py-3 text-right">
                           <span className={`badge ${f.test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                             {f.test_count}
@@ -161,7 +164,7 @@ export function TestStatusPage() {
 
       {/* L3: 파일별 테스트 파일 목록 + 출처 */}
       {file != null ? (
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
@@ -173,7 +176,7 @@ export function TestStatusPage() {
               {file.test_files.map((t) => (
                 <tr key={t.path} className="border-t border-border">
                   <td className="px-4 py-3 font-medium text-fg">{t.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
+                  <td className="break-all px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
                 </tr>
               ))}
             </tbody>

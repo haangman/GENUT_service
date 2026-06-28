@@ -50,6 +50,11 @@ describe('TestStatusPage', () => {
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
     expect(screen.getByText('총 테스트 2')).toBeInTheDocument()
 
+    // 잘림 방지: 표는 가로 스크롤(클리핑 아님), 긴 경로는 줄바꿈된다
+    const pathCell = screen.getByText('src/calc.c')
+    expect(pathCell.className).toContain('break-all')
+    expect(pathCell.closest('table')?.parentElement?.className).toContain('overflow-x-auto')
+
     // L3: 파일 클릭 → 테스트 파일 목록
     await userEvent.click(screen.getByText('calc.c'))
     expect(await screen.findByText('calc_Test_0.cpp')).toBeInTheDocument()
