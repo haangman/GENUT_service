@@ -1,20 +1,22 @@
 """프로덕트별 테스트 현황 수집 (FastAPI 비의존).
 
 프로덕트의 compile_commands.json에서 **테스트 생성 대상 파일**을 모으고, 프로덕트의
-out_tests 폴더를 스캔해 각 대상 파일에 **자동 생성된 테스트 파일**을 매칭한다. 결과는
-DB에 저장하지 않고 호출 시점에 체크아웃을 실시간 스캔한다.
+out_tests 폴더(및 그 형제 폴더)를 스캔해 각 대상 파일에 **생성된 테스트 파일**(성공/실패)과
+**생성 로그**를 매칭한다. 결과는 DB에 저장하지 않고 호출 시점에 체크아웃을 실시간 스캔한다.
+
+디스크 구조(등록한 출력 폴더 = out_tests_rel = `AA`):
+- 성공: `AA/<stem>/*_test*`            (stem = 대상 파일 `aaa.c`의 확장자 제거 이름 `aaa`)
+- 실패: `AA_Fail/<stem>/*_test*`       (AA와 같은 depth의 형제)
+- 로그: `AA_debug_log/<stem>/<test>.log` (AA와 같은 depth의 형제, 테스트 파일명 확장자→.log)
 
 매칭 규칙:
 - 대상 파일: compile_commands.json의 파일 중 `build`/`Build` 폴더 하위, 폴더명에
   `test`/`Test`가 포함된 경로, 프로덕트별 제외 글롭(`*test*` 등, path 기준 fnmatch)을 제외.
-- 테스트 파일: 대상 `aaa.c` → out_tests 하위에서 이름이 `aaa`인 폴더를 찾되, 그 폴더의
-  **상위 폴더 이름에 `_fail`이 없을 때만** 그 폴더 직속 파일 중 이름에 `_test`가 포함된
-  파일을 생성된 테스트로 본다(대소문자 무시).
+- 테스트 파일(성공/실패): stem 폴더 직속 파일 중 이름에 `_test`가 포함된 파일(대소문자 무시).
 """
 
 from __future__ import annotations
 
-import os
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -46,52 +48,102 @@ def target_files(rels: list[str], exclude_globs: list[str]) -> list[str]:
     return result
 
 
-def scan_out_tests(out_root: Path) -> dict[str, list[str]]:
-    """out_root 하위를 walk하여 {폴더명: [테스트 파일 상대경로(out_root 기준 POSIX)]} 매핑.
+def _find_sibling(parent: Path, name_lower: str) -> Path | None:
+    """parent 직속에서 이름이 name_lower와 (대소문자 무시) 일치하는 디렉터리를 찾는다."""
+    if not parent.is_dir():
+        return None
+    for entry in parent.iterdir():
+        if entry.is_dir() and entry.name.lower() == name_lower:
+            return entry
+    return None
 
-    상위 폴더 이름에 `_fail`이 포함된 폴더는 건너뛴다. 각 폴더 직속 파일 중 이름에
-    `_test`가 포함된 파일만 수집한다(대소문자 무시).
+
+def _sibling_roots(out_root: Path) -> tuple[Path | None, Path | None]:
+    """out_root와 같은 depth의 `<name>_Fail`·`<name>_debug_log` 폴더를 (대소문자 무시) 찾는다.
+
+    반환: (fail_root, log_root). 없으면 각각 None.
+    """
+    parent = out_root.parent
+    base = out_root.name.lower()
+    return (
+        _find_sibling(parent, f"{base}_fail"),
+        _find_sibling(parent, f"{base}_debug_log"),
+    )
+
+
+def _scan_stem_dir(scan_root: Path | None, product_root: Path) -> dict[str, list[str]]:
+    """scan_root 직속 stem 폴더의 `_test` 파일을 {stem: [product_root 기준 POSIX 경로]}로 모은다.
+
+    각 stem 폴더 직속 파일 중 이름에 `_test`가 포함된 파일만 수집한다(대소문자 무시).
     """
     mapping: dict[str, list[str]] = {}
-    if not out_root.is_dir():
+    if scan_root is None or not scan_root.is_dir():
         return mapping
-    out_resolved = out_root.resolve()
-    for dirpath, _dirnames, filenames in os.walk(out_resolved):
-        current = Path(dirpath)
-        # 상위 폴더 이름에 _fail이 있으면 이 폴더(=aaa)의 테스트는 제외
-        if "_fail" in current.parent.name.lower():
+    product_resolved = product_root.resolve()
+    for stem_dir in sorted(scan_root.iterdir()):
+        if not stem_dir.is_dir():
             continue
-        folder_name = current.name
         tests = [
-            (current / fn).relative_to(out_resolved).as_posix()
-            for fn in sorted(filenames)
-            if "_test" in fn.lower()
+            f.resolve().relative_to(product_resolved).as_posix()
+            for f in sorted(stem_dir.iterdir())
+            if f.is_file() and "_test" in f.name.lower()
         ]
         if tests:
-            mapping.setdefault(folder_name, []).extend(tests)
+            mapping.setdefault(stem_dir.name, []).extend(tests)
     return mapping
+
+
+def _log_path_for(
+    log_root: Path | None, product_root: Path, stem: str, test_filename: str
+) -> str | None:
+    """테스트 파일에 대응하는 로그 파일 경로(product_root 기준). 없으면 None.
+
+    `log_root/<stem>/<test 확장자 제거>.log`. 예: aaa_Test_0.cpp → aaa_Test_0.log.
+    """
+    if log_root is None:
+        return None
+    candidate = log_root / stem / (Path(test_filename).stem + ".log")
+    if candidate.is_file():
+        return candidate.resolve().relative_to(product_root.resolve()).as_posix()
+    return None
+
+
+def _test_file_entry(
+    rel_path: str, log_root: Path | None, product_root: Path, stem: str
+) -> dict:
+    """테스트 파일 1건 dict({name, path, log_path})를 만든다."""
+    name = Path(rel_path).name
+    return {
+        "name": name,
+        "path": rel_path,
+        "log_path": _log_path_for(log_root, product_root, stem, name),
+    }
 
 
 def build_status(root: Path, product: Product) -> list[dict]:
     """프로덕트 체크아웃(root)을 스캔해 대상 파일별 테스트 현황을 만든다.
 
-    반환: [{"name", "path", "test_count", "test_files": [{"name","path"}]}] (path 오름차순).
+    반환: [{"name","path","test_count","test_files","fail_count","failed_test_files"}]
+    (path 오름차순). 각 test_files 항목은 {"name","path","log_path"}.
     """
     rels = compile_db_service.list_files(root, product.compile_db_rel)
     targets = target_files(rels, list(product.exclude_globs or []))
 
     out_rel = (product.out_tests_rel or "").replace("\\", "/").strip("/")
-    out_root = (root / out_rel) if out_rel else root
-    tests_by_folder = scan_out_tests(out_root)
-    # out_root 기준 상대경로를 프로덕트 root 기준으로 환산하기 위한 접두사
-    prefix = f"{out_rel}/" if out_rel else ""
+    out_root = (root / out_rel).resolve() if out_rel else root.resolve()
+    fail_root, log_root = _sibling_roots(out_root) if out_rel else (None, None)
+
+    success = _scan_stem_dir(out_root, root)
+    failed = _scan_stem_dir(fail_root, root)
 
     status: list[dict] = []
     for rel in targets:
         stem = Path(rel).name.rsplit(".", 1)[0]
-        test_rels = tests_by_folder.get(stem, [])
         test_files = [
-            {"name": Path(t).name, "path": f"{prefix}{t}"} for t in test_rels
+            _test_file_entry(p, log_root, root, stem) for p in success.get(stem, [])
+        ]
+        failed_test_files = [
+            _test_file_entry(p, log_root, root, stem) for p in failed.get(stem, [])
         ]
         status.append(
             {
@@ -99,9 +151,34 @@ def build_status(root: Path, product: Product) -> list[dict]:
                 "path": rel,
                 "test_count": len(test_files),
                 "test_files": test_files,
+                "fail_count": len(failed_test_files),
+                "failed_test_files": failed_test_files,
             }
         )
     return status
+
+
+def _merge_test_file(bucket: dict, tf: dict, code: str) -> None:
+    """tf_path 키로 테스트 파일을 병합한다(product_codes 합집합, log_path 첫 비-None 채택)."""
+    entry = bucket.setdefault(
+        tf["path"], {"name": tf["name"], "codes": set(), "log_path": None}
+    )
+    entry["codes"].add(code)
+    if entry["log_path"] is None and tf.get("log_path"):
+        entry["log_path"] = tf["log_path"]
+
+
+def _emit_test_files(bucket: dict) -> list[dict]:
+    """병합 버킷을 path 오름차순 [{name,path,product_codes,log_path}] 리스트로 만든다."""
+    return [
+        {
+            "name": bucket[path]["name"],
+            "path": path,
+            "product_codes": sorted(bucket[path]["codes"]),
+            "log_path": bucket[path]["log_path"],
+        }
+        for path in sorted(bucket)
+    ]
 
 
 def merge_status(pairs: list[tuple[str, list[dict]]]) -> list[dict]:
@@ -109,34 +186,27 @@ def merge_status(pairs: list[tuple[str, list[dict]]]) -> list[dict]:
 
     입력은 `(product_code, build_status결과)` 쌍 목록. 같은 path의 대상 파일/테스트 파일은
     한 번만 세고(중복 제거), 각 파일에 그것이 등장한 `product_codes`(프로덕트 id)를 붙인다.
-    반환: [{"name","path","product_codes","test_count","test_files":[{"name","path","product_codes"}]}]
-    (대상 파일 path 오름차순, 각 test_files도 path 오름차순).
+    성공(test_files)·실패(failed_test_files)를 각각 병합한다.
     """
-    # path -> {name, codes:set, tf: {tf_path: {name, codes:set}}}
+    # path -> {name, codes:set, tf: {...}, ftf: {...}}
     targets: dict[str, dict] = {}
     for code, status in pairs:
         for item in status:
             entry = targets.setdefault(
-                item["path"], {"name": item["name"], "codes": set(), "tf": {}}
+                item["path"],
+                {"name": item["name"], "codes": set(), "tf": {}, "ftf": {}},
             )
             entry["codes"].add(code)
             for tf in item["test_files"]:
-                tf_entry = entry["tf"].setdefault(
-                    tf["path"], {"name": tf["name"], "codes": set()}
-                )
-                tf_entry["codes"].add(code)
+                _merge_test_file(entry["tf"], tf, code)
+            for tf in item.get("failed_test_files", []):
+                _merge_test_file(entry["ftf"], tf, code)
 
     result: list[dict] = []
     for path in sorted(targets):
         entry = targets[path]
-        test_files = [
-            {
-                "name": entry["tf"][tf_path]["name"],
-                "path": tf_path,
-                "product_codes": sorted(entry["tf"][tf_path]["codes"]),
-            }
-            for tf_path in sorted(entry["tf"])
-        ]
+        test_files = _emit_test_files(entry["tf"])
+        failed_test_files = _emit_test_files(entry["ftf"])
         result.append(
             {
                 "name": entry["name"],
@@ -144,6 +214,8 @@ def merge_status(pairs: list[tuple[str, list[dict]]]) -> list[dict]:
                 "product_codes": sorted(entry["codes"]),
                 "test_count": len(test_files),
                 "test_files": test_files,
+                "fail_count": len(failed_test_files),
+                "failed_test_files": failed_test_files,
             }
         )
     return result

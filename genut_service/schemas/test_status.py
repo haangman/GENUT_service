@@ -11,16 +11,22 @@ class TestFileInfo(BaseModel):
     name: str
     path: str
     product_codes: list[str]
+    log_path: str | None = None
 
 
 class TargetFileStatus(BaseModel):
-    """테스트 생성 대상 파일 1건과 그에 매칭된 테스트 파일들(동명 변이 합산)."""
+    """테스트 생성 대상 파일 1건과 그에 매칭된 테스트 파일들(동명 변이 합산).
+
+    test_files는 생성 성공, failed_test_files는 생성했으나 최종 실패한 테스트 파일이다.
+    """
 
     name: str
     path: str
     product_codes: list[str]
     test_count: int
     test_files: list[TestFileInfo]
+    fail_count: int
+    failed_test_files: list[TestFileInfo]
 
 
 class NameTestSummary(BaseModel):
@@ -31,3 +37,11 @@ class NameTestSummary(BaseModel):
     test_generation_mode: str
     target_file_count: int
     total_test_count: int
+    total_fail_count: int
+
+
+class FileContent(BaseModel):
+    """테스트 코드/로그 파일 1건의 내용(뷰어용). path는 프로덕트 root 기준 상대경로."""
+
+    path: str
+    content: str
