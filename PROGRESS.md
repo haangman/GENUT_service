@@ -142,7 +142,7 @@ migrations/              # Alembic (env.py + versions/)
 
 - Products: `POST/GET/PUT/DELETE /products(/{id})` (+patches, +`code_path`: 코드 영속 경로 선택·절대/상대, +`exclude_globs`)
 - Files: `GET /products/{id}/tree?path=`, `POST /products/{id}/compile-check {files}` → `{included,excluded}`
-- Test status: `GET /products/{id}/test-status` → 대상 파일별 `{name,path,test_count,test_files[]}`. compile_commands.json의 파일에서 build/test 폴더·프로덕트 `exclude_globs`(path fnmatch)를 제외해 **테스트 대상**을 모으고, `out_tests_rel` 하위에서 대상 stem과 같은 이름의 폴더(상위가 `_Fail`이 아닌)의 `_Test` 파일을 매칭(실시간 스캔, DB 저장 없음). **요약** `GET /test-status` → 전 프로덕트의 `{product_id,name,...,target_file_count,total_test_count}`(각 프로덕트 스캔, 한 건 실패는 0으로 격리).
+- Test status(**동명 프로덕트는 이름 1개로 합산** — path 기준 합집합, 중복 제거): compile_commands.json의 파일에서 build/test 폴더·프로덕트 `exclude_globs`(path fnmatch)를 제외해 **테스트 대상**을 모으고, `out_tests_rel` 하위에서 대상 stem과 같은 이름의 폴더(상위가 `_Fail`이 아닌)의 `_Test` 파일을 매칭(실시간 스캔, DB 저장 없음). **요약** `GET /test-status` → 이름별 `{name,product_codes[],test_generation_mode,target_file_count,total_test_count}`. **상세** `GET /test-status/detail?name=<name>` → 합산된 `{name,path,product_codes[],test_count,test_files:[{name,path,product_codes[]}]}`(각 파일·테스트 파일에 **출처 프로덕트 id**). 미존재 이름 404. 프로덕트 스캔 실패는 빈 결과로 격리.
 - Jobs: `POST /jobs {product_id,files,function_name?}`, `GET /jobs?status=&product_id=&page=`, `GET /jobs/{id}`, **`POST /jobs/{id}/cancel`**(실행 중 job 강제 종료; RUNNING 아니면 409·없으면 404, 즉시 RUNNING 반환·워커가 CANCELED 확정), **`POST /jobs/{id}/rerun`**(동일 입력으로 새 queued job 생성·201; terminal(done/failed/canceled) 아니면 409·원본/프로덕트 없으면 404; file_list·excluded_files·function_name을 그대로 복사, genut/timestamps는 미복사해 스케줄러가 재배정), `GET /jobs/{id}/logs?since=`(증분 이벤트), `GET /jobs/{id}/log/download`(전체 진행 로그 파일; 실행 중엔 그 시점까지·`.env` 키 마스킹·파일 없으면 DB 이벤트로 재구성)
 - GENUTs: `POST/GET/PUT/DELETE /genuts(/{id})` (credential 키 write-only·응답 제외, +`ds_assist_user_id`·`assure_repo_url`·`code_path` 선택)
 - Monitoring: `GET /workers`, `GET /queue`(각 항목 `waiting_on_product`)
@@ -156,7 +156,7 @@ migrations/              # Alembic (env.py + versions/)
 2. **프로덕트**: 목록 + 등록 폼(patch field-array) + **수정**(PUT, 기존값 프리필) + 삭제.
 3. **GENUT**: 목록 + 등록 폼(키 write-only) + **수정**(키 비우면 기존 유지) + 삭제.
 4. **모니터링**: 워커 그리드 · 요청 큐(대기 사유 배지) · job 이력(**제출 시각·시작 시간·종료 시간·총 수행 시간** 컬럼 — `submitted_at`/`started_at`/`finished_at` 기준, 총 수행 시간은 종료 전이면 경과를 **1초마다 실시간 갱신**+`(진행 중)`; **결과 컬럼은 짧은 요약/간단 설명만** — 긴 에러 원문 대신 상태 기반 문구, 원문은 로그 뷰어/다운로드에서). Job 이력 테이블은 **`table-fixed`+고정 폭 colgroup**(min-width)이라 컬럼이 안 밀리고, 좁은 화면에선 래퍼(`overflow-x-auto`)가 전체 좌우 스크롤을 준다. 작업 클릭 시 **실시간 로그 뷰어**(`?since=` 커서로 증분 누적, 종료 시 폴링 중단, 자동 스크롤; **로그 패널은 줄바꿈 없이 박스 안에서 상하·좌우 스크롤** — `whitespace-pre`+`overflow-auto`+`max-h`, table-fixed라 긴 로그가 데이터 컬럼을 밀지 않음) + **로그 파일 다운로드** + **`재수행`**(완료 job만; 동일 입력으로 새 job을 큐에 추가) 버튼. 실행 중 job 행에는 **`강제 종료` 버튼**(클릭 즉시 `종료 중…`으로 낙관적 표시 후 cancel POST, 이력 2s 폴링으로 canceled 반영).
-5. **테스트 현황**: 3단계 로컬-스테이트 드릴다운(라우트 파라미터 없이). L1 프로덕트 표(이름·ID·모드·**대상 파일 수·총 테스트 수**, `GET /test-status` 요약) → 행 클릭 → L2 그 프로덕트의 **합계 배지(대상 파일 N·총 테스트 M)** + 대상 파일 표(파일명·path·테스트 개수, `GET /products/{id}/test-status`) → 행 클릭 → L3 그 파일의 **테스트 파일 목록**(이름·path). 상단 브레드크럼으로 복귀. 프로덕트 등록 폼엔 **제외 패턴 textarea**(한 줄 1개 글롭, 제출 시 `exclude_globs[]`로 변환).
+5. **테스트 현황**: 3단계 로컬-스테이트 드릴다운(**이름 기준**, 라우트 파라미터 없이). 동명 프로덕트(A-1·A-2)는 **이름 1개로 합산**해 보여준다. L1 표(이름·등록 ID(`product_codes` 결합)·모드·**대상 파일 수·총 테스트 수**, `GET /test-status` 요약) → 행 클릭 → L2 **합계 배지** + 대상 파일 표(파일명·path·**프로덕트 ID**·테스트 개수, `GET /test-status/detail?name=`) → 행 클릭 → L3 테스트 파일 목록(이름·path·**프로덕트 ID**). 각 파일에 어느 프로덕트(id)에서 왔는지 표시. 상단 브레드크럼으로 복귀. 프로덕트 등록 폼엔 **제외 패턴 textarea**(한 줄 1개 글롭, 제출 시 `exclude_globs[]`로 변환).
 
 > 매칭/제외 규칙은 백엔드 `services/test_status_service.py`(§8 Test status 참조). 페이지는 `features/test-status/TestStatusPage.tsx`(MonitoringPage의 로컬-스테이트 드릴다운 패턴 재사용).
 
@@ -173,7 +173,7 @@ migrations/              # Alembic (env.py + versions/)
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
 - **테스트 현황 검증(신규)**: 백엔드 — `target_files` 제외(build/test 세그먼트·`*glob*`) · `scan_out_tests`(부모 `_Fail` 스킵·`_test`만·여러 폴더 합산) · `build_status`+API(대상/개수/테스트파일, 404) · `exclude_globs` 적용. 프론트 — 현황 3단계 드릴다운(프로덕트→대상 파일→테스트 파일).
 - **datetime 직렬화(신규)**: API의 datetime 필드는 `schemas/common.py`의 `UtcDatetime`로 **tz 인식 ISO(`+00:00`)** 로 내보낸다(naive면 UTC로 간주). 표식이 없으면 클라가 로컬로 오해해 실행 중 job의 "총 수행 시간"이 타임존 오프셋만큼 부풀려지던 버그를 차단. JobRead/JobEventRead/QueueItem에 적용.
-- 현재 **백엔드 118 passed, 1 deselected(docker)** **· 프론트 43 passed**(테스트 현황 드릴다운 + 프로덕트별 대상 파일 수·총 테스트 수 집계). (재실측 2026-06-26)
+- 현재 **백엔드 121 passed, 1 deselected(docker)** **· 프론트 43 passed**(테스트 현황: 동명 합산(경로 합집합)·파일별 출처 프로덕트 id 표시). (재실측 2026-06-28)
 
 ---
 
