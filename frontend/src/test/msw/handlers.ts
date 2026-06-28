@@ -16,4 +16,5 @@ export const handlers = [
   http.get('/api/queue', () => HttpResponse.json([])),
   http.get('/api/test-status', () => HttpResponse.json([])),
   http.get('/api/test-status/detail', () => HttpResponse.json([])),
+  http.get('/api/test-status/file', () => HttpResponse.json({ path: '', content: '' })),
 ]
