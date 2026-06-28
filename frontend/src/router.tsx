@@ -5,6 +5,7 @@ import { ProductsPage } from './features/products/ProductsPage'
 import { GenutsPage } from './features/genuts/GenutsPage'
 import { MonitoringPage } from './features/workers/MonitoringPage'
 import { TestStatusPage } from './features/test-status/TestStatusPage'
+import { TestFileViewPage } from './features/test-status/TestFileViewPage'
 
 export const routes = [
   {
@@ -17,6 +18,7 @@ export const routes = [
       { path: 'genuts', element: <GenutsPage /> },
       { path: 'monitoring', element: <MonitoringPage /> },
       { path: 'test-status', element: <TestStatusPage /> },
+      { path: 'test-status/view', element: <TestFileViewPage /> },
     ],
   },
 ]
