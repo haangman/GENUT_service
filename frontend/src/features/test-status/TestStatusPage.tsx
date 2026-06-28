@@ -129,7 +129,6 @@ export function TestStatusPage() {
                     <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
-                      <th className="px-4 py-3">프로덕트 ID</th>
                       <th className="px-4 py-3 text-right">테스트 개수</th>
                     </tr>
                   </thead>
@@ -142,9 +141,6 @@ export function TestStatusPage() {
                       >
                         <td className="px-4 py-3 font-medium text-fg">{f.name}</td>
                         <td className="px-4 py-3 font-mono text-xs text-muted">{f.path}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted">
-                          {f.product_codes.join(', ')}
-                        </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`badge ${f.test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                             {f.test_count}
@@ -171,7 +167,6 @@ export function TestStatusPage() {
               <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                 <th className="px-4 py-3">테스트 파일명</th>
                 <th className="px-4 py-3">path</th>
-                <th className="px-4 py-3">프로덕트 ID</th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +174,6 @@ export function TestStatusPage() {
                 <tr key={t.path} className="border-t border-border">
                   <td className="px-4 py-3 font-medium text-fg">{t.name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted">{t.product_codes.join(', ')}</td>
                 </tr>
               ))}
             </tbody>

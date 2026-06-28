@@ -45,16 +45,14 @@ describe('TestStatusPage', () => {
     expect(await screen.findByText('AA')).toBeInTheDocument()
     expect(screen.getByText('AA-1, AA-2')).toBeInTheDocument()
 
-    // L2: 이름 클릭 → 대상 파일 + 프로덕트 ID(AA-1, AA-2) + 합계
+    // L2: 이름 클릭 → 대상 파일 + 합계 (프로덕트 ID 컬럼은 제거됨)
     await userEvent.click(screen.getByText('AA'))
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
     expect(screen.getByText('총 테스트 2')).toBeInTheDocument()
-    expect(screen.getByText('AA-1, AA-2')).toBeInTheDocument()
 
-    // L3: 파일 클릭 → 테스트 파일별 출처(AA-1 / AA-2)
+    // L3: 파일 클릭 → 테스트 파일 목록
     await userEvent.click(screen.getByText('calc.c'))
     expect(await screen.findByText('calc_Test_0.cpp')).toBeInTheDocument()
-    expect(screen.getByText('AA-1')).toBeInTheDocument()
-    expect(screen.getByText('AA-2')).toBeInTheDocument()
+    expect(screen.getByText('calc_Test_1.cpp')).toBeInTheDocument()
   })
 })
