@@ -1,25 +1,24 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
-import { getTestStatus, getTestStatusSummary } from '../../api/testStatus'
+import { getTestStatusByName, getTestStatusSummary } from '../../api/testStatus'
 
-// 3단계 드릴다운: 프로덕트 목록(대상 파일 수·총 테스트 수) → 프로덕트 상세(대상 파일·테스트 수)
-// → 파일 상세(테스트 파일 목록).
+// 3단계 드릴다운(이름 기준): 프로덕트(이름) 목록 → 이름 상세(대상 파일·테스트 수)
+// → 파일 상세(테스트 파일 목록). 동명 변이는 합집합으로 합산하고, 파일마다 출처(프로덕트 id)를 보여준다.
 export function TestStatusPage() {
-  const [productId, setProductId] = useState<number | null>(null)
+  const [selectedName, setSelectedName] = useState<string | null>(null)
   const [filePath, setFilePath] = useState<string | null>(null)
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ['test-status-summary'],
     queryFn: getTestStatusSummary,
   })
-  const products = summary ?? []
-  const product = products.find((p) => p.product_id === productId) ?? null
+  const names = summary ?? []
 
   const { data: status, isLoading, isError } = useQuery({
-    queryKey: ['test-status', productId],
-    queryFn: () => getTestStatus(productId as number),
-    enabled: productId != null,
+    queryKey: ['test-status', selectedName],
+    queryFn: () => getTestStatusByName(selectedName as string),
+    enabled: selectedName != null,
   })
   const files = status ?? []
   const file = files.find((f) => f.path === filePath) ?? null
@@ -29,15 +28,15 @@ export function TestStatusPage() {
     <div>
       <PageHeader
         title="테스트 현황"
-        description="프로덕트별 테스트 생성 대상 파일과 생성된 테스트 현황을 본다."
+        description="프로덕트별 테스트 생성 대상 파일과 생성된 테스트 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다."
       />
 
-      {productId != null ? (
+      {selectedName != null ? (
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-muted">
           <button
             className="link"
             onClick={() => {
-              setProductId(null)
+              setSelectedName(null)
               setFilePath(null)
             }}
           >
@@ -47,19 +46,19 @@ export function TestStatusPage() {
           {file ? (
             <>
               <button className="link" onClick={() => setFilePath(null)}>
-                {product?.name ?? `#${productId}`}
+                {selectedName}
               </button>
               <span>/</span>
               <span className="font-medium text-fg">{file.name}</span>
             </>
           ) : (
-            <span className="font-medium text-fg">{product?.name ?? `#${productId}`}</span>
+            <span className="font-medium text-fg">{selectedName}</span>
           )}
         </nav>
       ) : null}
 
-      {/* L1: 프로덕트 목록 + 집계 */}
-      {productId == null ? (
+      {/* L1: 이름별 목록 + 집계 */}
+      {selectedName == null ? (
         <>
           {summaryLoading ? <p className="mb-3 text-sm text-muted">스캔 중…</p> : null}
           <div className="card overflow-hidden">
@@ -67,46 +66,48 @@ export function TestStatusPage() {
               <thead>
                 <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                   <th className="px-4 py-3">이름</th>
-                  <th className="px-4 py-3">프로덕트 ID</th>
+                  <th className="px-4 py-3">등록 ID</th>
                   <th className="px-4 py-3">모드</th>
                   <th className="px-4 py-3 text-right">대상 파일 수</th>
                   <th className="px-4 py-3 text-right">총 테스트 수</th>
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => (
+                {names.map((g) => (
                   <tr
-                    key={p.product_id}
+                    key={g.name}
                     className="cursor-pointer border-t border-border transition hover:bg-surface-hover"
                     onClick={() => {
-                      setProductId(p.product_id)
+                      setSelectedName(g.name)
                       setFilePath(null)
                     }}
                   >
-                    <td className="px-4 py-3 font-medium text-fg">{p.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{p.product_code}</td>
-                    <td className="px-4 py-3">
-                      <span className="badge badge-neutral">{p.test_generation_mode}</span>
+                    <td className="px-4 py-3 font-medium text-fg">{g.name}</td>
+                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-muted">
+                      {g.product_codes.join(', ')}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-fg">{p.target_file_count}</td>
+                    <td className="px-4 py-3">
+                      <span className="badge badge-neutral">{g.test_generation_mode}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-fg">{g.target_file_count}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`badge ${p.total_test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
-                        {p.total_test_count}
+                      <span className={`badge ${g.total_test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                        {g.total_test_count}
                       </span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!summaryLoading && products.length === 0 ? (
+            {!summaryLoading && names.length === 0 ? (
               <p className="px-4 py-6 text-sm text-subtle">등록된 프로덕트가 없습니다.</p>
             ) : null}
           </div>
         </>
       ) : null}
 
-      {/* L2: 대상 파일 목록 + 합계 */}
-      {productId != null && file == null ? (
+      {/* L2: 대상 파일 목록 + 합계 + 출처 */}
+      {selectedName != null && file == null ? (
         <>
           {isLoading ? <p className="text-sm text-muted">스캔 중…</p> : null}
           {isError ? (
@@ -128,6 +129,7 @@ export function TestStatusPage() {
                     <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
+                      <th className="px-4 py-3">프로덕트 ID</th>
                       <th className="px-4 py-3 text-right">테스트 개수</th>
                     </tr>
                   </thead>
@@ -140,6 +142,9 @@ export function TestStatusPage() {
                       >
                         <td className="px-4 py-3 font-medium text-fg">{f.name}</td>
                         <td className="px-4 py-3 font-mono text-xs text-muted">{f.path}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted">
+                          {f.product_codes.join(', ')}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`badge ${f.test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                             {f.test_count}
@@ -158,7 +163,7 @@ export function TestStatusPage() {
         </>
       ) : null}
 
-      {/* L3: 파일별 테스트 파일 목록 */}
+      {/* L3: 파일별 테스트 파일 목록 + 출처 */}
       {file != null ? (
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
@@ -166,6 +171,7 @@ export function TestStatusPage() {
               <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                 <th className="px-4 py-3">테스트 파일명</th>
                 <th className="px-4 py-3">path</th>
+                <th className="px-4 py-3">프로덕트 ID</th>
               </tr>
             </thead>
             <tbody>
@@ -173,6 +179,7 @@ export function TestStatusPage() {
                 <tr key={t.path} className="border-t border-border">
                   <td className="px-4 py-3 font-medium text-fg">{t.name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted">{t.product_codes.join(', ')}</td>
                 </tr>
               ))}
             </tbody>

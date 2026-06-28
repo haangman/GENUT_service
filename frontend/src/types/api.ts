@@ -150,21 +150,21 @@ export interface ProductCreate {
 export interface TestFileInfo {
   name: string
   path: string
+  product_codes: string[]
 }
 
 export interface TargetFileStatus {
   name: string
   path: string
+  product_codes: string[]
   test_count: number
   test_files: TestFileInfo[]
 }
 
-export interface ProductTestSummary {
-  product_id: number
+export interface NameTestSummary {
   name: string
-  product_code: string
+  product_codes: string[]
   test_generation_mode: TestGenerationMode
-  code_path: string | null
   target_file_count: number
   total_test_count: number
 }
