@@ -144,7 +144,7 @@ export function TestStatusPage() {
                   <th className="px-4 py-3">모드</th>
                   <th className="px-4 py-3 text-right">대상 파일 수</th>
                   <th className="px-4 py-3 text-right">총 테스트파일 수</th>
-                  <th className="px-4 py-3 text-right">실패 테스트 수</th>
+                  <th className="px-4 py-3 text-right">실패 수</th>
                 </tr>
               </thead>
               <tbody>
@@ -213,7 +213,7 @@ export function TestStatusPage() {
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
                       <th className="px-4 py-3 text-right">테스트 파일 수</th>
-                      <th className="px-4 py-3 text-right">실패 테스트 수</th>
+                      <th className="px-4 py-3 text-right">실패 수</th>
                     </tr>
                   </thead>
                   <tbody>
