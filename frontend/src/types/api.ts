@@ -152,6 +152,7 @@ export interface TestFileInfo {
   path: string
   product_codes: string[]
   log_path: string | null
+  case_count: number | null
 }
 
 export interface TargetFileStatus {
@@ -160,6 +161,7 @@ export interface TargetFileStatus {
   product_codes: string[]
   test_count: number
   test_files: TestFileInfo[]
+  case_count: number
   fail_count: number
   failed_test_files: TestFileInfo[]
 }
@@ -170,6 +172,7 @@ export interface NameTestSummary {
   test_generation_mode: TestGenerationMode
   target_file_count: number
   total_test_count: number
+  total_case_count: number
   total_fail_count: number
 }
 

@@ -44,6 +44,7 @@ function TestFileTable({
           >
             <th className="px-4 py-3">테스트 파일명</th>
             <th className="px-4 py-3">path</th>
+            {!failed ? <th className="px-4 py-3 text-right">테스트 수</th> : null}
             <th className="px-4 py-3 text-right">보기</th>
           </tr>
         </thead>
@@ -52,6 +53,11 @@ function TestFileTable({
             <tr key={t.path} className="border-t border-border">
               <td className={`px-4 py-3 font-medium ${failed ? 'text-danger-fg' : 'text-fg'}`}>{t.name}</td>
               <td className="break-all px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
+              {!failed ? (
+                <td className="px-4 py-3 text-right">
+                  <span className="badge badge-neutral">{t.case_count ?? 0}</span>
+                </td>
+              ) : null}
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-2">
                   <Link className="btn btn-sm btn-ghost" to={viewHref(t, 'code')}>
@@ -102,6 +108,7 @@ export function TestStatusPage() {
   const files = status ?? []
   const file = files.find((f) => f.path === filePath) ?? null
   const totalTests = files.reduce((sum, f) => sum + f.test_count, 0)
+  const totalCases = files.reduce((sum, f) => sum + f.case_count, 0)
   const totalFails = files.reduce((sum, f) => sum + f.fail_count, 0)
 
   return (
@@ -144,6 +151,7 @@ export function TestStatusPage() {
                   <th className="px-4 py-3">모드</th>
                   <th className="px-4 py-3 text-right">대상 파일 수</th>
                   <th className="px-4 py-3 text-right">총 테스트파일 수</th>
+                  <th className="px-4 py-3 text-right">총 테스트 수</th>
                   <th className="px-4 py-3 text-right">실패 수</th>
                 </tr>
               </thead>
@@ -168,6 +176,11 @@ export function TestStatusPage() {
                     <td className="px-4 py-3 text-right">
                       <span className={`badge ${g.total_test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                         {g.total_test_count}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`badge ${g.total_case_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                        {g.total_case_count}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -202,6 +215,9 @@ export function TestStatusPage() {
                 <span className={`badge ${totalTests > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                   총 테스트파일 {totalTests}
                 </span>
+                <span className={`badge ${totalCases > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                  총 테스트 {totalCases}
+                </span>
                 <span className={`badge ${totalFails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
                   총 실패 {totalFails}
                 </span>
@@ -213,6 +229,7 @@ export function TestStatusPage() {
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
                       <th className="px-4 py-3 text-right">테스트 파일 수</th>
+                      <th className="px-4 py-3 text-right">테스트 수</th>
                       <th className="px-4 py-3 text-right">실패 수</th>
                     </tr>
                   </thead>
@@ -228,6 +245,11 @@ export function TestStatusPage() {
                         <td className="px-4 py-3 text-right">
                           <span className={`badge ${f.test_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
                             {f.test_count}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`badge ${f.case_count > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                            {f.case_count}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">

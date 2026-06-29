@@ -18,6 +18,7 @@ describe('TestStatusPage', () => {
             test_generation_mode: 'cpp',
             target_file_count: 1,
             total_test_count: 2,
+            total_case_count: 7,
             total_fail_count: 1,
           },
         ]),
@@ -37,14 +38,17 @@ describe('TestStatusPage', () => {
                 path: 'out/calc/calc_Test_0.cpp',
                 product_codes: ['AA-1'],
                 log_path: 'out_debug_log/calc/calc_Test_0.log',
+                case_count: 3,
               },
               {
                 name: 'calc_Test_1.cpp',
                 path: 'out/calc/calc_Test_1.cpp',
                 product_codes: ['AA-2'],
                 log_path: null,
+                case_count: 4,
               },
             ],
+            case_count: 7,
             fail_count: 1,
             failed_test_files: [
               {
@@ -52,6 +56,7 @@ describe('TestStatusPage', () => {
                 path: 'out_Fail/calc/calc_Test_2.cpp',
                 product_codes: ['AA-1'],
                 log_path: 'out_debug_log/calc/calc_Test_2.log',
+                case_count: null,
               },
             ],
           },
@@ -61,23 +66,28 @@ describe('TestStatusPage', () => {
 
     renderWithProviders(<TestStatusPage />)
 
-    // L1: 이름 1행 + 등록 ID(두 변이)
+    // L1: 이름 1행 + 등록 ID(두 변이) + 총 테스트(케이스) 수 컬럼
     expect(await screen.findByText('AA')).toBeInTheDocument()
     expect(screen.getByText('AA-1, AA-2')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 수')).toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument() // total_case_count
 
-    // L2: 이름 클릭 → 대상 파일 + 합계(총 테스트/총 실패)
+    // L2: 이름 클릭 → 대상 파일 + 합계(총 테스트파일/총 테스트(케이스)/총 실패)
     await userEvent.click(screen.getByText('AA'))
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
     expect(screen.getByText('총 테스트파일 2')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 7')).toBeInTheDocument()
     expect(screen.getByText('총 실패 1')).toBeInTheDocument()
 
-    // L3: 파일 클릭 → 성공/실패 분리 표
+    // L3: 파일 클릭 → 성공/실패 분리 표 + 성공 표의 파일별 테스트(케이스) 수
     await userEvent.click(screen.getByText('calc.c'))
     expect(await screen.findByText('생성 성공')).toBeInTheDocument()
     expect(screen.getByText('생성 실패')).toBeInTheDocument()
     expect(screen.getByText('calc_Test_0.cpp')).toBeInTheDocument()
     expect(screen.getByText('calc_Test_1.cpp')).toBeInTheDocument()
     expect(screen.getByText('calc_Test_2.cpp')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument() // calc_Test_0 케이스 수
+    expect(screen.getByText('4')).toBeInTheDocument() // calc_Test_1 케이스 수
 
     // 코드 링크는 모든 테스트 파일에(성공 2 + 실패 1 = 3개), 뷰어 라우트로 연결된다
     const codeLinks = screen.getAllByRole('link', { name: '코드' })
