@@ -6,7 +6,7 @@ const navItems = [
   { to: '/products', label: '프로덕트' },
   { to: '/genuts', label: 'GENUT' },
   { to: '/monitoring', label: '모니터링' },
-  { to: '/test-status', label: '테스트 현황' },
+  { to: '/test-status', label: '테스트 파일 현황' },
 ]
 
 function ThemeToggle() {

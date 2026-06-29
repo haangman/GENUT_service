@@ -107,7 +107,7 @@ export function TestStatusPage() {
   return (
     <div>
       <PageHeader
-        title="테스트 현황"
+        title="테스트 파일 현황"
         description="프로덕트별 테스트 생성 대상 파일과 생성된 테스트(성공/실패) 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다."
       />
 
@@ -143,7 +143,7 @@ export function TestStatusPage() {
                   <th className="px-4 py-3">등록 ID</th>
                   <th className="px-4 py-3">모드</th>
                   <th className="px-4 py-3 text-right">대상 파일 수</th>
-                  <th className="px-4 py-3 text-right">총 테스트 수</th>
+                  <th className="px-4 py-3 text-right">총 테스트파일 수</th>
                   <th className="px-4 py-3 text-right">실패 테스트 수</th>
                 </tr>
               </thead>
@@ -200,7 +200,7 @@ export function TestStatusPage() {
               <div className="mb-3 flex gap-2 text-sm">
                 <span className="badge badge-neutral">대상 파일 {files.length}</span>
                 <span className={`badge ${totalTests > 0 ? 'badge-primary' : 'badge-neutral'}`}>
-                  총 테스트 {totalTests}
+                  총 테스트파일 {totalTests}
                 </span>
                 <span className={`badge ${totalFails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
                   총 실패 {totalFails}
@@ -212,8 +212,8 @@ export function TestStatusPage() {
                     <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
-                      <th className="px-4 py-3 text-right">테스트 개수</th>
-                      <th className="px-4 py-3 text-right">실패 개수</th>
+                      <th className="px-4 py-3 text-right">테스트 파일 수</th>
+                      <th className="px-4 py-3 text-right">실패 테스트 수</th>
                     </tr>
                   </thead>
                   <tbody>

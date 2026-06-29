@@ -68,7 +68,7 @@ describe('TestStatusPage', () => {
     // L2: 이름 클릭 → 대상 파일 + 합계(총 테스트/총 실패)
     await userEvent.click(screen.getByText('AA'))
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
-    expect(screen.getByText('총 테스트 2')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트파일 2')).toBeInTheDocument()
     expect(screen.getByText('총 실패 1')).toBeInTheDocument()
 
     // L3: 파일 클릭 → 성공/실패 분리 표
