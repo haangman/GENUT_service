@@ -6,12 +6,16 @@ from pydantic import BaseModel
 
 
 class TestFileInfo(BaseModel):
-    """매칭된 테스트 파일 1건. product_codes는 이 파일이 속한 프로덕트 id들."""
+    """매칭된 테스트 파일 1건. product_codes는 이 파일이 속한 프로덕트 id들.
+
+    case_count는 파일 안의 테스트 케이스 수(성공 파일만; 실패 파일은 None).
+    """
 
     name: str
     path: str
     product_codes: list[str]
     log_path: str | None = None
+    case_count: int | None = None
 
 
 class TargetFileStatus(BaseModel):
@@ -25,6 +29,7 @@ class TargetFileStatus(BaseModel):
     product_codes: list[str]
     test_count: int
     test_files: list[TestFileInfo]
+    case_count: int
     fail_count: int
     failed_test_files: list[TestFileInfo]
 
@@ -37,6 +42,7 @@ class NameTestSummary(BaseModel):
     test_generation_mode: str
     target_file_count: int
     total_test_count: int
+    total_case_count: int
     total_fail_count: int
 
 

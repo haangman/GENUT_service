@@ -46,10 +46,13 @@ def _build_out_tests(root: Path) -> None:
     (root / "out_Fail" / "calc").mkdir(parents=True)
     (root / "out_debug_log" / "calc").mkdir(parents=True)
 
-    (root / "out" / "calc" / "calc_Test_0.cpp").write_text("//0", encoding="utf-8")
-    (root / "out" / "calc" / "calc_Test_1.cpp").write_text("//1", encoding="utf-8")
+    # 성공 파일에는 gtest 케이스 매크로를 담는다(calc_Test_0=2개, calc_Test_1=1개, util_Test_0=1개)
+    (root / "out" / "calc" / "calc_Test_0.cpp").write_text(
+        "TEST(calc, a) { EXPECT_EQ(1,1); }\nTEST_F(calcF, b) {}\n", encoding="utf-8"
+    )
+    (root / "out" / "calc" / "calc_Test_1.cpp").write_text("TEST(calc, c) {}\n", encoding="utf-8")
     (root / "out" / "calc" / "notes.txt").write_text("x", encoding="utf-8")
-    (root / "out" / "util" / "util_Test_0.cpp").write_text("//u", encoding="utf-8")
+    (root / "out" / "util" / "util_Test_0.cpp").write_text("TEST(util, u) {}\n", encoding="utf-8")
 
     (root / "out_Fail" / "calc" / "calc_Test_2.cpp").write_text("//2", encoding="utf-8")
     (root / "out_Fail" / "calc" / "extra.txt").write_text("x", encoding="utf-8")
@@ -116,6 +119,50 @@ def test_log_path_for_is_case_insensitive(tmp_path: Path) -> None:
     )
 
 
+# --- 단위: 테스트 케이스 카운트 ------------------------------------------
+
+
+def test_count_test_cases_gtest(tmp_path: Path) -> None:
+    f = tmp_path / "g_Test.cpp"
+    f.write_text(
+        "// TEST(in, comment)\n"
+        "TEST(Suite, a) { EXPECT_EQ(1, 1); }\n"
+        "TEST_F(Fix, b) {}\n"
+        "TEST_P(Param, c) {}\n"
+        "TYPED_TEST(Typed, d) {}\n"
+        "INSTANTIATE_TEST_SUITE_P(X, Param, Values(1));\n",  # TEST 미포함(부분일치 제외)
+        encoding="utf-8",
+    )
+    # 주석의 TEST까지 포함하는 휴리스틱: TEST + TEST_F + TEST_P + TYPED_TEST + 주석 TEST = 5
+    assert test_status_service._count_test_cases(f) == 5
+
+
+def test_count_test_cases_kunit(tmp_path: Path) -> None:
+    f = tmp_path / "k_test.c"
+    f.write_text(
+        "static struct kunit_case cases[] = {\n"
+        "  KUNIT_CASE(test_a),\n"
+        "  KUNIT_CASE(test_b),\n"
+        "  KUNIT_CASE_PARAM(test_c, gen),\n"
+        "  {}\n};\n",
+        encoding="utf-8",
+    )
+    assert test_status_service._count_test_cases(f) == 3
+
+
+def test_count_test_cases_caches_by_mtime(tmp_path: Path) -> None:
+    f = tmp_path / "c_test.cpp"
+    f.write_text("TEST(a, b) {}\n", encoding="utf-8")
+    first = test_status_service._count_test_cases(f)
+    assert first == 1
+    # 같은 (경로,mtime,size) → 캐시 적중(동일 값)
+    assert test_status_service._count_test_cases(f) == 1
+
+
+def test_count_test_cases_missing_returns_none(tmp_path: Path) -> None:
+    assert test_status_service._count_test_cases(tmp_path / "nope.cpp") is None
+
+
 # --- 통합: build_status + API --------------------------------------------
 
 
@@ -176,9 +223,15 @@ def test_build_status_matches_success_failed_and_logs(tmp_path: Path) -> None:
     assert calc["fail_count"] == 1
     assert calc["failed_test_files"][0]["path"] == "out_Fail/calc/calc_Test_2.cpp"
     assert calc["failed_test_files"][0]["log_path"] == "out_debug_log/calc/calc_Test_2.log"
+    # 케이스 수: 성공 파일만(calc_Test_0=2, calc_Test_1=1) → 대상 합 3, 실패 파일은 None
+    cases = {t["name"]: t["case_count"] for t in calc["test_files"]}
+    assert cases == {"calc_Test_0.cpp": 2, "calc_Test_1.cpp": 1}
+    assert calc["case_count"] == 3
+    assert calc["failed_test_files"][0]["case_count"] is None
 
     util = next(r for r in rows if r["path"] == "src/util.c")
     assert util["test_count"] == 1 and util["fail_count"] == 0
+    assert util["case_count"] == 1
 
 
 def test_build_status_matches_log_case_insensitively(tmp_path: Path) -> None:
@@ -216,8 +269,14 @@ def test_merge_status_dedupes_and_tracks_codes() -> None:
             "path": "src/calc.c",
             "test_count": 1,
             "test_files": [
-                {"name": "calc_Test_0.cpp", "path": "out/calc/calc_Test_0.cpp", "log_path": "l.log"}
+                {
+                    "name": "calc_Test_0.cpp",
+                    "path": "out/calc/calc_Test_0.cpp",
+                    "log_path": "l.log",
+                    "case_count": 2,
+                }
             ],
+            "case_count": 2,
             "fail_count": 0,
             "failed_test_files": [],
         }
@@ -230,6 +289,8 @@ def test_merge_status_dedupes_and_tracks_codes() -> None:
     assert merged[0]["test_count"] == 1  # 2배 아님
     assert merged[0]["test_files"][0]["product_codes"] == ["A-1", "A-2"]
     assert merged[0]["test_files"][0]["log_path"] == "l.log"
+    assert merged[0]["test_files"][0]["case_count"] == 2
+    assert merged[0]["case_count"] == 2  # 케이스 합도 2배 아님
     assert merged[0]["fail_count"] == 0
 
 
@@ -281,6 +342,11 @@ def test_test_status_detail_by_name(
     assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]  # build/gen.c 제외
     calc = next(f for f in body if f["path"] == "src/calc.c")
     assert calc["test_count"] == 2
+    assert calc["case_count"] == 3  # calc_Test_0=2 + calc_Test_1=1
+    assert {t["name"]: t["case_count"] for t in calc["test_files"]} == {
+        "calc_Test_0.cpp": 2,
+        "calc_Test_1.cpp": 1,
+    }
     assert calc["fail_count"] == 1
     assert calc["failed_test_files"][0]["name"] == "calc_Test_2.cpp"
     assert calc["product_codes"] == ["P-1"]
@@ -335,7 +401,8 @@ def test_test_status_summary_groups_by_name(
     assert len(rows) == 1  # 이름 1행으로 합산
     row = rows[0]
     assert row["target_file_count"] == 2  # calc.c, util.c (2배 아님)
-    assert row["total_test_count"] == 3  # calc 2 + util 1
+    assert row["total_test_count"] == 3  # calc 2 + util 1 (테스트 파일 수)
+    assert row["total_case_count"] == 4  # calc 3(2+1) + util 1 (케이스 수)
     assert row["total_fail_count"] == 1  # calc 실패 1
     assert sorted(row["product_codes"]) == ["A-1", "A-2"]
 
@@ -355,7 +422,10 @@ def test_test_status_file_returns_code_and_log(
         params={"code": "P-1", "path": "out/calc/calc_Test_0.cpp"},
     )
     assert code.status_code == 200
-    assert code.json() == {"path": "out/calc/calc_Test_0.cpp", "content": "//0"}
+    assert code.json() == {
+        "path": "out/calc/calc_Test_0.cpp",
+        "content": "TEST(calc, a) { EXPECT_EQ(1,1); }\nTEST_F(calcF, b) {}\n",
+    }
 
     log = client.get(
         "/api/test-status/file",

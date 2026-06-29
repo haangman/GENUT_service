@@ -68,6 +68,7 @@ def get_test_status_summary(
                 test_generation_mode=group[0].test_generation_mode,
                 target_file_count=len(merged),
                 total_test_count=sum(row["test_count"] for row in merged),
+                total_case_count=sum(row["case_count"] for row in merged),
                 total_fail_count=sum(row["fail_count"] for row in merged),
             )
         )
