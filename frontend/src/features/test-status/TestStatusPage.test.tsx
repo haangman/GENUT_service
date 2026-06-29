@@ -69,14 +69,14 @@ describe('TestStatusPage', () => {
     // L1: 이름 1행 + 등록 ID(두 변이) + 총 테스트(케이스) 수 컬럼
     expect(await screen.findByText('AA')).toBeInTheDocument()
     expect(screen.getByText('AA-1, AA-2')).toBeInTheDocument()
-    expect(screen.getByText('총 테스트 수')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 케이스 수')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument() // total_case_count
 
     // L2: 이름 클릭 → 대상 파일 + 합계(총 테스트파일/총 테스트(케이스)/총 실패)
     await userEvent.click(screen.getByText('AA'))
     expect(await screen.findByText('calc.c')).toBeInTheDocument()
     expect(screen.getByText('총 테스트파일 2')).toBeInTheDocument()
-    expect(screen.getByText('총 테스트 7')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 케이스 7')).toBeInTheDocument()
     expect(screen.getByText('총 실패 1')).toBeInTheDocument()
 
     // L3: 파일 클릭 → 성공/실패 분리 표 + 성공 표의 파일별 테스트(케이스) 수

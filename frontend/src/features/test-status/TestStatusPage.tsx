@@ -44,7 +44,7 @@ function TestFileTable({
           >
             <th className="px-4 py-3">테스트 파일명</th>
             <th className="px-4 py-3">path</th>
-            {!failed ? <th className="px-4 py-3 text-right">테스트 수</th> : null}
+            {!failed ? <th className="px-4 py-3 text-right">테스트 케이스 수</th> : null}
             <th className="px-4 py-3 text-right">보기</th>
           </tr>
         </thead>
@@ -151,7 +151,7 @@ export function TestStatusPage() {
                   <th className="px-4 py-3">모드</th>
                   <th className="px-4 py-3 text-right">대상 파일 수</th>
                   <th className="px-4 py-3 text-right">총 테스트파일 수</th>
-                  <th className="px-4 py-3 text-right">총 테스트 수</th>
+                  <th className="px-4 py-3 text-right">총 테스트 케이스 수</th>
                   <th className="px-4 py-3 text-right">실패 수</th>
                 </tr>
               </thead>
@@ -216,7 +216,7 @@ export function TestStatusPage() {
                   총 테스트파일 {totalTests}
                 </span>
                 <span className={`badge ${totalCases > 0 ? 'badge-primary' : 'badge-neutral'}`}>
-                  총 테스트 {totalCases}
+                  총 테스트 케이스 {totalCases}
                 </span>
                 <span className={`badge ${totalFails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
                   총 실패 {totalFails}
@@ -229,7 +229,7 @@ export function TestStatusPage() {
                       <th className="px-4 py-3">파일명</th>
                       <th className="px-4 py-3">path</th>
                       <th className="px-4 py-3 text-right">테스트 파일 수</th>
-                      <th className="px-4 py-3 text-right">테스트 수</th>
+                      <th className="px-4 py-3 text-right">테스트 케이스 수</th>
                       <th className="px-4 py-3 text-right">실패 수</th>
                     </tr>
                   </thead>
