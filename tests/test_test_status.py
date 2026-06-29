@@ -94,15 +94,25 @@ def test_sibling_roots_missing_returns_none(tmp_path: Path) -> None:
 
 def test_log_path_for_resolves_existing_and_missing(tmp_path: Path) -> None:
     _build_out_tests(tmp_path)
-    log_root = tmp_path / "out_debug_log"
+    index = test_status_service._scan_log_index(tmp_path / "out_debug_log", tmp_path)
     assert (
-        test_status_service._log_path_for(log_root, tmp_path, "calc", "calc_Test_0.cpp")
+        test_status_service._log_path_for(index, "calc", "calc_Test_0.cpp")
         == "out_debug_log/calc/calc_Test_0.log"
     )
     # calc_Test_1.log은 없음 → None
     assert (
-        test_status_service._log_path_for(log_root, tmp_path, "calc", "calc_Test_1.cpp")
-        is None
+        test_status_service._log_path_for(index, "calc", "calc_Test_1.cpp") is None
+    )
+
+
+def test_log_path_for_is_case_insensitive(tmp_path: Path) -> None:
+    # 테스트 파일은 _Test, 로그 파일은 _test, stem 폴더도 대소문자 다름 → 그래도 매칭
+    (tmp_path / "out_debug_log" / "Aaa").mkdir(parents=True)
+    (tmp_path / "out_debug_log" / "Aaa" / "aaa_test.log").write_text("L", encoding="utf-8")
+    index = test_status_service._scan_log_index(tmp_path / "out_debug_log", tmp_path)
+    assert (
+        test_status_service._log_path_for(index, "aaa", "aaa_Test.cpp")
+        == "out_debug_log/Aaa/aaa_test.log"
     )
 
 
@@ -169,6 +179,31 @@ def test_build_status_matches_success_failed_and_logs(tmp_path: Path) -> None:
 
     util = next(r for r in rows if r["path"] == "src/util.c")
     assert util["test_count"] == 1 and util["fail_count"] == 0
+
+
+def test_build_status_matches_log_case_insensitively(tmp_path: Path) -> None:
+    # 테스트 파일(aaa_Test.cpp)과 로그(aaa_test.log)의 대소문자가 달라도 로그를 찾는다.
+    root = tmp_path / "checkout"
+    (root / "src").mkdir(parents=True)
+    (root / "build").mkdir(parents=True)
+    (root / "src" / "aaa.c").write_text("// code\n", encoding="utf-8")
+    compdb = [
+        {"directory": str(root / "build"), "command": "cc -c", "file": str(root / "src" / "aaa.c")}
+    ]
+    (root / "build" / "compile_commands.json").write_text(json.dumps(compdb), encoding="utf-8")
+    (root / "out" / "aaa").mkdir(parents=True)
+    (root / "out" / "aaa" / "aaa_Test.cpp").write_text("//", encoding="utf-8")  # _Test
+    (root / "out_debug_log" / "aaa").mkdir(parents=True)
+    (root / "out_debug_log" / "aaa" / "aaa_test.log").write_text("L", encoding="utf-8")  # _test
+
+    class _P:
+        compile_db_rel = "build"
+        out_tests_rel = "out"
+        exclude_globs: list[str] = []
+
+    rows = test_status_service.build_status(root, _P())
+    aaa = next(r for r in rows if r["path"] == "src/aaa.c")
+    assert aaa["test_files"][0]["log_path"] == "out_debug_log/aaa/aaa_test.log"
 
 
 # --- 단위: merge_status (합집합 + 출처 추적 + 실패 병합) ------------------

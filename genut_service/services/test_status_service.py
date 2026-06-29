@@ -106,30 +106,56 @@ def _scan_stem_dir(scan_root: Path | None, product_root: Path) -> dict[str, list
     return mapping
 
 
+def _scan_log_index(
+    log_root: Path | None, product_root: Path
+) -> dict[str, dict[str, str]]:
+    """로그 폴더를 {stem폴더명(소문자): {로그파일명(소문자): product_root 기준 경로}}로 색인한다.
+
+    폴더명·파일명 대소문자를 무시해 매칭하기 위함이다. 실제 프로젝트에서 테스트 파일과
+    로그 파일의 `_Test`/`_test` 대소문자가 다른 경우(예: aaa_Test.cpp ↔ aaa_test.log)에도
+    로그를 찾을 수 있다.
+    """
+    index: dict[str, dict[str, str]] = {}
+    if log_root is None or not log_root.is_dir():
+        return index
+    product_resolved = product_root.resolve()
+    for stem_dir in log_root.iterdir():
+        if not stem_dir.is_dir():
+            continue
+        files = {
+            f.name.lower(): f.resolve().relative_to(product_resolved).as_posix()
+            for f in stem_dir.iterdir()
+            if f.is_file()
+        }
+        if files:
+            index[stem_dir.name.lower()] = files
+    return index
+
+
 def _log_path_for(
-    log_root: Path | None, product_root: Path, stem: str, test_filename: str
+    log_index: dict[str, dict[str, str]], stem: str, test_filename: str
 ) -> str | None:
     """테스트 파일에 대응하는 로그 파일 경로(product_root 기준). 없으면 None.
 
-    `log_root/<stem>/<test 확장자 제거>.log`. 예: aaa_Test_0.cpp → aaa_Test_0.log.
+    로그 이름은 테스트 파일의 확장자를 `.log`로 바꾼 것이다(대소문자 무시).
+    예: aaa_Test.cpp → aaa_Test.log / aaa_test.log 모두 매칭한다.
     """
-    if log_root is None:
+    files = log_index.get(stem.lower())
+    if not files:
         return None
-    candidate = log_root / stem / (Path(test_filename).stem + ".log")
-    if candidate.is_file():
-        return candidate.resolve().relative_to(product_root.resolve()).as_posix()
-    return None
+    wanted = (Path(test_filename).stem + ".log").lower()
+    return files.get(wanted)
 
 
 def _test_file_entry(
-    rel_path: str, log_root: Path | None, product_root: Path, stem: str
+    rel_path: str, log_index: dict[str, dict[str, str]], stem: str
 ) -> dict:
     """테스트 파일 1건 dict({name, path, log_path})를 만든다."""
     name = Path(rel_path).name
     return {
         "name": name,
         "path": rel_path,
-        "log_path": _log_path_for(log_root, product_root, stem, name),
+        "log_path": _log_path_for(log_index, stem, name),
     }
 
 
@@ -148,15 +174,16 @@ def build_status(root: Path, product: Product) -> list[dict]:
 
     success = _scan_stem_dir(out_root, root)
     failed = _scan_stem_dir(fail_root, root)
+    log_index = _scan_log_index(log_root, root)
 
     status: list[dict] = []
     for rel in targets:
         stem = Path(rel).name.rsplit(".", 1)[0]
         test_files = [
-            _test_file_entry(p, log_root, root, stem) for p in success.get(stem, [])
+            _test_file_entry(p, log_index, stem) for p in success.get(stem, [])
         ]
         failed_test_files = [
-            _test_file_entry(p, log_root, root, stem) for p in failed.get(stem, [])
+            _test_file_entry(p, log_index, stem) for p in failed.get(stem, [])
         ]
         status.append(
             {
