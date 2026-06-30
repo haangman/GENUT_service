@@ -37,6 +37,10 @@ export interface Product {
   active: boolean
   code_path: string | null
   exclude_globs: string[]
+  auto_run: boolean
+  auto_interval_seconds: number | null
+  auto_file_list: string[]
+  cmake_template: string | null
   patches: Patch[]
 }
 
@@ -143,7 +147,20 @@ export interface ProductCreate {
   test_generation_mode: TestGenerationMode
   code_path?: string
   exclude_globs: string[]
+  auto_run?: boolean
+  auto_interval_seconds?: number | null
+  auto_file_list?: string[]
+  cmake_template?: string | null
   patches: PatchIn[]
+}
+
+export interface TargetFileItem {
+  path: string
+  excluded_by_pattern: boolean
+}
+
+export interface TargetFilesResponse {
+  files: TargetFileItem[]
 }
 
 // 테스트 현황: 대상 파일 1건과 그에 매칭된 테스트 파일들

@@ -6,6 +6,7 @@ export const handlers = [
   http.get('/api/products', () =>
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
   ),
+  http.post('/api/products/target-files', () => HttpResponse.json({ files: [] })),
   http.get('/api/genuts', () =>
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
   ),
