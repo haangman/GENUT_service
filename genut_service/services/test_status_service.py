@@ -69,6 +69,14 @@ def _excluded_by_default(rel_path: str) -> bool:
     return False
 
 
+def candidate_target_files(rels: list[str]) -> list[str]:
+    """기본 필터(build/test 세그먼트)만 적용한 대상 후보 목록. 사용자 글롭은 적용하지 않는다.
+
+    폼 단계 미리보기에서 "제외 전 전체 후보"를 보여주기 위해 사용한다(글롭/수동 제외는 표시만).
+    """
+    return [rel for rel in rels if not _excluded_by_default(rel)]
+
+
 def target_files(rels: list[str], exclude_globs: list[str]) -> list[str]:
     """테스트 생성 대상 파일 리스트. 기본 제외(build/test) + 사용자 글롭(path 기준)을 적용."""
     globs = [g for g in (exclude_globs or []) if g.strip()]

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 
@@ -111,3 +114,54 @@ def test_code_path_normalized_and_optional(client: TestClient) -> None:
 
 def test_code_path_rejects_parent(client: TestClient) -> None:
     assert client.post("/api/products", json=_payload("cp-bad", code_path="../etc")).status_code == 422
+
+
+# --- 자동 실행 모드: 대상 파일 미리보기 + auto 필드 -----------------------
+
+
+def _make_compile_db(root: Path, rels: list[str]) -> None:
+    (root / "build").mkdir(parents=True, exist_ok=True)
+    for rel in rels:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("//", encoding="utf-8")
+    compdb = [
+        {"directory": str(root / "build"), "command": "cc -c", "file": str(root / rel)}
+        for rel in rels
+    ]
+    (root / "build" / "compile_commands.json").write_text(json.dumps(compdb), encoding="utf-8")
+
+
+def test_preview_target_files_default_filter_and_pattern_flags(
+    client: TestClient, tmp_path: Path
+) -> None:
+    root = tmp_path / "code"
+    root.mkdir()
+    _make_compile_db(root, ["src/calc.c", "src/util.c", "build/gen.c", "tests/foo.c"])
+    resp = client.post(
+        "/api/products/target-files",
+        json={"code_path": str(root), "compile_db_rel": "build", "exclude_globs": ["*util*"]},
+    )
+    assert resp.status_code == 200, resp.text
+    by_path = {f["path"]: f["excluded_by_pattern"] for f in resp.json()["files"]}
+    # build/gen.c(build 폴더)·tests/foo.c(test 폴더)는 기본 필터로 제외, 나머지만 후보
+    assert set(by_path) == {"src/calc.c", "src/util.c"}
+    assert by_path["src/util.c"] is True  # *util* 패턴 매칭
+    assert by_path["src/calc.c"] is False
+
+
+def test_preview_target_files_empty_when_blank(client: TestClient) -> None:
+    resp = client.post(
+        "/api/products/target-files",
+        json={"code_path": "", "compile_db_rel": "", "exclude_globs": []},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["files"] == []
+
+
+def test_product_read_has_auto_defaults(client: TestClient) -> None:
+    created = client.post("/api/products", json=_payload("auto-defaults")).json()
+    assert created["auto_run"] is False
+    assert created["auto_interval_seconds"] is None
+    assert created["auto_file_list"] == []
+    assert created["cmake_template"] is None

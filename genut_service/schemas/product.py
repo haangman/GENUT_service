@@ -48,6 +48,12 @@ class ProductBase(BaseModel):
     code_path: str | None = None
     exclude_globs: list[str] = []
 
+    # 자동 실행(주기적 테스트 생성) 프로덕트 관련. 비자동은 모두 기본값.
+    auto_run: bool = False
+    auto_interval_seconds: int | None = None
+    auto_file_list: list[str] = []
+    cmake_template: str | None = None
+
     @field_validator("compile_db_rel", "out_tests_rel")
     @classmethod
     def _normalize_paths(cls, value: str) -> str:
@@ -107,3 +113,22 @@ class ProductRead(ProductBase):
 
     id: int
     patches: list[PatchRead] = []
+
+
+class TargetFilesRequest(BaseModel):
+    """폼 단계 대상 파일 미리보기 요청(아직 프로덕트 없음). code_path는 로컬 경로."""
+
+    code_path: str
+    compile_db_rel: str
+    exclude_globs: list[str] = []
+
+
+class TargetFileItem(BaseModel):
+    """미리보기 대상 파일 1건. excluded_by_pattern은 제외 글롭에 걸렸는지."""
+
+    path: str
+    excluded_by_pattern: bool
+
+
+class TargetFilesResponse(BaseModel):
+    files: list[TargetFileItem]

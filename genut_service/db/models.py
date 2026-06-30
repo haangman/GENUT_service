@@ -69,6 +69,15 @@ class Product(TimestampMixin, Base):
     # 테스트 대상 파일 수집 시 path 기준으로 제외할 글롭 패턴(예: "*test*"). 기본 빈 목록.
     exclude_globs: Mapped[list[str]] = mapped_column(JSON, default=list)
 
+    # 자동 실행(주기적 테스트 생성) 프로덕트 관련. 비자동 프로덕트는 모두 기본값.
+    auto_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 자동 수행 주기(초). None=비자동. (실제 주기 실행은 추후 스케줄러에서 구현)
+    auto_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 자동 생성 대상으로 확정된 파일 목록(프로덕트 루트 기준 상대경로). 향후 잡 file_list 근거.
+    auto_file_list: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # 파일별 하위 CMakeLists.txt 양식(placeholder `filename`을 파일 stem으로 치환). 비자동은 None.
+    cmake_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     patches: Mapped[list["Patch"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",

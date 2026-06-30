@@ -2,16 +2,52 @@
 
 from __future__ import annotations
 
+from fnmatch import fnmatch
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
 from genut_service.schemas.common import Page
-from genut_service.schemas.product import ProductCreate, ProductRead, ProductUpdate
-from genut_service.services import product_service
+from genut_service.schemas.product import (
+    ProductCreate,
+    ProductRead,
+    ProductUpdate,
+    TargetFileItem,
+    TargetFilesRequest,
+    TargetFilesResponse,
+)
+from genut_service.services import (
+    auto_product_service,
+    compile_db_service,
+    product_service,
+    test_status_service,
+)
+from genut_service.services.auto_product_service import AutoProductError
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+@router.post("/target-files", response_model=TargetFilesResponse)
+def preview_target_files(body: TargetFilesRequest) -> TargetFilesResponse:
+    """폼 단계용: 로컬 code_path의 compile_commands.json에서 기본 필터를 적용한 대상 파일 후보를
+    반환한다. 각 후보에 제외 글롭 매칭 여부(excluded_by_pattern)를 표시한다(목록은 제외 전 전체)."""
+    if not body.code_path.strip() or not body.compile_db_rel.strip():
+        return TargetFilesResponse(files=[])
+    root = workspace.resolve_code_path(body.code_path)
+    rels = compile_db_service.list_files(root, body.compile_db_rel)
+    candidates = test_status_service.candidate_target_files(rels)
+    globs = [g for g in body.exclude_globs if g and g.strip()]
+    files = [
+        TargetFileItem(
+            path=rel,
+            excluded_by_pattern=any(fnmatch(rel, glob) for glob in globs),
+        )
+        for rel in candidates
+    ]
+    return TargetFilesResponse(files=files)
 
 
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
@@ -21,6 +57,18 @@ def create_product(data: ProductCreate, session: Session = Depends(get_session))
     except IntegrityError:
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 존재하는 프로덕트 이름이다")
+    return ProductRead.model_validate(product)
+
+
+@router.post("/auto", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+def create_auto_product(
+    data: ProductCreate, session: Session = Depends(get_session)
+) -> ProductRead:
+    """자동 실행 프로덕트 1개를 만들고 테스트 출력 폴더에 CMakeLists 스캐폴딩을 생성한다."""
+    try:
+        product = auto_product_service.create_auto_product(session, data)
+    except AutoProductError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return ProductRead.model_validate(product)
 
 
