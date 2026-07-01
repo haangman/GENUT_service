@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from genut_service import workspace
 from genut_service.db.models import Product
 from genut_service.paths import normalize_rel_path
-from genut_service.schemas.product import ProductCreate
+from genut_service.schemas.product import ProductCreate, ProductUpdate
 from genut_service.services import product_service
 
 # 사용자가 양식을 비워 두면 쓰는 기본 양식2(gtest). placeholder `filename` → 파일 stem.
@@ -90,8 +90,33 @@ def create_auto_product(session: Session, data: ProductCreate) -> Product:
         raise AutoProductError("자동 실행 프로덕트 ID는 'auto'로 시작해야 한다")
     data = data.model_copy(update={"auto_run": True})
     product = product_service.create_product(session, data)
+    _scaffold(product)
+    return product
+
+
+def update_auto_product(
+    session: Session, product_id: int, data: ProductCreate
+) -> Product | None:
+    """자동 실행 프로덕트를 수정하고, 갱신된 정보/파일 목록으로 스캐폴딩을 재생성한다.
+
+    존재하지 않으면 None. product_code는 여전히 `auto`로 시작해야 한다.
+    """
+    if not (data.product_code or "").startswith("auto"):
+        raise AutoProductError("자동 실행 프로덕트 ID는 'auto'로 시작해야 한다")
+    payload = data.model_dump(exclude={"patches"})
+    payload["auto_run"] = True
+    product = product_service.update_product(
+        session, product_id, ProductUpdate(**payload, patches=data.patches)
+    )
+    if product is None:
+        return None
+    _scaffold(product)
+    return product
+
+
+def _scaffold(product: Product) -> None:
+    """프로덕트의 체크아웃에 out_tests 폴더/CMakeLists를 생성·갱신한다."""
     root = workspace.ensure_product_checkout(product)
     write_scaffolding(
         root, product.out_tests_rel, list(product.auto_file_list or []), product.cmake_template or ""
     )
-    return product

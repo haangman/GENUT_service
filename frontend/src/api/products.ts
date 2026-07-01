@@ -18,6 +18,11 @@ export function createAutoProduct(data: ProductCreate): Promise<Product> {
   return apiFetch<Product>('/products/auto', { method: 'POST', body: data })
 }
 
+// 자동 실행 프로덕트 수정(갱신된 정보/파일 목록으로 스캐폴딩 재생성).
+export function updateAutoProduct(id: number, data: ProductCreate): Promise<Product> {
+  return apiFetch<Product>(`/products/${id}/auto`, { method: 'PUT', body: data })
+}
+
 // 폼 단계 대상 파일 미리보기(로컬 code_path의 compile_commands.json + 기본 필터).
 export function previewTargetFiles(body: {
   code_path: string

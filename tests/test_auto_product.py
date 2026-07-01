@@ -99,3 +99,51 @@ def test_create_auto_product_requires_auto_prefix(
     monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
     resp = client.post("/api/products/auto", json=_auto_payload(root, product_code="P-1"))
     assert resp.status_code == 400
+
+
+def test_update_auto_product_rescaffolds_with_new_file_list(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    created = client.post("/api/products/auto", json=_auto_payload(root)).json()  # aaa, bbb
+
+    # 수정: 파일목록(aaa, ccc)·주기 변경 → 재스캐폴딩
+    updated = _auto_payload(
+        root, auto_file_list=["src/aaa.c", "src/ccc.c"], auto_interval_seconds=7200
+    )
+    resp = client.put(f"/api/products/{created['id']}/auto", json=updated)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["auto_file_list"] == ["src/aaa.c", "src/ccc.c"]
+    assert body["auto_interval_seconds"] == 7200
+
+    base_txt = (root / "UnitTest" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "add_subdirectory(aaa aaa_UnitTest)" in base_txt
+    assert "add_subdirectory(ccc ccc_UnitTest)" in base_txt
+    assert "add_subdirectory(bbb bbb_UnitTest)" not in base_txt  # 목록에서 빠지면 반영
+    assert (root / "UnitTest" / "ccc" / "CMakeLists.txt").is_file()
+
+
+def test_update_auto_product_requires_auto_prefix(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    created = client.post("/api/products/auto", json=_auto_payload(root)).json()
+    resp = client.put(
+        f"/api/products/{created['id']}/auto", json=_auto_payload(root, product_code="P-x")
+    )
+    assert resp.status_code == 400
+
+
+def test_update_auto_product_missing_404(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    resp = client.put("/api/products/99999/auto", json=_auto_payload(root))
+    assert resp.status_code == 404

@@ -72,6 +72,20 @@ def create_auto_product(
     return ProductRead.model_validate(product)
 
 
+@router.put("/{product_id}/auto", response_model=ProductRead)
+def update_auto_product(
+    product_id: int, data: ProductCreate, session: Session = Depends(get_session)
+) -> ProductRead:
+    """자동 실행 프로덕트를 수정하고 갱신된 정보/파일 목록으로 스캐폴딩을 재생성한다."""
+    try:
+        product = auto_product_service.update_auto_product(session, product_id, data)
+    except AutoProductError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    return ProductRead.model_validate(product)
+
+
 @router.get("", response_model=Page[ProductRead])
 def list_products(
     params: PageParams = Depends(),

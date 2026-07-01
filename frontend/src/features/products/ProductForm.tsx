@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -38,9 +38,11 @@ interface ProductFormProps {
   onSubmit: (values: ProductFormValues, autoFileList: string[]) => void
   submitting?: boolean
   defaultValues?: Partial<ProductFormValues>
+  // 수정 시 저장돼 있던 대상 파일 목록(미리보기 초기 제외/포함 상태를 복원)
+  initialAutoFiles?: string[]
 }
 
-export function ProductForm({ onSubmit, submitting, defaultValues }: ProductFormProps) {
+export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFiles }: ProductFormProps) {
   const {
     register,
     handleSubmit,
@@ -78,6 +80,15 @@ export function ProductForm({ onSubmit, submitting, defaultValues }: ProductForm
 
   // 행별 수동 override(true=제외, false=복원). 없으면 패턴 매칭 결과를 따른다.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({})
+  // 수정 시: 저장돼 있던 파일 목록으로 최초 1회 제외/포함 상태를 복원한다.
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current || !initialAutoFiles || candidates.length === 0) return
+    restoredRef.current = true
+    const saved = new Set(initialAutoFiles)
+    setOverrides(Object.fromEntries(candidates.map((f) => [f.path, !saved.has(f.path)])))
+  }, [candidates, initialAutoFiles])
+
   const isExcluded = (f: TargetFileItem) =>
     f.path in overrides ? overrides[f.path] : f.excluded_by_pattern
   const toggle = (f: TargetFileItem) =>

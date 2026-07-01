@@ -90,6 +90,10 @@ class ProductUpdate(BaseModel):
     active: bool | None = None
     code_path: str | None = None
     exclude_globs: list[str] | None = None
+    auto_run: bool | None = None
+    auto_interval_seconds: int | None = None
+    auto_file_list: list[str] | None = None
+    cmake_template: str | None = None
     patches: list[PatchIn] | None = None
 
     @field_validator("compile_db_rel", "out_tests_rel")

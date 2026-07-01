@@ -6,7 +6,7 @@ import { server } from '../../test/msw/server'
 import { renderWithProviders } from '../../test/utils'
 import { ProductsPage } from './ProductsPage'
 
-function product(id: number, name: string, mode = 'cpp') {
+function product(id: number, name: string, mode = 'cpp', extra: Record<string, unknown> = {}) {
   return {
     id,
     name,
@@ -21,7 +21,12 @@ function product(id: number, name: string, mode = 'cpp') {
     test_generation_mode: mode,
     active: true,
     code_path: null,
+    auto_run: false,
+    auto_interval_seconds: null,
+    auto_file_list: [],
+    cmake_template: null,
     patches: [],
+    ...extra,
   }
 }
 
@@ -65,5 +70,40 @@ describe('ProductsPage', () => {
 
     await waitFor(() => expect(putBody).not.toBeNull())
     expect(putBody!.name).toBe('alpha-edited')
+  })
+
+  it('edits an auto product via PUT /auto with the current file list', async () => {
+    let autoPut: Record<string, unknown> | null = null
+    const auto = product(1, 'AutoProd', 'cpp', {
+      product_code: 'auto-x',
+      code_path: '/x',
+      auto_run: true,
+      auto_interval_seconds: 3600,
+      auto_file_list: ['src/aaa.c'],
+      cmake_template: 'set(MODULE_TEST_NAME filename_UnitTest)\n',
+    })
+    server.use(
+      http.get('/api/products', () =>
+        HttpResponse.json({ items: [auto], total: 1, page: 1, page_size: 50 }),
+      ),
+      http.post('/api/products/target-files', () =>
+        HttpResponse.json({ files: [{ path: 'src/aaa.c', excluded_by_pattern: false }] }),
+      ),
+      http.put('/api/products/1/auto', async ({ request }) => {
+        autoPut = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(auto)
+      }),
+    )
+    renderWithProviders(<ProductsPage />)
+    await screen.findByText('AutoProd')
+
+    await userEvent.click(screen.getByRole('button', { name: '수정' }))
+    // 자동 모드가 프리필되어 미리보기 목록이 로드된다
+    expect(await screen.findByText('src/aaa.c', {}, { timeout: 3000 })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(autoPut).not.toBeNull())
+    expect(autoPut!.auto_run).toBe(true)
+    expect(autoPut!.auto_file_list).toEqual(['src/aaa.c'])
   })
 })

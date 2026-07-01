@@ -7,6 +7,7 @@ import {
   createProduct,
   deleteProduct,
   listProducts,
+  updateAutoProduct,
   updateProduct,
 } from '../../api/products'
 import {
@@ -71,9 +72,10 @@ export function ProductsPage() {
     onSuccess: onSaved,
   })
 
-  // 자동 실행 프로덕트는 신규 등록 시에만 전용 엔드포인트(스캐폴딩 포함)로 만든다.
+  // 자동 실행 프로덕트는 전용 엔드포인트(스캐폴딩 포함)로 생성/수정한다.
   const autoMut = useMutation({
-    mutationFn: (data: ProductCreate) => createAutoProduct(data),
+    mutationFn: ({ id, data }: { id: number | null; data: ProductCreate }) =>
+      id == null ? createAutoProduct(data) : updateAutoProduct(id, data),
     onSuccess: onSaved,
   })
 
@@ -95,18 +97,22 @@ export function ProductsPage() {
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean),
+      auto_run,
       patches: values.patches.map((patch, index) => ({ ...patch, order_index: index })),
     }
-    // 신규 + 자동 실행 모드 → 스캐폴딩 포함 생성
-    if (editing == null && auto_run) {
+    // 자동 실행 모드 → 신규/수정 모두 전용 엔드포인트로(스캐폴딩 포함)
+    if (auto_run) {
       autoMut.mutate({
-        ...base,
-        auto_run: true,
-        auto_interval_seconds: Math.round(
-          auto_interval_value * INTERVAL_UNIT_SECONDS[auto_interval_unit],
-        ),
-        auto_file_list: autoFileList,
-        cmake_template,
+        id: editing?.id ?? null,
+        data: {
+          ...base,
+          auto_run: true,
+          auto_interval_seconds: Math.round(
+            auto_interval_value * INTERVAL_UNIT_SECONDS[auto_interval_unit],
+          ),
+          auto_file_list: autoFileList,
+          cmake_template,
+        },
       })
       return
     }
@@ -145,6 +151,7 @@ export function ProductsPage() {
           <ProductForm
             key={editing?.id ?? 'new'}
             defaultValues={editing ? toFormValues(editing) : undefined}
+            initialAutoFiles={editing?.auto_file_list}
             onSubmit={handleSubmit}
             submitting={saving}
           />
