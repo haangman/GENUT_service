@@ -3,15 +3,25 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { cancelJob } from '../../api/jobs'
 import type { Job } from '../../types/api'
 import { JobLogs } from './JobLogs'
-import { formatDateTime, formatDuration, jobBadgeClass, jobResultLabel } from './jobFormat'
+import {
+  formatDateTime,
+  formatDuration,
+  jobBadgeClass,
+  jobKindBadgeClass,
+  jobKindLabel,
+  jobResultLabel,
+} from './jobFormat'
 
 // job 이력 테이블: 행 클릭 → 바로 아래에 로그 패널 전개, 실행 중 job은 강제 종료 버튼.
 // 모니터링(Job 이력)과 자동 실행 이력 페이지가 공용으로 사용한다.
+// showKind: 종류(GENUT/JJ 스캔/변경 감지) badge 컬럼을 추가한다(자동 실행 이력 전용).
 export function JobTable({
   jobs,
+  showKind = false,
   emptyMessage,
 }: {
   jobs: Job[]
+  showKind?: boolean
   emptyMessage?: string
 }) {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
@@ -44,10 +54,11 @@ export function JobTable({
     <div className="card overflow-x-auto">
       {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
           min-w로 좁은 화면에선 위 overflow-x-auto가 전체 좌우 스크롤을 제공한다. */}
-      <table className="w-full min-w-[1120px] table-fixed text-sm">
+      <table className={`w-full ${showKind ? 'min-w-[1220px]' : 'min-w-[1120px]'} table-fixed text-sm`}>
         <colgroup>
           <col className="w-[56px]" />
           <col className="w-[84px]" />
+          {showKind ? <col className="w-[100px]" /> : null}
           <col className="w-[96px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
@@ -60,6 +71,7 @@ export function JobTable({
           <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5">#</th>
             <th className="px-3 py-2.5">product</th>
+            {showKind ? <th className="px-3 py-2.5">종류</th> : null}
             <th className="px-3 py-2.5">상태</th>
             <th className="px-3 py-2.5">제출 시각</th>
             <th className="px-3 py-2.5">시작 시간</th>
@@ -80,6 +92,11 @@ export function JobTable({
               >
                 <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
                 <td className="px-3 py-2.5 text-muted">{job.product_id}</td>
+                {showKind ? (
+                  <td className="px-3 py-2.5">
+                    <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job.kind)}</span>
+                  </td>
+                ) : null}
                 <td className="px-3 py-2.5">
                   <span className={jobBadgeClass(job.status)}>{job.status}</span>
                 </td>
@@ -106,7 +123,7 @@ export function JobTable({
               </tr>
               {selectedJobId === job.id ? (
                 <tr className="bg-surface-2">
-                  <td colSpan={9} className="border-t border-border p-3">
+                  <td colSpan={showKind ? 10 : 9} className="border-t border-border p-3">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>

@@ -13,6 +13,7 @@ export const handlers = [
   http.get('/api/jobs', () =>
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
   ),
+  http.get('/api/jobs/auto-history', () => HttpResponse.json([])),
   http.get('/api/workers', () => HttpResponse.json([])),
   http.get('/api/queue', () => HttpResponse.json([])),
   http.get('/api/test-status', () => HttpResponse.json([])),
