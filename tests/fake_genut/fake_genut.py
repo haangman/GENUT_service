@@ -6,7 +6,9 @@
 - --function-name, --debug, --enable-assure 반영
 - .env(cwd)에서 TEST_GENERATION_MODE 등을 읽어 result.json의 env_seen에 기록
 - 시나리오는 소스 파일에서 위로 올라가며 찾은 GENUT_SCENARIO.json으로 구동
-  (outcome: success | hard_fail | crash, tests_per_function: int)
+  (outcome: success | hard_fail | crash, tests_per_function: int,
+   out_layout: flat(기본) | stem_dirs — stem_dirs면 실 GENUT 디스크 구조인
+   `<out>/<소스 stem>/<함수>_Test.<ext>`로 생성, test_name_pattern으로 파일명 변경 가능)
 """
 
 from __future__ import annotations
@@ -101,6 +103,9 @@ def main(argv: list[str] | None = None) -> None:
             time.sleep(total / steps)
             print(f"[genut] generating tests... {i + 1}/{steps}", flush=True)
 
+    layout = scenario.get("out_layout", "flat")
+    name_pattern = scenario.get("test_name_pattern", "{fn}_Test{ext}")
+
     functions: list[str] = []
     generated: list[str] = []
     positive = negative = 0
@@ -108,8 +113,18 @@ def main(argv: list[str] | None = None) -> None:
         fns = extract_functions(src)
         if args.function_name:
             fns = [fn for fn in fns if fn == args.function_name]
+        stem = Path(src).stem
         for fn in fns:
             functions.append(fn)
+            if layout == "stem_dirs":
+                # 실 GENUT 디스크 구조 모사: <out>/<stem>/<함수>_Test.<ext> 1개
+                stem_dir = out / stem
+                stem_dir.mkdir(parents=True, exist_ok=True)
+                name = name_pattern.format(fn=fn, ext=ext)
+                (stem_dir / name).write_text(f"// tests for {fn}\n", encoding="utf-8")
+                generated.append(f"{stem}/{name}")
+                positive += 1
+                continue
             for index in range(per_fn):
                 for kind in ("pos", "neg"):
                     name = f"test_{fn}_{index:03d}_{kind}{ext}"

@@ -52,15 +52,17 @@ def require_code_root(product: Product) -> Path:
     """auto 실행의 전제인 영속 코드 경로를 반환한다. 불가하면 AutoRunError.
 
     code_path가 없으면 생성 테스트가 영속적으로 남을 곳이 없어 스캔이 의미가 없다.
+    아직 체크아웃이 없으면(최초 사이클) 최초 clone까지 수행한다(git 실패는 GitError
+    전파 → 준비 job이 실패로 기록된다).
     """
     if not product.code_path:
         raise AutoRunError(
             "auto 실행에는 code_path(영속 코드 경로)가 필요하다 — 프로덕트에 코드 저장 경로를 지정하라"
         )
     root = workspace.resolve_code_path(product.code_path)
-    if not root.is_dir():
-        raise AutoRunError(f"code_path 경로가 존재하지 않는다: {root}")
-    return root
+    if root.is_dir():
+        return root
+    return workspace.ensure_product_checkout(product)
 
 
 def find_pending_genut_job(
