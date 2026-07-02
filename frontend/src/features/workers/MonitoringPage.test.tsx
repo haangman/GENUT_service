@@ -7,6 +7,7 @@ import { MonitoringPage } from './MonitoringPage'
 
 describe('MonitoringPage', () => {
   it('renders workers, queue, and job history from the API', async () => {
+    const originsSeen: (string | null)[] = []
     server.use(
       http.get('/api/workers', () =>
         HttpResponse.json([
@@ -18,14 +19,17 @@ describe('MonitoringPage', () => {
           { job_id: 6, product_id: 2, submitted_at: '2026-06-15T00:00:00Z', waiting_on_product: true },
         ]),
       ),
-      http.get('/api/jobs', () =>
-        HttpResponse.json({
+      http.get('/api/jobs', ({ request }) => {
+        originsSeen.push(new URL(request.url).searchParams.get('origin'))
+        return HttpResponse.json({
           items: [
             {
               id: 5,
               product_id: 2,
               genut_instance_id: 1,
               status: 'done',
+              kind: 'genut',
+              origin: 'manual',
               function_name: null,
               file_list: [],
               excluded_files: [],
@@ -40,8 +44,8 @@ describe('MonitoringPage', () => {
           total: 1,
           page: 1,
           page_size: 50,
-        }),
-      ),
+        })
+      }),
     )
 
     server.use(http.get('/api/jobs/5/logs', () => HttpResponse.json([])))
@@ -50,6 +54,9 @@ describe('MonitoringPage', () => {
     expect(await screen.findByText('worker-a')).toBeInTheDocument()
     expect(await screen.findByText('대기(프로덕트 사용 중)')).toBeInTheDocument()
     const resultCell = await screen.findByText('status=success total=4 pos=2 neg=2')
+
+    // 기존 모니터링 이력은 수동 job만 요청한다(auto job은 '자동 실행 이력' 페이지 전용)
+    expect(originsSeen.every((origin) => origin === 'manual')).toBe(true)
 
     // 고정 폭 테이블 + min-width: 좁은 화면에선 래퍼(overflow-x-auto)가 전체 좌우 스크롤을 준다.
     const table = resultCell.closest('table')

@@ -89,11 +89,18 @@ export interface QueueItem {
   waiting_on_product: boolean
 }
 
+// 실행 경로: genut(워커 실행) | auto_scan(누락 스캔) | auto_diff(변경 감지)
+export type JobKind = 'genut' | 'auto_scan' | 'auto_diff'
+// 생성 주체: manual(수동 제출) | auto(auto 모드 주기 실행)
+export type JobOrigin = 'manual' | 'auto'
+
 export interface Job {
   id: number
   product_id: number
   genut_instance_id: number | null
   status: string
+  kind: JobKind
+  origin: JobOrigin
   function_name: string | null
   file_list: string[]
   excluded_files: string[]
@@ -103,6 +110,16 @@ export interface Job {
   finished_at: string | null
   result_summary: string | null
   error: string | null
+}
+
+// GET /api/jobs/auto-history 응답: auto 프로덕트별 최근 job 그룹
+export interface AutoHistoryGroup {
+  product_id: number
+  product_name: string
+  product_code: string
+  auto_interval_seconds: number | null
+  total: number
+  jobs: Job[]
 }
 
 export interface JobEvent {

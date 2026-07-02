@@ -76,8 +76,9 @@ function QueuePanel() {
 
 function JobHistory() {
   const { data } = useQuery({
-    queryKey: ['jobs', 'history'],
-    queryFn: () => listJobs({ page_size: 50 }),
+    queryKey: ['jobs', 'history', 'manual'],
+    // 수동(테스트 요청 페이지) job만 — auto 생성 job은 '자동 실행 이력' 페이지에서 본다
+    queryFn: () => listJobs({ page_size: 50, origin: 'manual' }),
     refetchInterval: 2000, // 강제 종료 후 상태(canceled) 반영을 빠르게 보이도록
   })
   return (
