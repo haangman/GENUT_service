@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.db.models import Job, JobEvent, Product
-from genut_service.enums import JobStatus
+from genut_service.enums import JobOrigin, JobStatus
 from genut_service.services import compile_db_service
 
 
@@ -79,12 +79,18 @@ def list_jobs(
     page_size: int,
     status: str | None = None,
     product_id: int | None = None,
+    origin: str | None = None,
+    kind: str | None = None,
 ) -> tuple[list[Job], int]:
     stmt = select(Job)
     if status:
         stmt = stmt.where(Job.status == status)
     if product_id is not None:
         stmt = stmt.where(Job.product_id == product_id)
+    if origin:
+        stmt = stmt.where(Job.origin == origin)
+    if kind:
+        stmt = stmt.where(Job.kind == kind)
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     items = list(
         session.scalars(
@@ -92,6 +98,54 @@ def list_jobs(
         ).all()
     )
     return items, total
+
+
+def list_auto_history(
+    session: Session, per_product: int = 3
+) -> list[tuple[Product, int, list[Job]]]:
+    """auto 프로덕트별 origin='auto' job 이력을 (프로덕트, 전체 수, 최근 N개)로 반환한다.
+
+    window function(row_number/count OVER PARTITION BY) 1쿼리로 프로덕트별 최근
+    per_product개를 뽑는다(SQLite 3.25+/Postgres 공통). auto job이 없는 auto
+    프로덕트도 빈 그룹으로 포함한다. 정렬: 프로덕트 id 오름차순, job id 내림차순.
+    """
+    products = list(
+        session.scalars(
+            select(Product).where(Product.auto_run.is_(True)).order_by(Product.id)
+        )
+    )
+    if not products:
+        return []
+
+    rn = (
+        func.row_number()
+        .over(partition_by=Job.product_id, order_by=Job.id.desc())
+        .label("rn")
+    )
+    per_total = func.count().over(partition_by=Job.product_id).label("total")
+    ranked = (
+        select(Job.id.label("job_id"), rn, per_total)
+        .join(Product, Product.id == Job.product_id)
+        .where(Product.auto_run.is_(True), Job.origin == JobOrigin.AUTO.value)
+        .subquery()
+    )
+    rows = session.execute(
+        select(Job, ranked.c.total)
+        .join(ranked, ranked.c.job_id == Job.id)
+        .where(ranked.c.rn <= per_product)
+        .order_by(Job.product_id.asc(), Job.id.desc())
+    ).all()
+
+    jobs_by_product: dict[int, list[Job]] = {}
+    totals: dict[int, int] = {}
+    for job, total in rows:
+        jobs_by_product.setdefault(job.product_id, []).append(job)
+        totals[job.product_id] = total
+
+    return [
+        (product, totals.get(product.id, 0), jobs_by_product.get(product.id, []))
+        for product in products
+    ]
 
 
 def list_events(session: Session, job_id: int, since: int = 0) -> list[JobEvent]:

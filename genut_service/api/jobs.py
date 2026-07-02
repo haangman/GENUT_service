@@ -11,7 +11,7 @@ from genut_service.api.deps import PageParams, get_session
 from genut_service.enums import TERMINAL_STATUSES, JobStatus
 from genut_service.runner import process_registry
 from genut_service.schemas.common import Page
-from genut_service.schemas.job import JobCreate, JobEventRead, JobRead
+from genut_service.schemas.job import AutoHistoryGroup, JobCreate, JobEventRead, JobRead
 from genut_service.services import job_service
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -30,10 +30,12 @@ def list_jobs(
     params: PageParams = Depends(),
     status_filter: str | None = Query(None, alias="status"),
     product_id: int | None = Query(None),
+    origin: str | None = Query(None),
+    kind: str | None = Query(None),
     session: Session = Depends(get_session),
 ) -> Page[JobRead]:
     items, total = job_service.list_jobs(
-        session, params.page, params.page_size, status_filter, product_id
+        session, params.page, params.page_size, status_filter, product_id, origin, kind
     )
     return Page[JobRead](
         items=[JobRead.model_validate(item) for item in items],
@@ -41,6 +43,27 @@ def list_jobs(
         page=params.page,
         page_size=params.page_size,
     )
+
+
+# 주의: `/{job_id}`보다 먼저 선언해야 한다(뒤에 두면 "auto-history"가 int 변환에 걸려 422).
+@router.get("/auto-history", response_model=list[AutoHistoryGroup])
+def auto_history(
+    per_product: int = Query(3, ge=1, le=100),
+    session: Session = Depends(get_session),
+) -> list[AutoHistoryGroup]:
+    """auto 프로덕트별 자동 실행 job 이력(프로덕트당 최근 per_product개 + 전체 수)."""
+    groups = job_service.list_auto_history(session, per_product)
+    return [
+        AutoHistoryGroup(
+            product_id=product.id,
+            product_name=product.name,
+            product_code=product.product_code,
+            auto_interval_seconds=product.auto_interval_seconds,
+            total=total,
+            jobs=[JobRead.model_validate(job) for job in jobs],
+        )
+        for product, total, jobs in groups
+    ]
 
 
 @router.get("/{job_id}", response_model=JobRead)

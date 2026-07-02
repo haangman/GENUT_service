@@ -33,6 +33,17 @@ class JobRead(BaseModel):
     error: str | None
 
 
+class AutoHistoryGroup(BaseModel):
+    """auto 전용 이력 페이지의 프로덕트별 그룹(최근 N개 + 전체 수)."""
+
+    product_id: int
+    product_name: str
+    product_code: str
+    auto_interval_seconds: int | None
+    total: int
+    jobs: list[JobRead]
+
+
 class JobEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

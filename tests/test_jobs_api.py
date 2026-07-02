@@ -86,6 +86,112 @@ def test_get_missing_job_404(client: TestClient) -> None:
     assert client.get("/api/jobs/9999").status_code == 404
 
 
+def test_list_jobs_filters_by_origin_and_kind(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    from genut_service.db.models import Job
+    from genut_service.enums import JobKind, JobOrigin
+
+    product_id = _create_product(client)
+    client.post("/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]})  # manual
+    db_session.add_all(
+        [
+            Job(
+                product_id=product_id,
+                kind=JobKind.GENUT.value,
+                origin=JobOrigin.AUTO.value,
+                file_list=["src/a.cpp"],
+            ),
+            Job(
+                product_id=product_id,
+                kind=JobKind.AUTO_SCAN.value,
+                origin=JobOrigin.AUTO.value,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    manual = client.get("/api/jobs", params={"origin": "manual"}).json()
+    assert manual["total"] == 1
+    assert manual["items"][0]["origin"] == "manual"
+
+    auto = client.get("/api/jobs", params={"origin": "auto"}).json()
+    assert auto["total"] == 2
+
+    scans = client.get("/api/jobs", params={"kind": "auto_scan"}).json()
+    assert scans["total"] == 1
+    assert scans["items"][0]["kind"] == "auto_scan"
+
+
+def _make_auto_product(db_session: Session, name: str, auto_run: bool = True):
+    from genut_service.db.models import Product
+
+    product = Product(
+        name=name,
+        product_code=name,
+        git_url="u",
+        compile_db_rel="build",
+        out_tests_rel="unittests",
+        cmake_configure_cmd="c",
+        cmake_build_cmd="b",
+        test_run_cmd="r",
+        test_generation_mode="c",
+        auto_run=auto_run,
+        auto_interval_seconds=120 if auto_run else None,
+    )
+    db_session.add(product)
+    db_session.commit()
+    return product
+
+
+def test_auto_history_groups_recent_jobs_per_product(
+    client: TestClient, db_session: Session
+) -> None:
+    from genut_service.db.models import Job
+    from genut_service.enums import JobKind, JobOrigin
+
+    busy = _make_auto_product(db_session, "auto-busy")
+    idle = _make_auto_product(db_session, "auto-idle")
+    plain = _make_auto_product(db_session, "plain", auto_run=False)
+
+    # busy: auto job 5개 + manual 1개(제외 대상). plain: auto job 1개(그룹 자체가 제외).
+    for i in range(5):
+        db_session.add(
+            Job(
+                product_id=busy.id,
+                kind=JobKind.GENUT.value if i % 2 == 0 else JobKind.AUTO_SCAN.value,
+                origin=JobOrigin.AUTO.value,
+            )
+        )
+    db_session.add(Job(product_id=busy.id, origin=JobOrigin.MANUAL.value))
+    db_session.add(Job(product_id=plain.id, origin=JobOrigin.AUTO.value))
+    db_session.commit()
+
+    resp = client.get("/api/jobs/auto-history", params={"per_product": 3})
+    assert resp.status_code == 200, resp.text
+    groups = resp.json()
+
+    assert [g["product_name"] for g in groups] == ["auto-busy", "auto-idle"]
+    busy_group = groups[0]
+    assert busy_group["product_code"] == "auto-busy"
+    assert busy_group["auto_interval_seconds"] == 120
+    assert busy_group["total"] == 5  # manual job은 세지 않는다
+    assert len(busy_group["jobs"]) == 3  # 최근 3개만
+    ids = [j["id"] for j in busy_group["jobs"]]
+    assert ids == sorted(ids, reverse=True)  # 최신(id 내림차순)
+    assert all(j["origin"] == "auto" for j in busy_group["jobs"])
+
+    idle_group = groups[1]
+    assert idle_group["total"] == 0
+    assert idle_group["jobs"] == []  # 이력 없는 auto 프로덕트도 빈 그룹으로 노출
+
+
+def test_auto_history_empty_without_auto_products(client: TestClient) -> None:
+    resp = client.get("/api/jobs/auto-history")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_cancel_missing_job_404(client: TestClient) -> None:
     assert client.post("/api/jobs/99999/cancel").status_code == 404
 
