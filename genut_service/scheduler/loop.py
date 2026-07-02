@@ -13,6 +13,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from genut_service.runner.worker import process_job
+from genut_service.scheduler import auto_tick
 from genut_service.scheduler.engine import claim_jobs
 
 
@@ -51,6 +52,10 @@ class Scheduler:
         with self._session_factory() as session:
             self._process(session, job_id)
 
+    def _run_prep(self, job_id: int) -> None:
+        with self._session_factory() as session:
+            auto_tick.process_prep_job(session, job_id)
+
     async def _loop(self) -> None:
         assert self._stop is not None
         from genut_service.scheduler.janitor import reap_stuck_jobs, release_stale_locks
@@ -67,6 +72,15 @@ class Scheduler:
                     assignments = claim_jobs(session)
                 for job_id, _ in assignments:
                     task = asyncio.create_task(asyncio.to_thread(self._run_one, job_id))
+                    running.add(task)
+                    task.add_done_callback(running.discard)
+                # auto 모드: 주기 도래 사이클 큐잉 + 준비(prep) job 디스패치.
+                # 준비 job도 스레드에서 돌려 tick을 막지 않는다(git 갱신이 느릴 수 있음).
+                with self._session_factory() as session:
+                    auto_tick.enqueue_due_cycles(session)
+                    prep_ids = auto_tick.claim_prep_jobs(session)
+                for job_id in prep_ids:
+                    task = asyncio.create_task(asyncio.to_thread(self._run_prep, job_id))
                     running.add(task)
                     task.add_done_callback(running.discard)
                 # 주기적 안전망: 누수된 락 해제 + 상한 초과로 고착된 job 회수(워커 사망 등).

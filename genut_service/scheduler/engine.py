@@ -15,8 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
-from genut_service.enums import JobKind, JobStatus, WorkerStatus
+from genut_service.enums import PREP_KINDS, JobKind, JobStatus, WorkerStatus
 from genut_service.scheduler.lock import release_lock, try_acquire_lock
+
+_PREP_KIND_VALUES = tuple(kind.value for kind in PREP_KINDS)
 
 
 def _utcnow() -> datetime:
@@ -44,6 +46,18 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
     busy_names = set(
         session.scalars(
             select(Product.name).join(ProductLock, ProductLock.product_id == Product.id)
+        )
+    )
+    # auto 준비(auto_scan/auto_diff) job이 실행 중인 프로덕트도 배타 — 준비 작업의
+    # git reset(제자리 갱신)과 GENUT 실행이 같은 체크아웃에서 충돌하지 않게 한다.
+    busy_names |= set(
+        session.scalars(
+            select(Product.name)
+            .join(Job, Job.product_id == Product.id)
+            .where(
+                Job.status == JobStatus.RUNNING.value,
+                Job.kind.in_(_PREP_KIND_VALUES),
+            )
         )
     )
 
