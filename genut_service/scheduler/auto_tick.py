@@ -148,6 +148,32 @@ def _finish_prep(
     session.commit()
 
 
+def _force_finish_prep(session: Session, job_id: int, status: JobStatus, error: str) -> None:
+    """종료 처리 자체가 실패했을 때의 최후 폴백(runner/worker의 _force_finish_failed 대응).
+
+    running 고아가 남으면 그 프로덕트는 배정(claim_jobs 배타)·새 사이클(enqueue의
+    비종료 검사) 모두 janitor 회수 때까지 멈추므로, 롤백 후 재시도하고 그래도
+    실패하면 새 세션으로 한 번 더 시도한다.
+    """
+    try:
+        session.rollback()
+        job = session.get(Job, job_id)
+        if job is not None:
+            _finish_prep(session, job, status, error=error[:2000])
+        return
+    except Exception:  # noqa: BLE001 - 폴백이라 어떤 실패든 다음 수단으로 넘어간다
+        pass
+    try:
+        from genut_service.db.base import SessionLocal
+
+        with SessionLocal() as fresh:
+            job = fresh.get(Job, job_id)
+            if job is not None:
+                _finish_prep(fresh, job, status, error=error[:2000])
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def process_prep_job(session: Session, job_id: int) -> None:
     """running 준비 job 1건을 실행하고 done/failed/canceled로 종료한다."""
     job = session.get(Job, job_id)
@@ -175,12 +201,17 @@ def process_prep_job(session: Session, job_id: int) -> None:
         return
 
     kind_label = "변경 감지" if job.kind == JobKind.AUTO_DIFF.value else "누락 테스트 스캔"
-    emit(phase, "info", f"auto {kind_label} 시작: product={product.name}")
 
     summary: str | None = None
     run_error: Exception | None = None
     try:
+        emit(phase, "info", f"auto {kind_label} 시작: product={product.name}")
         should_cancel = lambda: process_registry.is_canceled(job_id)  # noqa: E731
+
+        # 실행 중 시작되는 git 서브프로세스를 강제 종료 레지스트리에 등록한다
+        def on_process(proc) -> None:  # noqa: ANN001
+            process_registry.register(job_id, proc)
+
         if job.kind == JobKind.AUTO_DIFF.value:
             from genut_service.config import get_settings
 
@@ -191,6 +222,7 @@ def process_prep_job(session: Session, job_id: int) -> None:
                 emit,
                 git_timeout=get_settings().git_timeout,
                 should_cancel=should_cancel,
+                on_process=on_process,
             )
         else:
             summary = auto_run_service.run_scan_job(
@@ -198,19 +230,29 @@ def process_prep_job(session: Session, job_id: int) -> None:
             )
     except Exception as exc:  # noqa: BLE001 - 어떤 예외든 이 job만 격리해 종료시킨다
         run_error = exc
+        # commit 실패 등으로 세션이 pending-rollback 상태면 이후 emit/종료 commit이
+        # 전부 재실패하므로 먼저 정리한다.
+        try:
+            session.rollback()
+        except Exception:  # noqa: BLE001
+            pass
 
     # 취소 판정은 unregister 전에 한다(unregister가 취소 플래그를 지운다)
     canceled = process_registry.is_canceled(job_id)
     process_registry.unregister(job_id)
-    if canceled or isinstance(run_error, auto_run_service.AutoRunCanceled):
-        emit(phase, "error", "강제 종료됨 (사용자 요청)")
-        _finish_prep(session, job, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
-    elif run_error is not None:
-        emit(phase, "error", f"{kind_label} 실패: {run_error}")
-        _finish_prep(session, job, JobStatus.FAILED, error=str(run_error)[:2000])
-    else:
-        emit(phase, "info", f"완료: {summary}")
-        _finish_prep(session, job, JobStatus.DONE, result_summary=summary)
+    try:
+        if canceled or isinstance(run_error, auto_run_service.AutoRunCanceled):
+            emit(phase, "error", "강제 종료됨 (사용자 요청)")
+            _finish_prep(session, job, JobStatus.CANCELED, error="사용자에 의해 강제 종료됨")
+        elif run_error is not None:
+            emit(phase, "error", f"{kind_label} 실패: {run_error}")
+            _finish_prep(session, job, JobStatus.FAILED, error=str(run_error)[:2000])
+        else:
+            emit(phase, "info", f"완료: {summary}")
+            _finish_prep(session, job, JobStatus.DONE, result_summary=summary)
+    except Exception as finish_exc:  # noqa: BLE001 - 종료 처리 자체 실패 시 최후 폴백
+        fallback = JobStatus.CANCELED if canceled else JobStatus.FAILED
+        _force_finish_prep(session, job_id, fallback, f"종료 처리 실패: {finish_exc}")
 
 
 def run_auto_pending(session: Session, now: datetime | None = None) -> int:

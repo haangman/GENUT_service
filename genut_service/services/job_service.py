@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
@@ -107,11 +107,22 @@ def list_auto_history(
 
     window function(row_number/count OVER PARTITION BY) 1쿼리로 프로덕트별 최근
     per_product개를 뽑는다(SQLite 3.25+/Postgres 공통). auto job이 없는 auto
-    프로덕트도 빈 그룹으로 포함한다. 정렬: 프로덕트 id 오름차순, job id 내림차순.
+    프로덕트도 빈 그룹으로 포함하고, **auto_run을 해제한 프로덕트라도 auto job
+    이력이 있으면 포함**한다 — 그렇지 않으면 남은 job(실행 중 포함)의 로그 열람·
+    강제 종료 경로가 UI에서 사라진다. 정렬: 프로덕트 id 오름차순, job id 내림차순.
     """
     products = list(
         session.scalars(
-            select(Product).where(Product.auto_run.is_(True)).order_by(Product.id)
+            select(Product)
+            .where(
+                or_(
+                    Product.auto_run.is_(True),
+                    Product.id.in_(
+                        select(Job.product_id).where(Job.origin == JobOrigin.AUTO.value)
+                    ),
+                )
+            )
+            .order_by(Product.id)
         )
     )
     if not products:
@@ -125,8 +136,7 @@ def list_auto_history(
     per_total = func.count().over(partition_by=Job.product_id).label("total")
     ranked = (
         select(Job.id.label("job_id"), rn, per_total)
-        .join(Product, Product.id == Job.product_id)
-        .where(Product.auto_run.is_(True), Job.origin == JobOrigin.AUTO.value)
+        .where(Job.origin == JobOrigin.AUTO.value)
         .subquery()
     )
     rows = session.execute(

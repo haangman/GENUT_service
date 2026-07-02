@@ -310,6 +310,49 @@ def test_process_prep_job_canceled_by_user(db_session: Session, tmp_path: Path) 
     assert scan.status == JobStatus.CANCELED.value
 
 
+def test_process_prep_job_survives_event_write_failure(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """JobEvent 기록이 계속 실패해도 job이 running 고아로 남지 않는다(최후 폴백)."""
+    root = _make_root(tmp_path)
+    product = _auto_product(db_session, code_path=str(root))
+    scan = _claimed_prep(db_session, product, JobKind.AUTO_SCAN)
+
+    class BoomEvent:  # 모든 emit이 예외를 던지는 상황 모사(DB 잠금 경합 등)
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("event write failed")
+
+    monkeypatch.setattr(auto_tick, "JobEvent", BoomEvent)
+
+    auto_tick.process_prep_job(db_session, scan.id)
+
+    db_session.expire_all()
+    reloaded = db_session.get(Job, scan.id)
+    assert reloaded.status == JobStatus.FAILED.value  # 고아(running) 잔류 금지
+    assert "종료 처리 실패" in (reloaded.error or "")
+
+
+def test_process_prep_job_passes_cancel_hooks_to_diff(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """diff 실행에 취소 플래그 확인·서브프로세스 등록 콜백이 전달된다."""
+    captured: dict = {}
+
+    def fake_diff(session, job, product, emit, **kwargs):  # noqa: ANN001
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(auto_tick.auto_run_service, "run_diff_job", fake_diff)
+    root = _make_root(tmp_path)
+    product = _auto_product(db_session, code_path=str(root))
+    diff = _claimed_prep(db_session, product, JobKind.AUTO_DIFF)
+
+    auto_tick.process_prep_job(db_session, diff.id)
+
+    assert callable(captured.get("should_cancel"))
+    assert callable(captured.get("on_process"))
+
+
 def test_process_prep_job_ignores_non_running(db_session: Session) -> None:
     product = _auto_product(db_session)
     job = Job(

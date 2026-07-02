@@ -152,9 +152,12 @@ def test_auto_history_groups_recent_jobs_per_product(
 
     busy = _make_auto_product(db_session, "auto-busy")
     idle = _make_auto_product(db_session, "auto-idle")
+    toggled_off = _make_auto_product(db_session, "toggled-off", auto_run=False)
     plain = _make_auto_product(db_session, "plain", auto_run=False)
 
-    # busy: auto job 5개 + manual 1개(제외 대상). plain: auto job 1개(그룹 자체가 제외).
+    # busy: auto job 5개 + manual 1개(제외 대상).
+    # toggled_off: auto_run을 해제했지만 auto job 이력이 남아 있음 → 그룹 유지.
+    # plain: auto job도 없음 → 그룹에서 제외.
     for i in range(5):
         db_session.add(
             Job(
@@ -164,14 +167,15 @@ def test_auto_history_groups_recent_jobs_per_product(
             )
         )
     db_session.add(Job(product_id=busy.id, origin=JobOrigin.MANUAL.value))
-    db_session.add(Job(product_id=plain.id, origin=JobOrigin.AUTO.value))
+    db_session.add(Job(product_id=toggled_off.id, origin=JobOrigin.AUTO.value))
+    db_session.add(Job(product_id=plain.id, origin=JobOrigin.MANUAL.value))
     db_session.commit()
 
     resp = client.get("/api/jobs/auto-history", params={"per_product": 3})
     assert resp.status_code == 200, resp.text
     groups = resp.json()
 
-    assert [g["product_name"] for g in groups] == ["auto-busy", "auto-idle"]
+    assert [g["product_name"] for g in groups] == ["auto-busy", "auto-idle", "toggled-off"]
     busy_group = groups[0]
     assert busy_group["product_code"] == "auto-busy"
     assert busy_group["auto_interval_seconds"] == 120
@@ -184,6 +188,11 @@ def test_auto_history_groups_recent_jobs_per_product(
     idle_group = groups[1]
     assert idle_group["total"] == 0
     assert idle_group["jobs"] == []  # 이력 없는 auto 프로덕트도 빈 그룹으로 노출
+
+    # auto_run 해제 후에도 남은 auto job의 로그/중지/재수행 경로가 유지된다
+    off_group = groups[2]
+    assert off_group["total"] == 1
+    assert len(off_group["jobs"]) == 1
 
 
 def test_auto_history_empty_without_auto_products(client: TestClient) -> None:
