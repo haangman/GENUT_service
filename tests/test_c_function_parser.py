@@ -31,7 +31,9 @@ def test_simple_c_functions_with_line_ranges() -> None:
     ]
 
 
-def test_multiline_signature_start_line_is_name_line() -> None:
+def test_multiline_signature_span_covers_return_type_line() -> None:
+    # start_line은 시그니처 시작(반환형 줄) — 반환형/수식어 줄만 바뀌어도
+    # diff 감지가 이 함수의 변경으로 귀속시킬 수 있다.
     text = (
         "static long\n"
         "compute_total(int a,\n"
@@ -41,7 +43,7 @@ def test_multiline_signature_start_line_is_name_line() -> None:
         "}\n"
     )
     spans = extract_functions(text)
-    assert spans == [FunctionSpan(name="compute_total", start_line=2, end_line=6)]
+    assert spans == [FunctionSpan(name="compute_total", start_line=1, end_line=6)]
 
 
 def test_prototypes_and_function_pointers_are_not_functions() -> None:
@@ -153,6 +155,21 @@ def test_macro_call_without_semicolon_does_not_swallow_next_function() -> None:
 # ---------------------------------------------------------------------------
 # C++
 # ---------------------------------------------------------------------------
+
+
+def test_transparent_blocks_after_rejected_candidate() -> None:
+    # 함수 호출로 초기화되는 전역 선언(후보 거부) 뒤의 namespace/extern "C" 블록도
+    # 투명하게 처리되어 내부 함수를 놓치지 않는다(세그먼트 경계 리셋 회귀).
+    text = (
+        "static int version = get_version();\n"
+        "namespace myproj {\n"
+        "int do_work(void) { return 1; }\n"
+        "}\n"
+        'extern "C" {\n'
+        "int c_api(void) { return 2; }\n"
+        "}\n"
+    )
+    assert _names(text) == ["do_work", "c_api"]
 
 
 def test_cpp_namespace_and_extern_c_are_transparent() -> None:

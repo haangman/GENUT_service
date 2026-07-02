@@ -62,7 +62,7 @@ class FunctionSpan:
     """함수 정의 1개: 이름과 소스 라인 범위(1-based, 양끝 포함)."""
 
     name: str
-    start_line: int  # 함수명이 있는 줄
+    start_line: int  # 시그니처 시작 줄(여러 줄 시그니처면 반환형/수식어 줄 포함)
     end_line: int    # 본문을 닫는 `}` 줄
 
 
@@ -237,7 +237,10 @@ def extract_functions(text: str) -> list[FunctionSpan]:
                     if c == "," and in_ctor_init:
                         j += 1
                         continue
-                    rejected_at = j + 1
+                    # `;`는 메인 루프가 다시 처리해 세그먼트 경계를 리셋하도록
+                    # 그 자리에서 멈춘다(건너뛰면 뒤따르는 namespace/extern "C"
+                    # 블록이 불투명으로 오판돼 내부 함수를 전부 놓친다).
+                    rejected_at = j
                     break
                 if c == ":":
                     # `Foo::Foo() : x_(1), y_(2) {` 생성자 초기화 리스트
@@ -261,16 +264,22 @@ def extract_functions(text: str) -> list[FunctionSpan]:
                         break
                     j = tok.end()
                     continue
-                # 그 외 문자(*, & 등) — 정의 시그니처로 보기 어렵다
-                rejected_at = j + 1
+                # 그 외 문자(*, & 등) — 정의 시그니처로 보기 어렵다.
+                # `}`는 메인 루프가 세그먼트 리셋을 하도록 그 자리에서 멈춘다.
+                rejected_at = j if c == "}" else j + 1
                 break
 
             if accepted:
                 body_end = _skip_balanced(masked, j, "{", "}")
+                # start_line은 시그니처의 시작(문장 세그먼트의 첫 유의미 문자) —
+                # 여러 줄 시그니처에서 반환형/수식어 라인의 변경도 함수에 귀속시킨다.
+                sig_start = _skip_ws(masked, max(seg_start, 0))
+                if sig_start >= match.start():
+                    sig_start = match.start()
                 spans.append(
                     FunctionSpan(
                         name=name,
-                        start_line=line_of(match.start()),
+                        start_line=line_of(sig_start),
                         end_line=line_of(min(body_end - 1, n - 1)) if n else 1,
                     )
                 )
