@@ -208,6 +208,21 @@ def _test_file_entry(
     }
 
 
+def scan_generated_tests(
+    root: Path, product: Product
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """성공/실패 폴더의 생성 테스트 파일을 {stem: [root 기준 POSIX 경로]}로 스캔한다.
+
+    반환: (성공, 실패). 성공은 `<out_tests_rel>/<stem>/`, 실패는 형제
+    `<out_tests_rel>_Fail/<stem>/`(대소문자 무시)에서 이름에 `_test`가 포함된 파일이다.
+    build_status와 auto 모드의 누락 테스트 판정이 공용으로 사용한다.
+    """
+    out_rel = (product.out_tests_rel or "").replace("\\", "/").strip("/")
+    out_root = (root / out_rel).resolve() if out_rel else root.resolve()
+    fail_root, _ = _sibling_roots(out_root) if out_rel else (None, None)
+    return _scan_stem_dir(out_root, root), _scan_stem_dir(fail_root, root)
+
+
 def build_status(root: Path, product: Product) -> list[dict]:
     """프로덕트 체크아웃(root)을 스캔해 대상 파일별 테스트 현황을 만든다.
 
@@ -219,10 +234,9 @@ def build_status(root: Path, product: Product) -> list[dict]:
 
     out_rel = (product.out_tests_rel or "").replace("\\", "/").strip("/")
     out_root = (root / out_rel).resolve() if out_rel else root.resolve()
-    fail_root, log_root = _sibling_roots(out_root) if out_rel else (None, None)
+    _, log_root = _sibling_roots(out_root) if out_rel else (None, None)
 
-    success = _scan_stem_dir(out_root, root)
-    failed = _scan_stem_dir(fail_root, root)
+    success, failed = scan_generated_tests(root, product)
     log_index = _scan_log_index(log_root, root)
 
     status: list[dict] = []
