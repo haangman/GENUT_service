@@ -70,6 +70,97 @@ def test_recent_log_tolerates_non_repo(tmp_path: Path) -> None:
     assert "git log 조회 실패" in out
 
 
+def _head(repo: Path) -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_head_commit_returns_full_hash(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    first = git_ops.head_commit(repo)
+    assert first == _head(repo)
+    assert len(first) == 40
+
+    (repo / "a.txt").write_text("one\ntwo\n", encoding="utf-8")
+    _git(["commit", "-am", "second"], repo)
+    second = git_ops.head_commit(repo)
+    assert second == _head(repo)
+    assert second != first
+
+
+def test_head_commit_non_repo_raises(tmp_path: Path) -> None:
+    with pytest.raises(git_ops.GitError):
+        git_ops.head_commit(tmp_path)
+
+
+def test_changed_files_reports_statuses(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "del.txt").write_text("bye\n", encoding="utf-8")
+    (repo / "src").mkdir()
+    (repo / "src" / "keep.c").write_text("int x;\n", encoding="utf-8")
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "baseline"], repo)
+    old = _head(repo)
+
+    (repo / "a.txt").write_text("one\ntwo\n", encoding="utf-8")  # M
+    (repo / "del.txt").unlink()  # D
+    (repo / "src" / "new.c").write_text("int y;\n", encoding="utf-8")  # A
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "changes"], repo)
+    new = _head(repo)
+
+    changes = git_ops.changed_files(repo, old, new)
+    assert ("M", "a.txt") in changes
+    assert ("D", "del.txt") in changes
+    assert ("A", "src/new.c") in changes  # 경로는 POSIX 구분자
+
+
+def test_changed_files_unknown_commit_raises(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    with pytest.raises(git_ops.GitError):
+        git_ops.changed_files(repo, "0" * 40, "HEAD")
+
+
+def test_diff_new_line_ranges_modified_deleted_added(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    target = repo / "f.c"
+    target.write_text("l1\nl2\nl3\nl4\nl5\n", encoding="utf-8")
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "baseline"], repo)
+    old = _head(repo)
+
+    # l2 수정, l4 삭제(순수 삭제), 끝에 extra 추가
+    target.write_text("l1\nL2\nl3\nl5\nextra\n", encoding="utf-8")
+    _git(["commit", "-am", "edit"], repo)
+    new = _head(repo)
+
+    ranges = git_ops.diff_new_line_ranges(repo, old, new, "f.c")
+    # 수정=(2,2), 순수 삭제는 new-side 직전 라인으로 귀속=(3,3), 추가=(5,5)
+    assert ranges == [(2, 2), (3, 3), (5, 5)]
+
+
+def test_diff_new_line_ranges_multiline_hunk(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    target = repo / "f.c"
+    target.write_text("l1\nl2\nl3\n", encoding="utf-8")
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "baseline"], repo)
+    old = _head(repo)
+
+    # l2를 3줄로 교체 → 한 hunk의 new-side가 (2,4)
+    target.write_text("l1\na\nb\nc\nl3\n", encoding="utf-8")
+    _git(["commit", "-am", "expand"], repo)
+    new = _head(repo)
+
+    assert git_ops.diff_new_line_ranges(repo, old, new, "f.c") == [(2, 4)]
+
+
 def test_git_ops_clone_invokes_on_start_for_cancellation(tmp_path: Path) -> None:
     """on_start가 주어지면 git이 등록 가능한 Popen으로 실행된다(취소 시 kill 대상)."""
     origin = tmp_path / "origin"

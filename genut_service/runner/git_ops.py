@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -135,6 +136,74 @@ def ensure_checkout(
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
     clone(url, ref, dest, timeout=timeout, on_start=on_start)
+
+
+def head_commit(repo_dir: str | Path, timeout: int = 30) -> str:
+    """repo의 현재 HEAD 커밋 해시(full)를 반환한다. 실패 시 GitError."""
+    res = _git(["-C", str(repo_dir), "rev-parse", "HEAD"], timeout=timeout)
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git rev-parse HEAD failed: {detail}")
+    return (res.get("stdout") or "").strip()
+
+
+def changed_files(
+    repo_dir: str | Path, old: str, new: str, timeout: int = 60
+) -> list[tuple[str, str]]:
+    """두 커밋 사이 변경 파일을 [(status, 상대경로)]로 반환한다. 실패 시 GitError.
+
+    status는 `git diff --name-status`의 첫 글자(M/A/D/R/C/...). rename/copy는
+    탭으로 구분된 마지막(=new-side) 경로를 취한다. 경로는 POSIX 구분자다.
+    """
+    res = _git(
+        ["-C", str(repo_dir), "diff", "--name-status", old, new],
+        timeout=timeout,
+    )
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git diff --name-status failed: {detail}")
+    changes: list[tuple[str, str]] = []
+    for line in (res.get("stdout") or "").splitlines():
+        parts = line.rstrip().split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0][:1]
+        changes.append((status, parts[-1]))
+    return changes
+
+
+def diff_new_line_ranges(
+    repo_dir: str | Path, old: str, new: str, rel_path: str, timeout: int = 60
+) -> list[tuple[int, int]]:
+    """한 파일의 두 커밋 간 변경을 new-side 라인 범위(1-based, 양끝 포함)로 반환한다.
+
+    `git diff -U0`의 hunk 헤더 `@@ -a,b +c,d @@`에서 +쪽을 파싱한다. d 생략은 1,
+    d==0(순수 삭제)은 삭제 지점 직전 라인 `(max(c,1), max(c,1))`로 귀속시켜
+    그 지점을 감싼 함수를 변경으로 판정할 수 있게 한다. 실패 시 GitError.
+    """
+    res = _git(
+        ["-C", str(repo_dir), "diff", "-U0", old, new, "--", rel_path],
+        timeout=timeout,
+    )
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git diff -U0 failed: {detail}")
+    ranges: list[tuple[int, int]] = []
+    for line in (res.get("stdout") or "").splitlines():
+        match = _HUNK_RE.match(line)
+        if match is None:
+            continue
+        start = int(match.group(1))
+        count = 1 if match.group(2) is None else int(match.group(2))
+        if count == 0:
+            anchor = max(start, 1)
+            ranges.append((anchor, anchor))
+        else:
+            ranges.append((start, start + count - 1))
+    return ranges
+
+
+_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
 def recent_log(repo_dir: str | Path, count: int = 5, timeout: int = 30) -> str:
