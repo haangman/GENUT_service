@@ -193,7 +193,7 @@ def test_cpp_class_member_definitions_and_ctor_initializer() -> None:
     text = (
         "class Widget {\n"
         "public:\n"
-        "    int inline_method() { return 0; }\n"  # 한계: 클래스 본문 내부는 미검출
+        "    int inline_method() { return 0; }\n"  # 클래스 본문 내부 인라인 멤버도 검출
         "};\n"
         "\n"
         "Widget::Widget() : x_(1), y_(2) {\n"
@@ -204,7 +204,29 @@ def test_cpp_class_member_definitions_and_ctor_initializer() -> None:
         "}\n"
     )
     # Class::method 정의는 method 이름으로 추출된다
-    assert _names(text) == ["Widget", "value"]
+    assert _names(text) == ["inline_method", "Widget", "value"]
+
+
+def test_cpp_class_body_members_are_scanned() -> None:
+    # 클래스/구조체 본문 안: 정의(본문 있는 것)만 검출, 선언/순수가상/멤버 초기화는 제외
+    text = (
+        "class Engine {\n"
+        "public:\n"
+        "    int start() { return 1; }\n"                 # 검출
+        "    virtual int capacity() const = 0;\n"          # 순수 가상 — 비매치
+        "    int declared_only(int rpm);\n"                # 선언 — 비매치
+        "    void (*callback)(int);\n"                     # 함수 포인터 멤버 — 비매치
+        "    Engine() = default;\n"                        # defaulted — 비매치
+        "    struct Inner {\n"
+        "        int run() { return 2; }\n"                # 중첩 타입의 멤버 — 검출
+        "    };\n"
+        "private:\n"
+        "    int rpm_ = compute_default();\n"              # 멤버 초기화 호출 — 비매치
+        "};\n"
+        "\n"
+        "int after_class(void) { return 3; }\n"
+    )
+    assert _names(text) == ["start", "run", "after_class"]
 
 
 def test_cpp_template_and_trailing_return_type() -> None:
