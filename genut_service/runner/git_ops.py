@@ -152,11 +152,17 @@ def changed_files(
 ) -> list[tuple[str, str]]:
     """두 커밋 사이 변경 파일을 [(status, 상대경로)]로 반환한다. 실패 시 GitError.
 
-    status는 `git diff --name-status`의 첫 글자(M/A/D/R/C/...). rename/copy는
-    탭으로 구분된 마지막(=new-side) 경로를 취한다. 경로는 POSIX 구분자다.
+    status는 `git diff --name-status`의 상태 토큰(M/A/D/R<유사도>/...) — 리네임은
+    `R100`(순수)·`R95`(수정 포함)처럼 유사도가 붙는다. rename/copy는 탭으로 구분된
+    마지막(=new-side) 경로를 취한다. 경로는 POSIX 구분자이며, 비ASCII(한글 등)
+    파일명이 8진 이스케이프로 인용되지 않도록 core.quotepath를 끈다.
     """
     res = _git(
-        ["-C", str(repo_dir), "diff", "--name-status", old, new],
+        [
+            "-c", "core.quotepath=false",
+            "-C", str(repo_dir),
+            "diff", "--name-status", old, new,
+        ],
         timeout=timeout,
     )
     if not res["success"]:
@@ -167,8 +173,7 @@ def changed_files(
         parts = line.rstrip().split("\t")
         if len(parts) < 2:
             continue
-        status = parts[0][:1]
-        changes.append((status, parts[-1]))
+        changes.append((parts[0], parts[-1]))
     return changes
 
 
@@ -182,7 +187,11 @@ def diff_new_line_ranges(
     그 지점을 감싼 함수를 변경으로 판정할 수 있게 한다. 실패 시 GitError.
     """
     res = _git(
-        ["-C", str(repo_dir), "diff", "-U0", old, new, "--", rel_path],
+        [
+            "-c", "core.quotepath=false",
+            "-C", str(repo_dir),
+            "diff", "-U0", old, new, "--", rel_path,
+        ],
         timeout=timeout,
     )
     if not res["success"]:

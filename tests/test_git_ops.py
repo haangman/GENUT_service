@@ -125,6 +125,43 @@ def test_changed_files_unknown_commit_raises(tmp_path: Path) -> None:
         git_ops.changed_files(repo, "0" * 40, "HEAD")
 
 
+def test_changed_files_handles_non_ascii_names(tmp_path: Path) -> None:
+    # core.quotepath 기본값(true)이면 한글 파일명이 8진 이스케이프로 인용되어
+    # 경로 매칭이 깨진다 — quotepath를 끄고 원문 경로를 받는지 확인한다.
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "모듈.c").write_text("int one(void) { return 1; }\n", encoding="utf-8")
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "korean file"], repo)
+    old = _head(repo)
+
+    (repo / "모듈.c").write_text("int one(void) { return 11; }\n", encoding="utf-8")
+    _git(["commit", "-am", "edit korean file"], repo)
+
+    changes = git_ops.changed_files(repo, old, _head(repo))
+    assert ("M", "모듈.c") in changes
+
+
+def test_changed_files_reports_rename_with_similarity(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "old_name.c").write_text(
+        "int bbb(void) { return 1; }\nint ccc(void) { return 2; }\n", encoding="utf-8"
+    )
+    _git(["add", "-A"], repo)
+    _git(["commit", "-m", "baseline"], repo)
+    old = _head(repo)
+
+    _git(["mv", "old_name.c", "new_name.c"], repo)
+    _git(["commit", "-m", "rename"], repo)
+
+    changes = git_ops.changed_files(repo, old, _head(repo))
+    assert len(changes) == 1
+    status, path = changes[0]
+    assert status == "R100"  # 순수 리네임은 유사도 100
+    assert path == "new_name.c"  # new-side 경로
+
+
 def test_diff_new_line_ranges_modified_deleted_added(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _init_repo(repo)

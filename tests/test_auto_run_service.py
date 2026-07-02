@@ -491,6 +491,73 @@ def test_diff_changed_function_dedups_pending_job(db_session: Session, tmp_path:
     assert "스킵 1건" in summary
 
 
+def test_diff_registers_git_processes_for_cancellation(
+    db_session: Session, tmp_path: Path
+) -> None:
+    root = _make_git_root(tmp_path)
+    product = _make_product(db_session, root)
+    diff = _prep_job(db_session, product, kind=JobKind.AUTO_DIFF)
+    procs: list[object] = []
+
+    auto_run_service.run_diff_job(
+        db_session, diff, product, _Emit(), on_process=procs.append
+    )
+
+    assert procs  # fetch 등 git 서브프로세스가 등록 콜백에 노출 → 취소 시 즉시 kill 가능
+
+
+def test_diff_pure_rename_creates_no_jobs(db_session: Session, tmp_path: Path) -> None:
+    root = _make_git_root(tmp_path)
+    product = _make_product(db_session, root, auto_file_list=["src/bbb.c"])
+    product.last_scanned_commit = _head(root)
+    db_session.commit()
+
+    _git(["mv", "src/aaa.c", "src/bbb.c"], root)
+    _git_commit_all(root, "pure rename")
+    diff = _prep_job(db_session, product, kind=JobKind.AUTO_DIFF)
+    emit = _Emit()
+
+    auto_run_service.run_diff_job(db_session, diff, product, emit)
+
+    assert _genut_jobs(db_session) == []  # 내용 동일 + stem 기준 테스트 매칭 유지 → 재생성 불필요
+    assert any("순수 리네임" in m for m in emit.messages("info"))
+
+
+def test_diff_rename_with_modification_regenerates_all_functions(
+    db_session: Session, tmp_path: Path
+) -> None:
+    root = _make_git_root(tmp_path)
+    product = _make_product(db_session, root, auto_file_list=["src/bbb.c"])
+    product.last_scanned_commit = _head(root)
+    db_session.commit()
+
+    _git(["mv", "src/aaa.c", "src/bbb.c"], root)
+    (root / "src" / "bbb.c").write_text(
+        AAA_SOURCE.replace("return 2;", "return 22;"), encoding="utf-8"
+    )
+    # 새 경로가 compile db에 잡히도록 갱신(basename 매칭)
+    (root / "build" / "compile_commands.json").write_text(
+        json.dumps(
+            [{"directory": str(root / "build"), "command": "cc -c", "file": str(root / "src" / "bbb.c")}]
+        ),
+        encoding="utf-8",
+    )
+    _git_commit_all(root, "rename with edit")
+    diff = _prep_job(db_session, product, kind=JobKind.AUTO_DIFF)
+    emit = _Emit()
+
+    auto_run_service.run_diff_job(db_session, diff, product, emit)
+
+    # 리네임+수정은 라인 대응이 어려워 파일의 전 함수를 재생성한다
+    jobs = _genut_jobs(db_session)
+    assert [(j.file_list, j.function_name) for j in jobs] == [
+        (["src/bbb.c"], "bbb"),
+        (["src/bbb.c"], "ccc"),
+        (["src/bbb.c"], "ddd"),
+    ]
+    assert any("리네임+수정" in m for m in emit.messages("info"))
+
+
 def test_diff_non_git_code_path_raises_and_keeps_baseline(
     db_session: Session, tmp_path: Path
 ) -> None:

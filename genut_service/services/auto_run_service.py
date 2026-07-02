@@ -266,6 +266,7 @@ def run_diff_job(
     *,
     git_timeout: int = 300,
     should_cancel: Callable[[], bool] | None = None,
+    on_process: Callable[[object], None] | None = None,
 ) -> str:
     """변경 함수 감지 본체. 결과 요약 문자열을 반환한다.
 
@@ -278,10 +279,16 @@ def run_diff_job(
     old = product.last_scanned_commit
 
     # 제자리 갱신: fetch+reset(생성 산출물 폴더는 preserve). fetch 실패는 관용 무시되어
-    # 기존 체크아웃을 그대로 쓴다(→ HEAD 불변이면 "변경 없음").
+    # 기존 체크아웃을 그대로 쓴다(→ HEAD 불변이면 "변경 없음"). on_process로 긴 git
+    # 서브프로세스(fetch/clone)를 강제 종료 레지스트리에 노출한다(취소 즉시 반응).
     preserve = [normalize_rel_path(product.out_tests_rel)] if product.out_tests_rel else []
     git_ops.ensure_checkout(
-        product.git_url, product.git_ref, root, timeout=git_timeout, preserve=preserve
+        product.git_url,
+        product.git_ref,
+        root,
+        timeout=git_timeout,
+        preserve=preserve,
+        on_start=on_process,
     )
     new = git_ops.head_commit(root, timeout=git_timeout)  # 실패(GitError)면 job 실패·기준 유지
 
@@ -319,6 +326,32 @@ def run_diff_job(
         if rel_norm not in auto_set:
             continue
         touched += 1
+        if status.startswith("R"):
+            if status == "R100":
+                # 순수 리네임: 내용이 같고 테스트는 stem(파일명) 기준으로 매칭되므로
+                # 재생성이 필요 없다(경로가 바뀌어도 stem이 같으면 기존 테스트 유효).
+                emit(phase, "info", f"{rel_norm}: 순수 리네임 — job 없음")
+                continue
+            # 수정을 동반한 리네임: 옛 경로와의 라인 대응이 어려우므로 안전하게
+            # 파일의 전 함수를 재생성 대상으로 본다(dedup이 중복을 흡수한다).
+            try:
+                spans = extract_functions_from_file(root / rel_norm)
+            except OSError as exc:
+                emit(phase, "warn", f"소스 읽기 실패 — 스킵: {rel_norm} ({exc})")
+                continue
+            changed_fns = _overlapping_functions(spans, [(1, 1 << 31)])
+            emit(
+                phase,
+                "info",
+                f"{rel_norm}: 리네임+수정({status}) — 전 함수 {len(changed_fns)}개 재생성",
+            )
+            for name in changed_fns:
+                job_created = enqueue_genut_job(
+                    session, product, root, rel_norm, name, emit, phase=phase
+                )
+                created += job_created is not None
+                skipped += job_created is None
+            continue
         if status != "M":
             emit(phase, "info", f"{rel_norm}: 변경 유형 {status} — 누락 스캔에 위임")
             continue
