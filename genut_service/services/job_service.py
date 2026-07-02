@@ -53,6 +53,10 @@ def rerun_job(session: Session, job_id: int) -> Job | None:
         return None
     job = Job(
         product_id=original.product_id,
+        # kind/origin도 복사 — 준비(prep) job의 재수행은 새 queued 준비 job이 되어
+        # 스케줄러 auto 단계가 다시 집어 실행한다.
+        kind=original.kind,
+        origin=original.origin,
         function_name=original.function_name,
         # JSON 컬럼 aliasing 방지를 위해 새 리스트로 복사한다.
         file_list=list(original.file_list or []),

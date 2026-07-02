@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
-from genut_service.enums import JobStatus, WorkerStatus
+from genut_service.enums import JobKind, JobStatus, WorkerStatus
 from genut_service.scheduler.engine import claim_jobs, finish_job
 
 
@@ -158,3 +158,18 @@ def test_disabled_worker_is_not_used(db_session: Session) -> None:
     _worker(db_session, "w1", enabled=False)
     _job(db_session, product.id)
     assert claim_jobs(db_session) == []
+
+
+def test_prep_jobs_are_not_claimed_by_workers(db_session: Session) -> None:
+    # 준비(auto_scan/auto_diff) job은 워커 배정 대상이 아니다 — 스케줄러 auto 단계가 실행한다
+    product = _product(db_session, "P")
+    _worker(db_session, "w1")
+    for kind in (JobKind.AUTO_SCAN, JobKind.AUTO_DIFF):
+        db_session.add(Job(product_id=product.id, kind=kind.value))
+    db_session.commit()
+
+    assert claim_jobs(db_session) == []
+    # GENUT job은 여전히 배정된다
+    genut_job = _job(db_session, product.id)
+    assignments = claim_jobs(db_session)
+    assert [jid for jid, _ in assignments] == [genut_job.id]

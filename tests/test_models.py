@@ -15,7 +15,7 @@ from genut_service.db.models import (
     Product,
     ProductLock,
 )
-from genut_service.enums import JobStatus, WorkerStatus
+from genut_service.enums import JobKind, JobOrigin, JobStatus, WorkerStatus
 
 
 def _make_product(name: str = "demo") -> Product:
@@ -95,10 +95,21 @@ def test_job_defaults_and_events(db_session: Session) -> None:
     loaded = db_session.get(Job, job.id)
     assert loaded is not None
     assert loaded.status == JobStatus.QUEUED.value
+    assert loaded.kind == JobKind.GENUT.value
+    assert loaded.origin == JobOrigin.MANUAL.value
     assert loaded.file_list == []
     assert loaded.excluded_files == []
     assert loaded.attempt == 0
     assert [e.message for e in loaded.events] == ["queued", "assigned"]
+
+
+def test_product_auto_tracking_defaults(db_session: Session) -> None:
+    product = _make_product()
+    db_session.add(product)
+    db_session.commit()
+    db_session.refresh(product)
+    assert product.last_auto_run_at is None
+    assert product.last_scanned_commit is None
 
 
 def test_product_lock_is_exclusive_per_product(db_session: Session) -> None:

@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
-from genut_service.enums import JobStatus, WorkerStatus
+from genut_service.enums import JobKind, JobStatus, WorkerStatus
 from genut_service.scheduler.lock import release_lock, try_acquire_lock
 
 
@@ -50,7 +50,12 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
     candidates = session.execute(
         select(Job, Product.name)
         .join(Product, Product.id == Job.product_id)
-        .where(Job.status == JobStatus.QUEUED.value)
+        # 워커는 GENUT job만 집는다. 준비(auto_scan/auto_diff) job은 스케줄러의
+        # auto 단계가 직접 실행한다.
+        .where(
+            Job.status == JobStatus.QUEUED.value,
+            Job.kind == JobKind.GENUT.value,
+        )
         .order_by(Job.priority.desc(), Job.submitted_at.asc(), Job.id.asc())
     ).all()
 

@@ -24,7 +24,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from genut_service.db.base import Base
-from genut_service.enums import JobStatus, TestGenerationMode, WorkerStatus
+from genut_service.enums import (
+    JobKind,
+    JobOrigin,
+    JobStatus,
+    TestGenerationMode,
+    WorkerStatus,
+)
 
 
 def _utcnow() -> datetime:
@@ -77,6 +83,12 @@ class Product(TimestampMixin, Base):
     auto_file_list: Mapped[list[str]] = mapped_column(JSON, default=list)
     # 파일별 하위 CMakeLists.txt 양식(placeholder `filename`을 파일 stem으로 치환). 비자동은 None.
     cmake_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 마지막 auto 사이클을 큐잉한 시각(주기 도래 판정 기준). None=미실행.
+    last_auto_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # 마지막 변경 감지(diff)의 기준 커밋(HEAD 해시). None=최초 실행 전.
+    last_scanned_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     patches: Mapped[list["Patch"]] = relationship(
         back_populates="product",
@@ -145,6 +157,10 @@ class Job(TimestampMixin, Base):
     )
 
     status: Mapped[str] = mapped_column(String(16), default=JobStatus.QUEUED.value)
+    # 실행 경로 구분: genut(워커 실행) | auto_scan/auto_diff(스케줄러 auto 단계가 실행)
+    kind: Mapped[str] = mapped_column(String(16), default=JobKind.GENUT.value)
+    # 생성 주체 구분: manual(수동 제출) | auto(auto 모드 주기 실행)
+    origin: Mapped[str] = mapped_column(String(16), default=JobOrigin.MANUAL.value)
     function_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # compile-check를 통과해 실제 제출되는 파일들(프로덕트 루트 기준 상대경로)

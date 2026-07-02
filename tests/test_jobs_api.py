@@ -59,6 +59,8 @@ def test_submit_splits_included_excluded(client: TestClient, checkout: Path) -> 
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["status"] == "queued"
+    assert body["kind"] == "genut"
+    assert body["origin"] == "manual"
     assert body["file_list"] == ["src/a.cpp"]
     assert body["excluded_files"] == ["src/b.cpp"]
     assert body["function_name"] == "foo"
@@ -145,9 +147,37 @@ def test_rerun_creates_new_queued_job(
     assert body["file_list"] == original["file_list"] == ["src/a.cpp"]
     assert body["excluded_files"] == original["excluded_files"] == ["src/b.cpp"]
     assert body["function_name"] == "foo"
+    assert body["kind"] == "genut"
+    assert body["origin"] == "manual"
     # 워커/시작시각은 복사하지 않아 스케줄러가 재배정한다
     assert body["genut_instance_id"] is None
     assert body["started_at"] is None
+
+
+def test_rerun_copies_kind_and_origin_for_prep_job(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    """준비(prep) job의 재수행은 kind/origin을 유지한 새 queued job이 된다."""
+    from genut_service.db.models import Job
+    from genut_service.enums import JobKind, JobOrigin, JobStatus
+
+    product_id = _create_product(client)
+    prep = Job(
+        product_id=product_id,
+        kind=JobKind.AUTO_SCAN.value,
+        origin=JobOrigin.AUTO.value,
+        status=JobStatus.DONE.value,
+    )
+    db_session.add(prep)
+    db_session.commit()
+
+    resp = client.post(f"/api/jobs/{prep.id}/rerun")
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["id"] != prep.id
+    assert body["status"] == "queued"
+    assert body["kind"] == "auto_scan"
+    assert body["origin"] == "auto"
 
 
 def test_rerun_missing_job_404(client: TestClient) -> None:
@@ -196,6 +226,8 @@ def test_jobread_serializes_naive_datetime_as_utc() -> None:
         product_id=1,
         genut_instance_id=None,
         status="running",
+        kind="genut",
+        origin="manual",
         function_name=None,
         file_list=[],
         excluded_files=[],

@@ -20,6 +20,8 @@ class JobRead(BaseModel):
     product_id: int
     genut_instance_id: int | None
     status: str
+    kind: str
+    origin: str
     function_name: str | None
     file_list: list[str]
     excluded_files: list[str]
