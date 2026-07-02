@@ -3,6 +3,9 @@
 - run_scan_job(JJ작업): auto_file_list의 각 파일에 대해 성공/실패 테스트 폴더를 확인,
   테스트가 하나도 없는 파일은 파일 단위 GENUT job, 일부만 있으면 누락 함수별 GENUT job을
   큐잉한다.
+- run_diff_job(변경 감지): 코드를 제자리 갱신한 뒤 마지막 스캔 커밋과 HEAD를 diff해,
+  auto_file_list 파일의 수정된 함수마다 GENUT job을 큐잉한다. 기준 커밋은 전 과정이
+  성공했을 때만 전진한다(실패 시 다음 주기에 같은 구간을 재시도).
 - enqueue_genut_job: dedup(동일 파일/함수의 queued/running job이 있으면 스킵)과
   compile_commands 포함 검사를 거쳐 origin='auto' GENUT job을 만든다.
 
@@ -22,8 +25,12 @@ from genut_service import workspace
 from genut_service.db.models import Job, Product
 from genut_service.enums import JobKind, JobOrigin, JobPhase, JobStatus
 from genut_service.paths import normalize_rel_path
+from genut_service.runner import git_ops
 from genut_service.services import compile_db_service, test_status_service
-from genut_service.services.c_function_parser import extract_functions_from_file
+from genut_service.services.c_function_parser import (
+    FunctionSpan,
+    extract_functions_from_file,
+)
 
 # (phase, level, message) — runner/worker.py의 emit과 동일 계약
 EmitFn = Callable[[str, str, str], None]
@@ -232,3 +239,106 @@ def run_scan_job(
             skipped += job_created is None
 
     return f"파일 {len(rels)}개 스캔: job {created}개 생성, 스킵 {skipped}건, 경고 {warned}건"
+
+
+def _overlapping_functions(
+    spans: list[FunctionSpan], ranges: list[tuple[int, int]]
+) -> list[str]:
+    """변경 라인 범위와 겹치는 함수 이름 목록(소스 순서, 중복 제거)."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for span in spans:
+        if span.name.lower() in seen:
+            continue
+        if any(start <= span.end_line and end >= span.start_line for start, end in ranges):
+            seen.add(span.name.lower())
+            names.append(span.name)
+    return names
+
+
+def run_diff_job(
+    session: Session,
+    job: Job,
+    product: Product,
+    emit: EmitFn,
+    *,
+    git_timeout: int = 300,
+    should_cancel: Callable[[], bool] | None = None,
+) -> str:
+    """변경 함수 감지 본체. 결과 요약 문자열을 반환한다.
+
+    코드 제자리 갱신 → 기준 커밋(last_scanned_commit)..HEAD의 diff에서 auto_file_list
+    파일의 수정(M)된 함수를 판정해 함수별 GENUT job을 큐잉한다. 신규(A)/삭제(D)/리네임(R)
+    파일은 누락 스캔(run_scan_job)에 위임한다. 기준 커밋은 전 과정 성공 후에만 전진한다.
+    """
+    phase = JobPhase.DIFF.value
+    root = require_code_root(product)
+    old = product.last_scanned_commit
+
+    # 제자리 갱신: fetch+reset(생성 산출물 폴더는 preserve). fetch 실패는 관용 무시되어
+    # 기존 체크아웃을 그대로 쓴다(→ HEAD 불변이면 "변경 없음").
+    preserve = [normalize_rel_path(product.out_tests_rel)] if product.out_tests_rel else []
+    git_ops.ensure_checkout(
+        product.git_url, product.git_ref, root, timeout=git_timeout, preserve=preserve
+    )
+    new = git_ops.head_commit(root, timeout=git_timeout)  # 실패(GitError)면 job 실패·기준 유지
+
+    if old is None:
+        product.last_scanned_commit = new
+        session.commit()
+        emit(phase, "info", f"최초 실행 — 기준 커밋 기록: {new[:12]}")
+        return f"최초 실행 — 기준 커밋 기록: {new[:12]} (변경 감지 없음)"
+    if old == new:
+        return f"변경 없음 ({new[:12]})"
+
+    try:
+        changes = git_ops.changed_files(root, old, new, timeout=git_timeout)
+    except git_ops.GitError as exc:
+        # 기준 커밋 소실(force-push/gc 등) — HEAD로 재기준하고 정상 종료(영구 실패 루프 방지)
+        emit(phase, "warn", f"기준 커밋 {old[:12]} 조회 실패 — HEAD로 재기준: {exc}")
+        product.last_scanned_commit = new
+        session.commit()
+        return f"기준 커밋 재설정: {old[:12]} → {new[:12]}"
+
+    auto_set = {normalize_rel_path(f) for f in (product.auto_file_list or []) if f}
+    emit(
+        phase,
+        "info",
+        f"{old[:12]}..{new[:12]}: 변경 파일 {len(changes)}개 (대상 파일 {len(auto_set)}개와 대조)",
+    )
+
+    created = 0
+    skipped = 0
+    touched = 0
+    for status, rel in changes:
+        if should_cancel is not None and should_cancel():
+            raise AutoRunCanceled()
+        rel_norm = normalize_rel_path(rel)
+        if rel_norm not in auto_set:
+            continue
+        touched += 1
+        if status != "M":
+            emit(phase, "info", f"{rel_norm}: 변경 유형 {status} — 누락 스캔에 위임")
+            continue
+        ranges = git_ops.diff_new_line_ranges(root, old, new, rel_norm, timeout=git_timeout)
+        try:
+            spans = extract_functions_from_file(root / rel_norm)
+        except OSError as exc:
+            emit(phase, "warn", f"소스 읽기 실패 — 스킵: {rel_norm} ({exc})")
+            continue
+        changed_fns = _overlapping_functions(spans, ranges)
+        if not changed_fns:
+            emit(phase, "info", f"{rel_norm}: 함수 영역 밖 변경 — job 없음")
+            continue
+        emit(phase, "info", f"{rel_norm}: 변경 함수 {len(changed_fns)}개 ({', '.join(changed_fns)})")
+        for name in changed_fns:
+            job_created = enqueue_genut_job(session, product, root, rel_norm, name, emit, phase=phase)
+            created += job_created is not None
+            skipped += job_created is None
+
+    product.last_scanned_commit = new  # ★ 전 과정 성공 후에만 전진
+    session.commit()
+    return (
+        f"{old[:12]}..{new[:12]}: 대상 파일 변경 {touched}건, "
+        f"job {created}개 생성, 스킵 {skipped}건"
+    )
