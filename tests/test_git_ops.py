@@ -209,7 +209,7 @@ def test_git_ops_clone_invokes_on_start_for_cancellation(tmp_path: Path) -> None
 
 
 def test_ensure_checkout_preserve_keeps_staged_output(tmp_path: Path) -> None:
-    """reset --hard는 staged 신규 파일을 지우지만 preserve로 지정한 폴더는 보존된다."""
+    """원격이 전진해 reset이 실행되면 staged 신규 파일은 지워지지만 preserve 폴더는 보존된다."""
     origin = tmp_path / "origin"
     _init_repo(origin)
     (origin / "out").mkdir()
@@ -221,17 +221,36 @@ def test_ensure_checkout_preserve_keeps_staged_output(tmp_path: Path) -> None:
     git_ops.ensure_checkout(str(origin), "main", work)  # 최초 clone
     out = work / "out"
 
-    # 직전 실행이 생성하고 staging까지 한 산출물 모사
+    # 직전 실행이 생성하고 staging까지 한 산출물 모사 + 원격 전진(reset이 실제로 돌게)
     (out / "gen_Test.cpp").write_text("generated\n", encoding="utf-8")
     _git(["add", str(out / "gen_Test.cpp")], work)
+    (origin / "a.txt").write_text("one\ntwo\n", encoding="utf-8")
+    _git(["commit", "-am", "advance 1"], origin)
 
     # preserve 없이 재체크아웃하면 staged 신규 파일은 사라진다(회귀의 근본 원인 입증)
     git_ops.ensure_checkout(str(origin), "main", work)
     assert not (out / "gen_Test.cpp").exists()
 
-    # 다시 생성·staging 후 preserve=["out"]로 재체크아웃하면 보존된다
+    # 다시 생성·staging + 원격 전진 후 preserve=["out"]로 재체크아웃하면 보존된다
     (out / "gen_Test.cpp").write_text("generated\n", encoding="utf-8")
     _git(["add", str(out / "gen_Test.cpp")], work)
+    (origin / "a.txt").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    _git(["commit", "-am", "advance 2"], origin)
     git_ops.ensure_checkout(str(origin), "main", work, preserve=["out"])
     assert (out / "gen_Test.cpp").is_file()  # 생성물 보존
     assert (out / ".gitkeep").is_file()  # 커밋 baseline 도 유지
+    assert (work / "a.txt").read_text(encoding="utf-8") == "one\ntwo\nthree\n"  # 코드는 최신화
+
+
+def test_ensure_checkout_skips_reset_when_up_to_date(tmp_path: Path) -> None:
+    """원격 변경이 없으면 reset·preserve 백업(트리 2회 복사)을 통째로 생략한다."""
+    origin = tmp_path / "origin"
+    _init_repo(origin)
+    work = tmp_path / "work"
+    git_ops.ensure_checkout(str(origin), "main", work)
+
+    # staged 신규 파일이 있어도, 원격이 그대로면 reset이 생략되어 그대로 남는다
+    (work / "gen_Test.cpp").write_text("generated\n", encoding="utf-8")
+    _git(["add", "gen_Test.cpp"], work)
+    git_ops.ensure_checkout(str(origin), "main", work)
+    assert (work / "gen_Test.cpp").is_file()

@@ -112,7 +112,11 @@ def ensure_checkout(
 ) -> None:
     """dest에 repo를 제자리 업데이트하거나(없으면) clone한다.
 
-    - `dest/.git`이 있으면 `fetch origin` + `reset --hard origin/<ref>`로 추적 파일을 최신화한다.
+    - `dest/.git`이 있으면 `fetch origin` 후, **HEAD가 이미 원격과 같으면 reset을
+      생략**한다 — reset 전후의 preserve 백업/복원이 트리 전체 복사 2회라, 생성 테스트가
+      누적된 out 폴더에서는 이 생략이 실행/사이클당 I/O를 크게 줄인다(이미 적용된 patch
+      등 작업 트리 상태도 그대로 유지된다).
+    - 변경이 있으면 `reset --hard origin/<ref>`로 추적 파일을 최신화한다.
       `git clean`을 하지 않으므로 **순수 untracked 파일은 보존**되지만, `reset --hard`는
       **staged(인덱스에 add된) 신규 파일을 삭제**한다. 따라서 생성 산출물(예: 테스트 출력
       폴더)이 GENUT 통합 과정에서 staged 되면 다음 실행의 reset에서 사라질 수 있다.
@@ -125,9 +129,18 @@ def ensure_checkout(
     if (dest / ".git").is_dir():
         fetch = _git(["-C", str(dest), "fetch", "origin"], timeout=timeout, on_start=on_start)
         if fetch["returncode"] == 0:
+            target = f"origin/{ref}" if ref else "@{u}"
+            local = _git(["-C", str(dest), "rev-parse", "HEAD"], timeout=timeout)
+            remote = _git(["-C", str(dest), "rev-parse", target], timeout=timeout)
+            if (
+                local["success"]
+                and remote["success"]
+                and local["stdout"].strip() == remote["stdout"].strip()
+            ):
+                return  # 이미 최신 — reset·preserve 백업/복원 생략
             saved = _backup_preserved(dest, preserve)
             _git(
-                ["-C", str(dest), "reset", "--hard", f"origin/{ref}" if ref else "@{u}"],
+                ["-C", str(dest), "reset", "--hard", target],
                 timeout=timeout,
                 on_start=on_start,
             )
