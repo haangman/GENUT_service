@@ -68,11 +68,13 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
         )
     )
 
+    # 후보는 최소 컬럼(id, 이름)만 조회한다 — 매초 도는 핫패스에서 큐 전체의
+    # JSON/TEXT 컬럼(file_list, error 등)까지 역직렬화하지 않도록.
+    # 워커는 GENUT job만 집는다. 준비(auto_scan/auto_diff) job은 스케줄러의
+    # auto 단계가 직접 실행한다.
     candidates = session.execute(
-        select(Job, Product.name)
+        select(Job.id, Product.name)
         .join(Product, Product.id == Job.product_id)
-        # 워커는 GENUT job만 집는다. 준비(auto_scan/auto_diff) job은 스케줄러의
-        # auto 단계가 직접 실행한다.
         .where(
             Job.status == JobStatus.QUEUED.value,
             Job.kind == JobKind.GENUT.value,
@@ -80,25 +82,35 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
         .order_by(Job.priority.desc(), Job.submitted_at.asc(), Job.id.asc())
     ).all()
 
-    # 락이 없는 이름부터, 같은 이름당 1개씩만 후보로 뽑는다
-    eligible: list[Job] = []
+    # 락이 없는 이름부터, 같은 이름당 1개씩 — idle 워커 수에 도달하면 중단
+    eligible_ids: list[int] = []
     seen_names = set(busy_names)
-    for job, name in candidates:
+    for job_id, name in candidates:
         if name in seen_names:
             continue
         seen_names.add(name)
-        eligible.append(job)
+        eligible_ids.append(job_id)
+        if len(eligible_ids) >= len(idle_workers):
+            break
 
     assignments: list[tuple[int, int]] = []
-    for worker, job in zip(idle_workers, eligible):
-        if not try_acquire_lock(session, job.product_id, job.id, worker.id):
-            continue
-        job.status = JobStatus.RUNNING.value
-        job.genut_instance_id = worker.id
-        job.started_at = _utcnow()
-        worker.worker_status = WorkerStatus.BUSY.value
-        worker.current_job_id = job.id
-        assignments.append((job.id, worker.id))
+    if eligible_ids:
+        jobs_by_id = {
+            job.id: job
+            for job in session.scalars(select(Job).where(Job.id.in_(eligible_ids)))
+        }
+        for worker, job_id in zip(idle_workers, eligible_ids):
+            job = jobs_by_id.get(job_id)
+            if job is None:
+                continue
+            if not try_acquire_lock(session, job.product_id, job.id, worker.id):
+                continue
+            job.status = JobStatus.RUNNING.value
+            job.genut_instance_id = worker.id
+            job.started_at = _utcnow()
+            worker.worker_status = WorkerStatus.BUSY.value
+            worker.current_job_id = job.id
+            assignments.append((job.id, worker.id))
 
     session.commit()
     return assignments
