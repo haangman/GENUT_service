@@ -60,13 +60,36 @@ class Scheduler:
         with self._session_factory() as session:
             auto_tick.process_prep_job(session, job_id)
 
+    # ── tick의 DB 작업들. 이벤트 루프가 아니라 to_thread에서 실행한다 ──
+    # 워커 스레드들의 commit과 경합하면 SQLite busy 대기(최대 busy_timeout)로 각
+    # statement가 블로킹될 수 있는데, 이벤트 루프에서 직접 돌리면 그 동안 모든 API
+    # 응답이 함께 멈춘다. 호출은 순차 await이므로 단일 writer 전제는 유지된다.
+
+    def _claim_tick(self) -> list[tuple[int, int]]:
+        with self._session_factory() as session:
+            return claim_jobs(session)
+
+    def _auto_run_tick(self) -> list[int]:
+        with self._session_factory() as session:
+            auto_tick.enqueue_due_cycles(session)
+            return auto_tick.claim_prep_jobs(session)
+
+    def _sweep_tick(self) -> None:
+        from genut_service.scheduler.janitor import reap_stuck_jobs, release_stale_locks
+
+        with self._session_factory() as session:
+            release_stale_locks(session)
+            reap_stuck_jobs(session, self._stuck_timeout)
+
+    def _purge_tick(self) -> None:
+        from genut_service.config import get_settings
+        from genut_service.scheduler.janitor import purge_old_job_events
+
+        with self._session_factory() as session:
+            purge_old_job_events(session, get_settings().job_event_retention_days)
+
     async def _loop(self) -> None:
         assert self._stop is not None
-        from genut_service.scheduler.janitor import (
-            purge_old_job_events,
-            reap_stuck_jobs,
-            release_stale_locks,
-        )
 
         running: set[asyncio.Task] = set()
         # 약 30초마다 안전망 sweep을 돈다(tick 간격 기준 환산).
@@ -78,17 +101,14 @@ class Scheduler:
             try:
                 # 매 tick마다 idle 워커만큼 배정하고, 완료를 기다리지 않고 즉시 디스패치한다.
                 # (배치 전체 완료를 기다리지 않으므로 워커가 비는 즉시 다음 job을 잡아 롤링 병렬)
-                with self._session_factory() as session:
-                    assignments = claim_jobs(session)
+                assignments = await asyncio.to_thread(self._claim_tick)
                 for job_id, _ in assignments:
                     task = asyncio.create_task(asyncio.to_thread(self._run_one, job_id))
                     running.add(task)
                     task.add_done_callback(running.discard)
                 # auto 모드: 주기 도래 사이클 큐잉 + 준비(prep) job 디스패치.
                 # 준비 job도 스레드에서 돌려 tick을 막지 않는다(git 갱신이 느릴 수 있음).
-                with self._session_factory() as session:
-                    auto_tick.enqueue_due_cycles(session)
-                    prep_ids = auto_tick.claim_prep_jobs(session)
+                prep_ids = await asyncio.to_thread(self._auto_run_tick)
                 for job_id in prep_ids:
                     task = asyncio.create_task(asyncio.to_thread(self._run_prep, job_id))
                     running.add(task)
@@ -96,16 +116,9 @@ class Scheduler:
                 # 주기적 안전망: 누수된 락 해제 + 상한 초과로 고착된 job 회수(워커 사망 등).
                 tick += 1
                 if tick % sweep_every == 0:
-                    with self._session_factory() as session:
-                        release_stale_locks(session)
-                        reap_stuck_jobs(session, self._stuck_timeout)
+                    await asyncio.to_thread(self._sweep_tick)
                 if tick % purge_every == 0:
-                    from genut_service.config import get_settings
-
-                    with self._session_factory() as session:
-                        purge_old_job_events(
-                            session, get_settings().job_event_retention_days
-                        )
+                    await asyncio.to_thread(self._purge_tick)
             except Exception:  # noqa: BLE001 - 루프는 어떤 오류에도 죽지 않는다
                 pass
             try:
