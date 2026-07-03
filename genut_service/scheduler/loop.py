@@ -45,7 +45,11 @@ class Scheduler:
 
             s = get_settings()
             # 정상 job의 최대 실행 시간보다 넉넉히 큰 상한 — 이를 넘기면 고착으로 보고 회수한다.
-            stuck_timeout = s.genut_run_timeout + s.git_timeout * 5 + 300
+            # genut_run_timeout×3: venv 생성 + pip install + 본 실행이 각각 별도 타임아웃.
+            # git_timeout×12: product/GENUT/ASSURE의 fetch·reset·clone·log + 패치 여유분.
+            # (패치 수는 무제한이라 정적 상한이 완전하지 않다 — reap_stuck_jobs가 살아있는
+            #  서브프로세스를 가진 job은 회수하지 않으므로 이 상한은 죽은 워커용 안전망이다.)
+            stuck_timeout = s.genut_run_timeout * 3 + s.git_timeout * 12 + 600
         self._stuck_timeout = stuck_timeout
 
     def _run_one(self, job_id: int) -> None:

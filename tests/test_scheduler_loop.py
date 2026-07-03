@@ -78,3 +78,13 @@ def test_scheduler_runs_jobs_concurrently(tmp_path: Path) -> None:
         )
     assert done == 3
     engine.dispose()
+
+
+def test_default_stuck_timeout_covers_normal_worst_case() -> None:
+    """워치독 상한은 정상 job의 합법적 최악 소요(venv 생성+pip install+본 실행 각
+    genut_run_timeout + git 작업들)보다 커야 한다 — 작으면 살아있는 job을 오회수한다."""
+    from genut_service.config import get_settings
+
+    s = get_settings()
+    scheduler = Scheduler(session_factory=None)
+    assert scheduler._stuck_timeout > 3 * s.genut_run_timeout + 6 * s.git_timeout

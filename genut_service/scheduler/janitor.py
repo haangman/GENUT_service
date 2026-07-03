@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, ProductLock
 from genut_service.enums import INFLIGHT_STATUSES, TERMINAL_STATUSES, JobStatus, WorkerStatus
+from genut_service.runner import process_registry
 from genut_service.scheduler.engine import finish_job
 
 _TERMINAL = {status.value for status in TERMINAL_STATUSES}
@@ -21,6 +22,11 @@ def reap_stuck_jobs(session: Session, max_runtime_seconds: float) -> int:
     **주기적 안전망**이다. 정상 job은 자신의 타임아웃(genut_run_timeout/git_timeout) 안에
     끝나므로, 이 상한을 넘긴 건 워커 스레드가 finish 없이 사라져 고착된 경우로 본다. FAILED로
     종료하고 락/워커를 회수한다. 상한은 정상 장기 job을 잘못 죽이지 않도록 넉넉히 잡는다.
+
+    단, 그 job의 서브프로세스가 아직 레지스트리에 살아 있으면 **느린 정상 실행**으로 보고
+    회수하지 않는다 — 살아있는 워커를 회수하면 락이 조기 해제되어 같은 프로덕트에 다른
+    job이 배정되고, 같은 체크아웃에서 실행이 겹치는 경합이 생기기 때문이다(각 서브프로세스는
+    자기 타임아웃으로 언젠가 끝난다).
     """
     now = datetime.now(timezone.utc)
     stuck_ids: list[int] = []
@@ -31,6 +37,8 @@ def reap_stuck_jobs(session: Session, max_runtime_seconds: float) -> int:
         if started.tzinfo is None:  # SQLite 등에서 naive로 돌아오면 UTC로 간주
             started = started.replace(tzinfo=timezone.utc)
         if (now - started).total_seconds() > max_runtime_seconds:
+            if process_registry.has_process(job.id):
+                continue  # 서브프로세스 생존 → 죽은 워커가 아니라 느린 실행
             stuck_ids.append(job.id)
     for job_id in stuck_ids:
         finish_job(

@@ -164,3 +164,38 @@ def test_reap_stuck_jobs_recovers_overlong_running(db_session: Session) -> None:
     assert db_session.get(Job, fresh.id).status == JobStatus.RUNNING.value  # 최근 건은 보존
     assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 0
     assert db_session.get(GenutInstance, worker.id).worker_status == WorkerStatus.IDLE.value
+
+
+def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
+    """서브프로세스가 살아 등록된 job은 느린 정상 실행으로 보고 회수하지 않는다."""
+    from datetime import datetime, timedelta, timezone
+
+    from genut_service.runner import process_registry
+
+    product = _product(db_session)
+    job = Job(
+        product_id=product.id,
+        status=JobStatus.RUNNING.value,
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=10_000),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    class _FakeProc:
+        pid = None
+
+        def terminate(self) -> None: ...
+        def kill(self) -> None: ...
+
+    process_registry.register(job.id, _FakeProc())
+    try:
+        assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 0  # 생존 → 회수 금지
+        db_session.expire_all()
+        assert db_session.get(Job, job.id).status == JobStatus.RUNNING.value
+    finally:
+        process_registry.unregister(job.id)
+
+    # 서브프로세스가 사라지면(등록 해제) 죽은 워커로 보고 회수한다
+    assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 1
+    db_session.expire_all()
+    assert db_session.get(Job, job.id).status == JobStatus.FAILED.value
