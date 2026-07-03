@@ -8,7 +8,7 @@ from genut_service.db.models import GenutInstance, Product
 
 
 def build_env(product: Product, genut: GenutInstance) -> dict[str, str]:
-    """.env 키 매핑: DS_ASSIST_*는 GENUT 인스턴스, 나머지는 프로덕트."""
+    """.env 키 매핑: DS_ASSIST_*·LLM_MODEL은 GENUT 인스턴스, 나머지는 프로덕트."""
     return {
         "TEST_GENERATION_MODE": product.test_generation_mode,
         "DS_ASSIST_CREDENTIAL_KEY": genut.ds_assist_credential_key,
@@ -17,6 +17,8 @@ def build_env(product: Product, genut: GenutInstance) -> dict[str, str]:
         "CMAKE_CONFIGURE_CMD": product.cmake_configure_cmd,
         "CMAKE_BUILD_CMD": product.cmake_build_cmd,
         "TEST_RUN_CMD": product.test_run_cmd,
+        # ORM 기본값은 flush 시점에 적용되므로, 미저장 인스턴스도 기본값으로 폴백한다
+        "LLM_MODEL": genut.llm_model or "gptOss",
     }
 
 

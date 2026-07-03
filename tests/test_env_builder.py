@@ -40,3 +40,16 @@ def test_build_env_includes_user_id() -> None:
 def test_build_env_user_id_none_becomes_empty() -> None:
     env = build_env(_product(), _genut(None))
     assert env["DS_ASSIST_USER_ID"] == ""
+
+
+def test_build_env_includes_llm_model_default() -> None:
+    # 미저장 인스턴스(ORM 기본값 미적용)도 기본 gptOss로 폴백한다
+    env = build_env(_product(), _genut("userX"))
+    assert env["LLM_MODEL"] == "gptOss"
+
+
+def test_build_env_includes_selected_llm_model() -> None:
+    genut = _genut("userX")
+    genut.llm_model = "SSCR_SE"
+    env = build_env(_product(), genut)
+    assert env["LLM_MODEL"] == "SSCR_SE"

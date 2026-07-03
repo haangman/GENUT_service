@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> None:
                 "DS_ASSIST_SEND_SYSTEM_NAME",
                 "DS_ASSIST_USER_ID",
                 "TEST_RUN_CMD",
+                "LLM_MODEL",
             )
         },
         "file_list_seen": file_list,

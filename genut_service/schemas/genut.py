@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from genut_service.paths import normalize_code_path
+
+# GENUT가 사용할 LLM 모델 선택지 (.env의 LLM_MODEL 값)
+LlmModelName = Literal["gptOss", "SSCR_SE"]
 
 
 def _norm_code_path(value: str | None) -> str | None:
@@ -30,6 +35,7 @@ class GenutBase(BaseModel):
     ds_assist_user_id: str | None = None
     max_attempts: int = Field(default=10, ge=1)
     run_command: str = "python -m genut"
+    llm_model: LlmModelName = "gptOss"
     enabled: bool = True
     code_path: str | None = None
 
@@ -59,6 +65,7 @@ class GenutUpdate(BaseModel):
     ds_assist_credential_key: str | None = None
     max_attempts: int | None = Field(default=None, ge=1)
     run_command: str | None = None
+    llm_model: LlmModelName | None = None
     enabled: bool | None = None
     code_path: str | None = None
 

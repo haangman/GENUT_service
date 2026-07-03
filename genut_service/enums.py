@@ -51,6 +51,13 @@ class JobOrigin(StrEnum):
 PREP_KINDS: frozenset[JobKind] = frozenset({JobKind.AUTO_SCAN, JobKind.AUTO_DIFF})
 
 
+class LlmModel(StrEnum):
+    """GENUT가 사용할 LLM 모델 (.env의 LLM_MODEL 값)."""
+
+    GPT_OSS = "gptOss"
+    SSCR_SE = "SSCR_SE"
+
+
 class WorkerStatus(StrEnum):
     """GENUT 인스턴스(=워커) 상태."""
 

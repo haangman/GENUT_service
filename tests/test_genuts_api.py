@@ -97,6 +97,29 @@ def test_assure_repo_url_round_trip(client: TestClient) -> None:
     )
 
 
+def test_llm_model_defaults_to_gpt_oss(client: TestClient) -> None:
+    body = client.post("/api/genuts", json=_payload("llm-default")).json()
+    assert body["llm_model"] == "gptOss"
+
+
+def test_llm_model_round_trip_and_update(client: TestClient, db_session: Session) -> None:
+    body = client.post("/api/genuts", json=_payload("llm", llm_model="SSCR_SE")).json()
+    assert body["llm_model"] == "SSCR_SE"
+
+    gid = body["id"]
+    resp = client.put(f"/api/genuts/{gid}", json={"llm_model": "gptOss"})
+    assert resp.status_code == 200
+    assert resp.json()["llm_model"] == "gptOss"
+    db_session.expire_all()
+    assert db_session.get(GenutInstance, gid).llm_model == "gptOss"
+
+
+def test_llm_model_rejects_unknown_value(client: TestClient) -> None:
+    # 허용된 선택지(gptOss | SSCR_SE) 밖의 값은 422
+    resp = client.post("/api/genuts", json=_payload("llm-bad", llm_model="gpt4"))
+    assert resp.status_code == 422
+
+
 def test_list_and_delete(client: TestClient) -> None:
     genut_id = client.post("/api/genuts", json=_payload()).json()["id"]
     listing = client.get("/api/genuts")
