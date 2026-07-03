@@ -128,6 +128,16 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
           </label>
           <input id="run_command" className={inputClass} {...register('run_command')} />
         </div>
+
+        <div>
+          <label htmlFor="llm_model" className="label">
+            LLM_MODEL (.env로 전달)
+          </label>
+          <select id="llm_model" className={inputClass} {...register('llm_model')}>
+            <option value="gptOss">gptOss</option>
+            <option value="SSCR_SE">SSCR_SE</option>
+          </select>
+        </div>
       </div>
 
       <button type="submit" disabled={submitting} className="btn btn-primary px-5">

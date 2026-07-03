@@ -44,6 +44,9 @@ export interface Product {
   patches: Patch[]
 }
 
+// GENUT가 사용할 LLM 모델 (.env의 LLM_MODEL 값)
+export type LlmModel = 'gptOss' | 'SSCR_SE'
+
 export interface Genut {
   id: number
   name: string
@@ -54,6 +57,7 @@ export interface Genut {
   ds_assist_user_id: string | null
   max_attempts: number
   run_command: string
+  llm_model: LlmModel
   enabled: boolean
   code_path: string | null
   worker_status: string
@@ -70,6 +74,7 @@ export interface GenutCreate {
   ds_assist_user_id?: string
   max_attempts: number
   run_command: string
+  llm_model?: LlmModel
   enabled: boolean
   code_path?: string
 }

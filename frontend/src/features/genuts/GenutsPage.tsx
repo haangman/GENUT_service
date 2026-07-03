@@ -17,6 +17,7 @@ function toFormValues(genut: Genut): Partial<GenutFormValues> {
     ds_assist_send_system_name: genut.ds_assist_send_system_name,
     max_attempts: genut.max_attempts,
     run_command: genut.run_command,
+    llm_model: genut.llm_model ?? 'gptOss',
     code_path: genut.code_path ?? '',
   }
 }
@@ -116,6 +117,7 @@ export function GenutsPage() {
               <th className="px-4 py-3">이름</th>
               <th className="px-4 py-3">repo</th>
               <th className="px-4 py-3">시스템</th>
+              <th className="px-4 py-3">LLM</th>
               <th className="px-4 py-3">max</th>
               <th className="px-4 py-3">상태</th>
               <th className="px-4 py-3"></th>
@@ -127,6 +129,7 @@ export function GenutsPage() {
                 <td className="px-4 py-3 font-medium text-fg">{genut.name}</td>
                 <td className="max-w-[260px] truncate px-4 py-3 text-muted">{genut.repo_url}</td>
                 <td className="px-4 py-3 text-muted">{genut.ds_assist_send_system_name}</td>
+                <td className="px-4 py-3 text-muted">{genut.llm_model ?? 'gptOss'}</td>
                 <td className="px-4 py-3 text-muted">{genut.max_attempts}</td>
                 <td className="px-4 py-3">
                   <span

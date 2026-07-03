@@ -14,6 +14,7 @@ const VALID: GenutFormValues = {
   ds_assist_send_system_name: 'sys-A',
   max_attempts: 10,
   run_command: 'python -m genut',
+  llm_model: 'gptOss',
   code_path: '',
 }
 
@@ -46,5 +47,17 @@ describe('GenutForm', () => {
   it('renders the ASSURE repo URL input', () => {
     render(<GenutForm onSubmit={vi.fn()} />)
     expect(screen.getByLabelText('ASSURE repo URL (선택)')).toBeInTheDocument()
+  })
+
+  it('LLM_MODEL 선택은 기본 gptOss이고 SSCR_SE로 바꿔 제출할 수 있다', async () => {
+    const onSubmit = vi.fn()
+    render(<GenutForm onSubmit={onSubmit} defaultValues={VALID} />)
+    const select = screen.getByLabelText('LLM_MODEL (.env로 전달)') as HTMLSelectElement
+    expect(select.value).toBe('gptOss') // 기본값
+
+    await userEvent.selectOptions(select, 'SSCR_SE')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].llm_model).toBe('SSCR_SE')
   })
 })

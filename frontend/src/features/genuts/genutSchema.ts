@@ -10,6 +10,7 @@ export const genutFormSchema = z.object({
   ds_assist_send_system_name: z.string().min(1, '시스템 이름을 입력하세요'),
   max_attempts: z.coerce.number().int().min(1, '1 이상이어야 합니다'),
   run_command: z.string().min(1, '실행 명령을 입력하세요'),
+  llm_model: z.enum(['gptOss', 'SSCR_SE']),
   code_path: z.string(),
 })
 
@@ -30,5 +31,6 @@ export const EMPTY_GENUT_FORM: GenutFormValues = {
   ds_assist_send_system_name: '',
   max_attempts: 10,
   run_command: 'python -m genut',
+  llm_model: 'gptOss',
   code_path: '',
 }
