@@ -16,6 +16,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -149,6 +150,13 @@ class Job(TimestampMixin, Base):
     """테스트 생성 요청 1건."""
 
     __tablename__ = "jobs"
+    # 핫패스 인덱스: 스케줄러 1초 틱의 claim(status,kind)·배타 조회(product_id,status),
+    # 이력 폴링의 origin 필터. SQLite는 FK에 자동 인덱스를 만들지 않는다.
+    __table_args__ = (
+        Index("ix_jobs_status_kind", "status", "kind"),
+        Index("ix_jobs_product_status", "product_id", "status"),
+        Index("ix_jobs_origin", "origin"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
@@ -197,6 +205,8 @@ class JobEvent(Base):
     """job 타임라인/로그(append-only). 대용량 stdout/stderr를 message에 담는다."""
 
     __tablename__ = "job_events"
+    # 로그 증분 폴링(WHERE job_id=? AND id>?)이 1.5초마다 도는 핫패스 — 복합 인덱스 필수
+    __table_args__ = (Index("ix_job_events_job_id_id", "job_id", "id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))

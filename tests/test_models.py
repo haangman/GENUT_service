@@ -103,6 +103,17 @@ def test_job_defaults_and_events(db_session: Session) -> None:
     assert [e.message for e in loaded.events] == ["queued", "assigned"]
 
 
+def test_hot_path_indexes_exist(db_engine) -> None:
+    """스케줄러 틱·폴링 핫패스 컬럼에 인덱스가 존재한다(이력 증가에 따른 풀스캔 방지)."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(db_engine)
+    job_indexes = {ix["name"] for ix in inspector.get_indexes("jobs")}
+    assert {"ix_jobs_status_kind", "ix_jobs_product_status", "ix_jobs_origin"} <= job_indexes
+    event_indexes = {ix["name"] for ix in inspector.get_indexes("job_events")}
+    assert "ix_job_events_job_id_id" in event_indexes
+
+
 def test_product_auto_tracking_defaults(db_session: Session) -> None:
     product = _make_product()
     db_session.add(product)
