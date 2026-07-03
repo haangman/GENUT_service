@@ -65,35 +65,55 @@ def require_code_root(product: Product) -> Path:
     return workspace.ensure_product_checkout(product)
 
 
-def find_pending_genut_job(
-    session: Session,
-    product_id: int,
-    rel_file: str,
-    function_name: str | None = None,
-    *,
-    any_function: bool = False,
-) -> Job | None:
-    """이번 요청을 대체할 수 있는 queued/running GENUT job을 찾는다(없으면 None).
+class EnqueueContext:
+    """스캔/diff 1회 동안 재사용하는 큐잉 컨텍스트.
 
-    - any_function=True(파일 단위 dedup): 그 파일을 포함한 어떤 pending job이든 매치.
-    - 함수 단위: 같은 함수의 job, 또는 그 파일의 파일 단위(function_name 없음) job이
-      매치한다 — 파일 단위 job은 모든 함수를 생성하므로 함수 job을 대체한다.
-
-    file_list는 JSON 컬럼이라 파이썬에서 비교한다(pending job 수는 작다).
+    함수 1건을 큐잉할 때마다 compile_commands.json을 재파싱하고 pending job 전건을
+    다시 읽으면 누락 함수 K개의 첫 사이클이 O(K²)가 된다. 스캔 시작 시 (1) compile DB와
+    (2) queued/running GENUT job의 (파일, 함수) 인덱스를 한 번만 만들어 O(K)로 줄인다.
     """
-    stmt = select(Job).where(
-        Job.product_id == product_id,
-        Job.kind == JobKind.GENUT.value,
-        Job.status.in_(_PENDING_STATUSES),
-    )
-    for job in session.scalars(stmt):
-        if rel_file not in (job.file_list or []):
-            continue
+
+    def __init__(self, session: Session, product: Product, root: Path) -> None:
+        rels, bases = compile_db_service.load_compile_db(root, product.compile_db_rel)
+        self._compdb_rels = rels
+        self._compdb_bases = bases
+        # 파일(정규화 상대경로) → {함수명(None=파일 단위): job id}. 새 큐잉도 여기 반영한다.
+        self._pending: dict[str, dict[str | None, int]] = {}
+        stmt = select(Job).where(
+            Job.product_id == product.id,
+            Job.kind == JobKind.GENUT.value,
+            Job.status.in_(_PENDING_STATUSES),
+        )
+        for job in session.scalars(stmt):
+            for rel in job.file_list or []:
+                self._pending.setdefault(normalize_rel_path(rel), {}).setdefault(
+                    job.function_name, job.id
+                )
+
+    def in_compile_db(self, rel: str) -> bool:
+        """split_inclusion과 동일 규칙: 정규화 상대경로 일치 또는 basename 일치."""
+        return rel in self._compdb_rels or Path(rel).name in self._compdb_bases
+
+    def pending_job_id(
+        self, rel: str, function_name: str | None, *, any_function: bool = False
+    ) -> int | None:
+        """이번 요청을 대체할 수 있는 pending job의 id를 찾는다(없으면 None).
+
+        - any_function=True(파일 단위 dedup): 그 파일의 어떤 pending job이든 매치.
+        - 함수 단위: 같은 함수의 job, 또는 그 파일의 파일 단위(None) job이 매치한다 —
+          파일 단위 job은 모든 함수를 생성하므로 함수 job을 대체한다.
+        """
+        functions = self._pending.get(rel)
+        if not functions:
+            return None
         if any_function:
-            return job
-        if job.function_name is None or job.function_name == function_name:
-            return job
-    return None
+            return next(iter(functions.values()))
+        if None in functions:
+            return functions[None]
+        return functions.get(function_name)
+
+    def note_enqueued(self, rel: str, function_name: str | None, job_id: int) -> None:
+        self._pending.setdefault(rel, {}).setdefault(function_name, job_id)
 
 
 def enqueue_genut_job(
@@ -105,23 +125,24 @@ def enqueue_genut_job(
     emit: EmitFn,
     *,
     phase: str = JobPhase.SCAN.value,
+    ctx: EnqueueContext | None = None,
 ) -> Job | None:
     """origin='auto' GENUT job을 큐잉한다. dedup/컴파일DB 미포함이면 스킵하고 None.
 
     파일 단위 요청(function_name=None)은 그 파일의 어떤 pending job과도 중복으로 본다.
+    여러 건을 큐잉할 때는 ctx(EnqueueContext)를 공유해 재파싱/재조회를 피한다.
     """
+    if ctx is None:
+        ctx = EnqueueContext(session, product, root)
     rel = normalize_rel_path(rel_file)
     label = f"{rel}::{function_name}" if function_name else rel
 
-    pending = find_pending_genut_job(
-        session, product.id, rel, function_name, any_function=function_name is None
-    )
-    if pending is not None:
-        emit(phase, "info", f"스킵(중복): {label} — 대기/실행 중 job #{pending.id}")
+    pending_id = ctx.pending_job_id(rel, function_name, any_function=function_name is None)
+    if pending_id is not None:
+        emit(phase, "info", f"스킵(중복): {label} — 대기/실행 중 job #{pending_id}")
         return None
 
-    included, _ = compile_db_service.split_inclusion(root, product.compile_db_rel, [rel])
-    if not included:
+    if not ctx.in_compile_db(rel):
         emit(phase, "warn", f"스킵(컴파일DB 미포함): {label}")
         return None
 
@@ -131,12 +152,13 @@ def enqueue_genut_job(
         origin=JobOrigin.AUTO.value,
         function_name=function_name or None,
         # JSON 컬럼 aliasing 방지를 위해 항상 새 리스트로 만든다
-        file_list=list(included),
+        file_list=[rel],
         excluded_files=[],
         status=JobStatus.QUEUED.value,
     )
     session.add(job)
     session.commit()
+    ctx.note_enqueued(rel, function_name, job.id)
     kind_label = f"함수 {function_name}" if function_name else "파일 전체"
     emit(phase, "info", f"job #{job.id} 큐잉: {rel} ({kind_label})")
     return job
@@ -186,6 +208,7 @@ def run_scan_job(
         f"스캔 시작: 대상 {len(rels)}개, 성공 폴더 stem {len(success)}개, "
         f"실패 폴더 stem {len(failed)}개",
     )
+    ctx = EnqueueContext(session, product, root)  # compile DB·pending 인덱스 1회 구성
 
     created = 0
     skipped = 0
@@ -198,7 +221,9 @@ def run_scan_job(
 
         if not existing:
             # 성공/실패 어느 쪽에도 테스트가 없다 → 파일 단위 생성
-            job_created = enqueue_genut_job(session, product, root, rel, None, emit, phase=phase)
+            job_created = enqueue_genut_job(
+                session, product, root, rel, None, emit, phase=phase, ctx=ctx
+            )
             created += job_created is not None
             skipped += job_created is None
             continue
@@ -236,7 +261,9 @@ def run_scan_job(
             f"(테스트 파일 성공 {len(success.get(stem, []))}·실패 {len(failed.get(stem, []))})",
         )
         for name in missing:
-            job_created = enqueue_genut_job(session, product, root, rel, name, emit, phase=phase)
+            job_created = enqueue_genut_job(
+                session, product, root, rel, name, emit, phase=phase, ctx=ctx
+            )
             created += job_created is not None
             skipped += job_created is None
 
@@ -315,6 +342,7 @@ def run_diff_job(
         "info",
         f"{old[:12]}..{new[:12]}: 변경 파일 {len(changes)}개 (대상 파일 {len(auto_set)}개와 대조)",
     )
+    ctx = EnqueueContext(session, product, root)  # compile DB·pending 인덱스 1회 구성
 
     created = 0
     skipped = 0
@@ -347,7 +375,7 @@ def run_diff_job(
             )
             for name in changed_fns:
                 job_created = enqueue_genut_job(
-                    session, product, root, rel_norm, name, emit, phase=phase
+                    session, product, root, rel_norm, name, emit, phase=phase, ctx=ctx
                 )
                 created += job_created is not None
                 skipped += job_created is None
@@ -367,7 +395,9 @@ def run_diff_job(
             continue
         emit(phase, "info", f"{rel_norm}: 변경 함수 {len(changed_fns)}개 ({', '.join(changed_fns)})")
         for name in changed_fns:
-            job_created = enqueue_genut_job(session, product, root, rel_norm, name, emit, phase=phase)
+            job_created = enqueue_genut_job(
+                session, product, root, rel_norm, name, emit, phase=phase, ctx=ctx
+            )
             created += job_created is not None
             skipped += job_created is None
 

@@ -135,20 +135,21 @@ def test_enqueue_respects_interval(db_session: Session) -> None:
 def test_enqueue_skips_while_previous_cycle_pending(db_session: Session) -> None:
     product = _auto_product(db_session)
     auto_tick.enqueue_due_cycles(db_session)
-    first_stamp = product.last_auto_run_at
 
     # 주기를 강제로 도래시켜도, 이전 사이클 준비 job이 비종료면 스킵
-    product.last_auto_run_at = _now() - timedelta(seconds=999)
+    forced_past = _now() - timedelta(seconds=999)
+    product.last_auto_run_at = forced_past
     db_session.commit()
     assert auto_tick.enqueue_due_cycles(db_session) == []
     assert len(_jobs(db_session)) == 2
 
-    # 이전 사이클을 종료시키면 새 사이클이 큐잉된다
+    # 이전 사이클을 종료시키면 새 사이클이 큐잉되고 시각이 현재로 갱신된다
+    # (시계 해상도가 낮은 환경에서도 결정적이도록 강제 과거값과 비교한다)
     for job in _jobs(db_session):
         job.status = JobStatus.DONE.value
     db_session.commit()
     assert len(auto_tick.enqueue_due_cycles(db_session)) == 2
-    assert product.last_auto_run_at != first_stamp
+    assert product.last_auto_run_at > forced_past
 
 
 def test_enqueue_skips_non_auto_inactive_and_no_interval(db_session: Session) -> None:

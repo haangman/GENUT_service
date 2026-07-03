@@ -293,6 +293,34 @@ def test_scan_cancellation_raises(db_session: Session, tmp_path: Path) -> None:
         )
 
 
+def test_scan_loads_compile_db_once_for_many_enqueues(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """누락 함수가 K개여도 compile_commands.json은 스캔당 1회만 파싱한다(O(K) 보장)."""
+    from genut_service.services import compile_db_service
+
+    root = _make_root(tmp_path)
+    _write_test_file(root, "unittests", "aaa", "zzz_Test.cpp")  # 일부 커버 → 함수 단위 경로
+    product = _make_product(db_session, root)
+
+    calls: list[int] = []
+    original = compile_db_service.load_compile_db
+
+    def counting(*args, **kwargs):  # noqa: ANN001
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        auto_run_service.compile_db_service, "load_compile_db", counting
+    )
+    scan = _prep_job(db_session, product)
+
+    summary = auto_run_service.run_scan_job(db_session, scan, product, _Emit())
+
+    assert "job 3개 생성" in summary  # bbb/ccc/ddd 모두 누락 → 3건 큐잉
+    assert len(calls) == 1  # 큐잉 건수와 무관하게 1회 로드
+
+
 # ---------------------------------------------------------------------------
 # 변경 함수 감지 (run_diff_job)
 # ---------------------------------------------------------------------------
