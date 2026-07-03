@@ -19,6 +19,9 @@ class JobRead(BaseModel):
     id: int
     product_id: int
     genut_instance_id: int | None
+    # 배정된 GENUT 인스턴스 이름(미배정이면 None) — 이력 화면에서 어떤 GENUT이
+    # 실행했는지 표시하는 용도
+    genut_name: str | None = None
     status: str
     kind: str
     origin: str

@@ -86,6 +86,32 @@ def test_get_missing_job_404(client: TestClient) -> None:
     assert client.get("/api/jobs/9999").status_code == 404
 
 
+def test_job_read_exposes_assigned_genut_name(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    from genut_service.db.models import GenutInstance, Job
+
+    product_id = _create_product(client)
+    job_id = client.post(
+        "/api/jobs", json={"product_id": product_id, "files": ["src/a.cpp"]}
+    ).json()["id"]
+    # 미배정 상태에서는 이름이 없다
+    assert client.get(f"/api/jobs/{job_id}").json()["genut_name"] is None
+
+    genut = GenutInstance(
+        name="GENUT1",
+        repo_url="u",
+        ds_assist_credential_key="k",
+        ds_assist_send_system_name="s",
+    )
+    db_session.add(genut)
+    db_session.flush()
+    db_session.get(Job, job_id).genut_instance_id = genut.id
+    db_session.commit()
+
+    assert client.get(f"/api/jobs/{job_id}").json()["genut_name"] == "GENUT1"
+
+
 def test_list_jobs_filters_by_origin_and_kind(
     client: TestClient, checkout: Path, db_session: Session
 ) -> None:
