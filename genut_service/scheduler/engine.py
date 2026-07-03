@@ -15,10 +15,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genut_service.db.models import GenutInstance, Job, Product, ProductLock
-from genut_service.enums import PREP_KINDS, JobKind, JobStatus, WorkerStatus
+from genut_service.enums import (
+    PREP_KINDS,
+    TERMINAL_STATUSES,
+    JobKind,
+    JobStatus,
+    WorkerStatus,
+)
 from genut_service.scheduler.lock import release_lock, try_acquire_lock
 
 _PREP_KIND_VALUES = tuple(kind.value for kind in PREP_KINDS)
+_TERMINAL_VALUES = frozenset(status.value for status in TERMINAL_STATUSES)
 
 
 def _utcnow() -> datetime:
@@ -108,6 +115,11 @@ def finish_job(
     job = session.get(Job, job_id)
     if job is None:
         return
+    # 이미 종료된 job이면 no-op — 워치독(reap_stuck_jobs)이 회수한 job의 워커
+    # 스레드가 뒤늦게 완료돼 호출해도 상태를 뒤집거나(FAILED→DONE) 그 사이 다른
+    # job이 새로 획득한 락을 건드리지 않는다.
+    if job.status in _TERMINAL_VALUES:
+        return
     job.status = status.value
     job.finished_at = _utcnow()
     if result_summary is not None:
@@ -115,7 +127,8 @@ def finish_job(
     if error is not None:
         job.error = error
 
-    release_lock(session, job.product_id)
+    # 이 job이 소유한 락만 해제한다(늦은 종료 처리로부터 남의 락 보호)
+    release_lock(session, job.product_id, job_id=job.id)
 
     if job.genut_instance_id is not None:
         worker = session.get(GenutInstance, job.genut_instance_id)

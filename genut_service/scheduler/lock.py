@@ -23,8 +23,16 @@ def try_acquire_lock(
     return True
 
 
-def release_lock(session: Session, product_id: int) -> None:
-    """프로덕트 락을 해제한다(없으면 무시)."""
+def release_lock(session: Session, product_id: int, job_id: int | None = None) -> None:
+    """프로덕트 락을 해제한다(없으면 무시).
+
+    job_id가 주어지면 **그 job이 소유한 락일 때만** 지운다 — 워치독에 회수된 job의
+    워커 스레드가 뒤늦게 종료 처리를 호출해도, 그 사이 다른 job이 새로 획득한 락을
+    지우지 못하게 한다("한 프로덕트 동시 1개" 불변식 보호).
+    """
     lock = session.get(ProductLock, product_id)
-    if lock is not None:
-        session.delete(lock)
+    if lock is None:
+        return
+    if job_id is not None and lock.job_id != job_id:
+        return
+    session.delete(lock)

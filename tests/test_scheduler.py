@@ -160,6 +160,55 @@ def test_disabled_worker_is_not_used(db_session: Session) -> None:
     assert claim_jobs(db_session) == []
 
 
+def test_finish_job_is_noop_on_terminal_job(db_session: Session) -> None:
+    """워치독 회수 후 뒤늦게 도착한 워커의 종료 처리가 상태·락을 건드리지 않는다."""
+    product = _product(db_session, "P")
+    _worker(db_session, "w1")
+    job1 = _job(db_session, product.id)
+    assert [jid for jid, _ in claim_jobs(db_session)] == [job1.id]
+
+    # 워치독이 J1을 FAILED로 회수(락 해제·워커 idle)한 상황 모사
+    finish_job(db_session, job1.id, JobStatus.FAILED, error="watchdog")
+    # 같은 프로덕트의 J2가 새로 배정되어 새 락을 소유한다
+    job2 = _job(db_session, product.id)
+    assert [jid for jid, _ in claim_jobs(db_session)] == [job2.id]
+
+    # J1의 워커 스레드가 뒤늦게 완료를 보고해도 no-op이어야 한다
+    finish_job(db_session, job1.id, JobStatus.DONE, result_summary="late finish")
+    db_session.expire_all()
+    assert db_session.get(Job, job1.id).status == JobStatus.FAILED.value  # 안 뒤집힘
+    assert db_session.get(Job, job1.id).result_summary is None
+    assert db_session.get(ProductLock, product.id) is not None  # J2의 락 보존
+
+    # 락이 살아 있으므로 같은 프로덕트의 J3는 동시 배정되지 않는다(배타 불변식 유지)
+    _worker(db_session, "w2")
+    _job(db_session, product.id)
+    assert claim_jobs(db_session) == []
+
+
+def test_release_lock_requires_ownership(db_session: Session) -> None:
+    from genut_service.scheduler.lock import release_lock
+
+    product = _product(db_session, "P")
+    worker = _worker(db_session, "w1")
+    owner = _job(db_session, product.id)
+    other = _job(db_session, product.id)
+    db_session.add(
+        ProductLock(product_id=product.id, job_id=owner.id, genut_instance_id=worker.id)
+    )
+    db_session.commit()
+
+    # 소유자가 아닌 job_id로는 해제되지 않는다
+    release_lock(db_session, product.id, job_id=other.id)
+    db_session.commit()
+    assert db_session.get(ProductLock, product.id) is not None
+
+    # 소유자 job_id로는 해제된다
+    release_lock(db_session, product.id, job_id=owner.id)
+    db_session.commit()
+    assert db_session.get(ProductLock, product.id) is None
+
+
 def test_prep_jobs_are_not_claimed_by_workers(db_session: Session) -> None:
     # 준비(auto_scan/auto_diff) job은 워커 배정 대상이 아니다 — 스케줄러 auto 단계가 실행한다
     product = _product(db_session, "P")
