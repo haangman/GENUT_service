@@ -62,11 +62,17 @@ class Scheduler:
 
     async def _loop(self) -> None:
         assert self._stop is not None
-        from genut_service.scheduler.janitor import reap_stuck_jobs, release_stale_locks
+        from genut_service.scheduler.janitor import (
+            purge_old_job_events,
+            reap_stuck_jobs,
+            release_stale_locks,
+        )
 
         running: set[asyncio.Task] = set()
         # 약 30초마다 안전망 sweep을 돈다(tick 간격 기준 환산).
         sweep_every = max(1, round(30.0 / max(self._interval, 0.1)))
+        # 약 1시간마다 오래된 job 이벤트 로그를 정리한다(무한 증가 방지).
+        purge_every = max(1, round(3600.0 / max(self._interval, 0.1)))
         tick = 0
         while not self._stop.is_set():
             try:
@@ -93,6 +99,13 @@ class Scheduler:
                     with self._session_factory() as session:
                         release_stale_locks(session)
                         reap_stuck_jobs(session, self._stuck_timeout)
+                if tick % purge_every == 0:
+                    from genut_service.config import get_settings
+
+                    with self._session_factory() as session:
+                        purge_old_job_events(
+                            session, get_settings().job_event_retention_days
+                        )
             except Exception:  # noqa: BLE001 - 루프는 어떤 오류에도 죽지 않는다
                 pass
             try:

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from genut_service.db.models import GenutInstance, Job, ProductLock
+from genut_service.db.models import GenutInstance, Job, JobEvent, ProductLock
 from genut_service.enums import INFLIGHT_STATUSES, TERMINAL_STATUSES, JobStatus, WorkerStatus
 from genut_service.runner import process_registry
 from genut_service.scheduler.engine import finish_job
@@ -68,6 +68,30 @@ def mark_interrupted_jobs(session: Session) -> int:
         count += 1
     session.commit()
     return count
+
+
+def purge_old_job_events(session: Session, retention_days: int) -> int:
+    """보존 기간을 넘긴 **종료된** job의 이벤트 로그를 삭제한다. 삭제 행 수 반환.
+
+    JobEvent는 GENUT 출력 한 줄당 1행(append-only)이라 정리 없이는 무한 증가해
+    로그 폴링·백업 비용을 계속 키운다. 전체 로그는 job.log 파일로 남아 다운로드는
+    계속 동작한다. retention_days <= 0이면 아무것도 하지 않는다.
+    """
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    old_jobs = (
+        select(Job.id)
+        .where(
+            Job.status.in_(_TERMINAL),
+            Job.finished_at.is_not(None),
+            Job.finished_at < cutoff,
+        )
+        .scalar_subquery()
+    )
+    result = session.execute(delete(JobEvent).where(JobEvent.job_id.in_(old_jobs)))
+    session.commit()
+    return int(result.rowcount or 0)
 
 
 def release_stale_locks(session: Session) -> int:

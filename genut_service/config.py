@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # 스케줄러 tick 간격(초)
     scheduler_interval: float = 1.0
 
+    # 종료된 job의 이벤트 로그(JobEvent) 보존 기간(일). 0 이하 = 정리 안 함.
+    # 이벤트는 GENUT 출력 한 줄당 1행이라 정리 없이는 무한 증가한다.
+    # (전체 로그는 job.log 파일로 남으므로 다운로드는 계속 가능하다.)
+    job_event_retention_days: int = 14
+
     # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
     scheduler_autostart: bool = True
 

@@ -199,3 +199,43 @@ def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
     assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 1
     db_session.expire_all()
     assert db_session.get(Job, job.id).status == JobStatus.FAILED.value
+
+
+def test_purge_old_job_events_removes_only_old_terminal(db_session: Session) -> None:
+    """보존 기간을 넘긴 종료 job의 이벤트만 삭제된다(최근·실행 중 job은 보존)."""
+    from datetime import datetime, timedelta, timezone
+
+    from genut_service.db.models import JobEvent
+    from genut_service.scheduler.janitor import purge_old_job_events
+
+    product = _product(db_session)
+    old_done = Job(
+        product_id=product.id,
+        status=JobStatus.DONE.value,
+        finished_at=datetime.now(timezone.utc) - timedelta(days=20),
+    )
+    recent_done = Job(
+        product_id=product.id,
+        status=JobStatus.DONE.value,
+        finished_at=datetime.now(timezone.utc),
+    )
+    running = Job(product_id=product.id, status=JobStatus.RUNNING.value)
+    db_session.add_all([old_done, recent_done, running])
+    db_session.flush()
+    db_session.add_all(
+        [
+            JobEvent(job_id=old_done.id, message="old-1"),
+            JobEvent(job_id=old_done.id, message="old-2"),
+            JobEvent(job_id=recent_done.id, message="recent"),
+            JobEvent(job_id=running.id, message="live"),
+        ]
+    )
+    db_session.commit()
+
+    assert purge_old_job_events(db_session, retention_days=14) == 2
+    remaining = [e.message for e in db_session.scalars(select(JobEvent))]
+    assert sorted(remaining) == ["live", "recent"]
+
+    # retention_days <= 0 이면 비활성(아무것도 지우지 않는다)
+    assert purge_old_job_events(db_session, retention_days=0) == 0
+    assert db_session.scalar(select(func.count()).select_from(JobEvent)) == 2
