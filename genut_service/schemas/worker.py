@@ -22,3 +22,5 @@ class QueueItem(BaseModel):
     product_id: int
     submitted_at: UtcDatetime
     waiting_on_product: bool
+    # 생성 주체(manual|auto) — 큐 뷰에서 수동 제출과 auto 생성 job을 구분한다
+    origin: str

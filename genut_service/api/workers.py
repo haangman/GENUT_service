@@ -25,6 +25,7 @@ def list_queue(session: Session = Depends(get_session)) -> list[QueueItem]:
             product_id=job.product_id,
             submitted_at=job.submitted_at,
             waiting_on_product=waiting,
+            origin=job.origin,
         )
         for job, waiting in monitoring_service.list_queue(session)
     ]

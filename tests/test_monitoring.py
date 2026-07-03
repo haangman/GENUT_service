@@ -85,6 +85,22 @@ def test_queue_excludes_prep_jobs(client: TestClient, db_session: Session) -> No
     assert len(body) == 1  # 준비(auto_scan/auto_diff) job은 워커 큐 뷰에서 제외
 
 
+def test_queue_exposes_job_origin(client: TestClient, db_session: Session) -> None:
+    from genut_service.enums import JobOrigin
+
+    product = _product(db_session)
+    db_session.add_all(
+        [
+            Job(product_id=product.id),  # 수동 제출(기본 manual)
+            Job(product_id=product.id, origin=JobOrigin.AUTO.value),
+        ]
+    )
+    db_session.commit()
+
+    body = client.get("/api/queue").json()
+    assert [item["origin"] for item in body] == ["manual", "auto"]
+
+
 def test_janitor_releases_terminal_lock_and_resets_worker(db_session: Session) -> None:
     product = _product(db_session)
     worker = _worker(db_session)
