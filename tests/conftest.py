@@ -36,6 +36,23 @@ def _disable_venv_by_default() -> Iterator[None]:
     settings.genut_use_venv = original
 
 
+@pytest.fixture(autouse=True)
+def _disable_test_status_cache_by_default() -> Iterator[None]:
+    """테스트 기본값: 테스트 현황 요약 캐시 비활성(테스트 간 결과 오염 방지).
+
+    캐시 동작을 검증하는 테스트는 설정을 직접 켠다(끝나면 캐시도 비운다).
+    """
+    from genut_service.api.test_status import clear_summary_cache
+
+    settings = get_settings()
+    original = settings.test_status_cache_ttl
+    settings.test_status_cache_ttl = 0.0
+    clear_summary_cache()
+    yield
+    settings.test_status_cache_ttl = original
+    clear_summary_cache()
+
+
 @pytest.fixture
 def db_engine() -> Iterator[Engine]:
     """격리된 인메모리 SQLite 엔진. FK 강제(PRAGMA foreign_keys=ON) 활성."""

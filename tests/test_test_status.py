@@ -480,3 +480,36 @@ def test_test_status_file_rejects_outside_allowed_404(
         params={"code": "P-1", "path": "src/calc.c"},
     )
     assert resp.status_code == 404
+
+
+def test_summary_is_cached_within_ttl_and_invalidated_on_product_change(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """요약은 TTL 동안 캐시되고(스캔 1회), 프로덕트 목록이 바뀌면 즉시 무효화된다."""
+    from genut_service.api import test_status as ts_api
+    from genut_service.config import get_settings
+
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="cached", code="C-1")
+
+    scans: list[int] = []
+    original = ts_api._scan_pairs
+
+    def counting(products):  # noqa: ANN001
+        scans.append(1)
+        return original(products)
+
+    monkeypatch.setattr(ts_api, "_scan_pairs", counting)
+    get_settings().test_status_cache_ttl = 60.0  # 이 테스트만 캐시 활성(autouse가 복원)
+
+    first = client.get("/api/test-status").json()
+    second = client.get("/api/test-status").json()
+    assert second == first
+    assert len(scans) == 1  # TTL 안의 두 번째 요청은 캐시로 응답(재스캔 없음)
+
+    # 프로덕트 목록 변경(신규 등록) → 지문이 달라져 즉시 재스캔
+    # (_scan_pairs는 이름 그룹당 1회 — 이제 이름이 2개라 2회 추가된다)
+    _create_product(client, name="cached-2", code="C-2")
+    client.get("/api/test-status")
+    assert len(scans) == 3

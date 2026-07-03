@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # (전체 로그는 job.log 파일로 남으므로 다운로드는 계속 가능하다.)
     job_event_retention_days: int = 14
 
+    # 테스트 현황 요약(GET /api/test-status) 캐시 TTL(초). 0 이하 = 캐시 안 함.
+    # 요약은 전체 프로덕트의 체크아웃 파일시스템 풀스캔이라, 짧은 TTL로 반복 요청을
+    # 흡수한다(그 사이 생성된 테스트는 최대 TTL만큼 늦게 보인다).
+    test_status_cache_ttl: float = 30.0
+
     # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
     scheduler_autostart: bool = True
 

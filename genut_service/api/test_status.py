@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import get_session
+from genut_service.config import get_settings
 from genut_service.db.models import Product
 from genut_service.paths import PathValidationError, normalize_rel_path
 from genut_service.schemas.test_status import (
@@ -28,6 +30,16 @@ from genut_service.schemas.test_status import (
 from genut_service.services import test_status_service
 
 router = APIRouter(prefix="/api/test-status", tags=["test-status"])
+
+# 요약 캐시. 요약은 등록 프로덕트 전체의 체크아웃 파일시스템 풀스캔이라 요청 1건이
+# 무겁다 — 짧은 TTL로 폴링/중복 요청을 흡수한다. 프로덕트 목록이 바뀌면(등록/수정)
+# 지문(fingerprint)이 달라져 즉시 무효화되고, 파일시스템 변화만은 최대 TTL만큼 늦게 보인다.
+_summary_cache: dict = {"key": None, "expires": 0.0, "value": None}
+
+
+def clear_summary_cache() -> None:
+    """요약 캐시 초기화(테스트/수동 무효화용)."""
+    _summary_cache.update(key=None, expires=0.0, value=None)
 
 
 def _scan_pairs(products: list[Product]) -> list[tuple[str, list[dict]]]:
@@ -52,6 +64,13 @@ def get_test_status_summary(
 ) -> list[NameTestSummary]:
     """이름으로 묶은 테스트 현황 요약. 같은 이름의 변이는 합집합으로 합산한다."""
     products = session.scalars(select(Product).order_by(Product.id)).all()
+
+    ttl = get_settings().test_status_cache_ttl
+    cache_key = tuple((p.id, str(p.updated_at)) for p in products)
+    now = time.monotonic()
+    if ttl > 0 and _summary_cache["key"] == cache_key and now < _summary_cache["expires"]:
+        return _summary_cache["value"]
+
     # 이름별 그룹(등록 순서 보존)
     groups: dict[str, list[Product]] = {}
     for product in products:
@@ -72,6 +91,8 @@ def get_test_status_summary(
                 total_fail_count=sum(row["fail_count"] for row in merged),
             )
         )
+    if ttl > 0:
+        _summary_cache.update(key=cache_key, expires=now + ttl, value=out)
     return out
 
 
