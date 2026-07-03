@@ -104,6 +104,8 @@ export interface Job {
   id: number
   product_id: number
   genut_instance_id: number | null
+  // 배정된 GENUT 인스턴스 이름(미배정이면 null) — 이력 화면 표시용
+  genut_name: string | null
   status: string
   kind: JobKind
   origin: JobOrigin

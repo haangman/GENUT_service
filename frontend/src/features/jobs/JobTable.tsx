@@ -13,15 +13,18 @@ import {
 } from './jobFormat'
 
 // job 이력 테이블: 행 클릭 → 바로 아래에 로그 패널 전개, 실행 중 job은 강제 종료 버튼.
-// 모니터링(Job 이력)과 자동 실행 이력 페이지가 공용으로 사용한다.
-// showKind: 종류(GENUT/JJ 스캔/변경 감지) badge 컬럼을 추가한다(자동 실행 이력 전용).
+// 수동/자동 실행 이력 페이지가 공용으로 사용한다.
+// showKind: 종류(GENUT 이름/JJ 스캔/변경 감지) badge 컬럼을 추가한다(자동 실행 이력 전용).
+// showProduct: product 컬럼 표시 여부 — 프로덕트별로 이미 그룹된 화면에서는 끈다.
 export function JobTable({
   jobs,
   showKind = false,
+  showProduct = true,
   emptyMessage,
 }: {
   jobs: Job[]
   showKind?: boolean
+  showProduct?: boolean
   emptyMessage?: string
 }) {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
@@ -50,27 +53,30 @@ export function JobTable({
   if (jobs.length === 0 && emptyMessage) {
     return <p className="text-sm text-subtle">{emptyMessage}</p>
   }
+  const columnCount = 8 + (showProduct ? 1 : 0) + (showKind ? 1 : 0)
   return (
     <div className="card overflow-x-auto">
       {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
-          min-w로 좁은 화면에선 위 overflow-x-auto가 전체 좌우 스크롤을 제공한다. */}
-      <table className={`w-full ${showKind ? 'min-w-[1220px]' : 'min-w-[1120px]'} table-fixed text-sm`}>
+          결과 컬럼만 폭을 지정하지 않아 남는 공간을 차지하며 줄바꿈으로 전체 내용을 보여준다.
+          min-w-[1120px]는 본문 컨테이너(max-w-6xl) 안에 맞아 데스크톱에서는 좌우 스크롤 없이
+          우측의 강제 종료 버튼까지 보인다(좁은 화면은 overflow-x-auto가 스크롤 제공). */}
+      <table className="w-full min-w-[1120px] table-fixed text-sm">
         <colgroup>
           <col className="w-[56px]" />
-          <col className="w-[84px]" />
+          {showProduct ? <col className="w-[84px]" /> : null}
           {showKind ? <col className="w-[100px]" /> : null}
           <col className="w-[96px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
           <col className="w-[150px]" />
-          <col className="w-[180px]" />
+          <col />
           <col className="w-[80px]" />
         </colgroup>
         <thead>
           <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5">#</th>
-            <th className="px-3 py-2.5">product</th>
+            {showProduct ? <th className="px-3 py-2.5">product</th> : null}
             {showKind ? <th className="px-3 py-2.5">종류</th> : null}
             <th className="px-3 py-2.5">상태</th>
             <th className="px-3 py-2.5">제출 시각</th>
@@ -91,10 +97,12 @@ export function JobTable({
                 onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
               >
                 <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
-                <td className="px-3 py-2.5 text-muted">{job.product_id}</td>
+                {showProduct ? (
+                  <td className="px-3 py-2.5 text-muted">{job.product_id}</td>
+                ) : null}
                 {showKind ? (
                   <td className="px-3 py-2.5">
-                    <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job.kind)}</span>
+                    <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job)}</span>
                   </td>
                 ) : null}
                 <td className="px-3 py-2.5">
@@ -104,7 +112,8 @@ export function JobTable({
                 <td className={cell}>{formatDateTime(job.started_at)}</td>
                 <td className={cell}>{formatDateTime(job.finished_at)}</td>
                 <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
-                <td className="truncate px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
+                {/* 결과는 잘라내지 않고 줄바꿈으로 전체를 보여준다 */}
+                <td className="break-words px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
                 <td className="px-3 py-2.5 text-right">
                   {job.status === 'running' ? (
                     <button
@@ -123,7 +132,7 @@ export function JobTable({
               </tr>
               {selectedJobId === job.id ? (
                 <tr className="bg-surface-2">
-                  <td colSpan={showKind ? 10 : 9} className="border-t border-border p-3">
+                  <td colSpan={columnCount} className="border-t border-border p-3">
                     <JobLogs jobId={job.id} status={job.status} />
                   </td>
                 </tr>

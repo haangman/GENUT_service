@@ -86,8 +86,10 @@ export function JobLogs({
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted">
-        <span className="mr-auto font-medium">
+      {/* 버튼은 제목 바로 옆(왼쪽 정렬)에 둔다 — 우측 정렬이면 테이블이 화면보다 넓을 때
+          좌우 스크롤 밖으로 밀려 보이지 않는다 */}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="font-medium">
           job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
         </span>
         <button type="button" onClick={handleSave} className="btn btn-sm">
