@@ -74,8 +74,13 @@ def test_pipeline_reaches_done(
     done = db_session.get(Job, job.id)
     assert done.status == JobStatus.DONE.value
     assert done.result_summary is not None
-    # 생성된 테스트 파일이 실제로 디스크에 존재
-    assert glob.glob(str(workspace / f"job_{job.id}" / "product" / "tests" / "generated" / "test_*"))
+    # 종료 후 워크스페이스는 정리된다: 진행 로그(job.log)만 보존, clone 등은 삭제
+    # (job당 clone/.venv가 무한 누적되어 디스크를 고갈시키는 것을 막는다.
+    #  생성 테스트를 영속 보존하려면 code_path를 지정한다 — 아래 테스트 참조.)
+    job_root = workspace / f"job_{job.id}"
+    assert (job_root / "job.log").is_file()
+    assert not (job_root / "product").exists()
+    assert not (job_root / "filelist.txt").exists()
 
 
 def test_pipeline_persistent_code_path_preserves_generated(

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
 from collections.abc import Callable
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -36,6 +40,37 @@ def _force_finish_failed(
     except Exception:  # noqa: BLE001
         pass
 
+
+
+def _cleanup_job_workspace(job_id: int) -> None:
+    """job 워크스페이스(_workspaces/job_{id})에서 진행 로그(job.log)만 남기고 정리한다.
+
+    job마다 만들어지는 프로덕트/GENUT clone·.venv·filelist는 정리하지 않으면
+    (특히 auto 모드의 함수 단위 job으로) 무한 누적되어 디스크를 고갈시킨다.
+    job.log는 로그 다운로드 API가 계속 사용하므로 보존한다. 정리 실패는 무시한다
+    (파일 잠금 등 — job 결과에 영향을 주지 않는다).
+    """
+    root = Path(get_settings().workspace_root) / f"job_{job_id}"
+    if not root.is_dir():
+        return
+
+    def _grant_write(func, path, _exc):  # noqa: ANN001 - Windows: git 객체 등 읽기 전용 해제
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass
+
+    for entry in root.iterdir():
+        try:
+            if entry.name == "job.log":
+                continue
+            if entry.is_dir():
+                shutil.rmtree(entry, onexc=_grant_write)
+            else:
+                entry.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def process_job(
@@ -151,3 +186,9 @@ def process_job(
     except Exception as finish_exc:  # noqa: BLE001 - 종료 처리 자체 실패 시 최후 폴백
         fallback = JobStatus.CANCELED if canceled else JobStatus.FAILED
         _force_finish_failed(session, job_id, f"종료 처리 실패: {finish_exc}", fallback)
+
+    # 종료 후 워크스페이스 정리(로그만 보존) — 실패해도 job 결과에는 영향 없다
+    try:
+        _cleanup_job_workspace(job_id)
+    except Exception:  # noqa: BLE001
+        pass
