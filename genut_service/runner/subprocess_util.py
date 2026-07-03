@@ -45,33 +45,48 @@ def run(
     timeout: int = 600,
     env: dict | None = None,
 ) -> dict:
-    """argv를 실행하고 {success, returncode, stdout, stderr}를 반환한다."""
+    """argv를 실행하고 {success, returncode, stdout, stderr}를 반환한다.
+
+    타임아웃 시 kill_tree로 **프로세스 트리 전체**를 종료한다 — 부모만 죽이면
+    빌드/컴파일러 같은 손자 프로세스가 살아남아 CPU를 소비하고, 락이 해제된 뒤
+    같은 체크아웃에 접근하는 다음 job과 경합하기 때문이다.
+    """
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             argv,
             cwd=cwd,
             env=env,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=timeout,
+            # 새 세션/프로세스 그룹으로 띄워 kill_tree가 자식까지 통째로 종료할 수 있게 한다
+            start_new_session=True,
         )
-        return {
-            "success": result.returncode == 0,
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        }
-    except subprocess.TimeoutExpired as exc:
+    except FileNotFoundError as exc:
+        return {"success": False, "returncode": None, "stdout": "", "stderr": str(exc)}
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_tree(proc)
+        try:
+            # 트리가 죽으면 파이프가 닫혀 곧 반환된다(그동안 모인 출력 수거)
+            stdout, _stderr = proc.communicate(timeout=10)
+        except Exception:  # noqa: BLE001 - 수거 실패는 무시(이미 실패 처리)
+            stdout = ""
         return {
             "success": False,
             "returncode": None,
-            "stdout": exc.stdout or "",
+            "stdout": stdout or "",
             "stderr": f"timeout after {timeout}s",
         }
-    except FileNotFoundError as exc:
-        return {"success": False, "returncode": None, "stdout": "", "stderr": str(exc)}
+    return {
+        "success": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
 
 
 def run_streaming(
@@ -130,8 +145,13 @@ def run_streaming(
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+        # 트리 전체 종료 — 부모만 죽이면 손자(빌드/컴파일러)가 살아남아 파이프를 쥐고
+        # reader 스레드도 함께 잔존한다.
+        kill_tree(proc)
+        try:
+            proc.wait(timeout=10)
+        except Exception:  # noqa: BLE001
+            pass
         reader.join(timeout=2)
         return {
             "success": False,
