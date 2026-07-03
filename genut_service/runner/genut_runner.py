@@ -9,6 +9,7 @@ CLI 실행은 executor에 위임한다(호스트=HostExecutor, 컨테이너=Dock
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -42,6 +43,19 @@ def _masked_env_text(env: dict[str, str]) -> str:
         f"{key}={'********' if key in _SECRET_ENV_KEYS else value}"
         for key, value in env.items()
     )
+
+
+# URL의 userinfo(`user:token@`) 부분 — 사설 repo 접근 토큰이 여기에 박히는 경우가 흔하다
+_URL_USERINFO_RE = re.compile(r"(?<=://)[^/@\s]+@")
+
+
+def _masked_url(url: str | None) -> str:
+    """git URL의 자격증명(userinfo)을 마스킹한다.
+
+    `https://x-access-token:ghp_xxx@host/...` 같은 URL을 그대로 로그(JobEvent·job.log·
+    다운로드)에 남기면 토큰이 평문으로 유출되므로, 출력 전에 `***@`로 가린다.
+    """
+    return _URL_USERINFO_RE.sub("***@", url or "", count=1)
 
 
 def _is_python_token(token: str) -> bool:
@@ -156,7 +170,7 @@ def run(
     #    + 순서대로 patch 멱등 적용. (PatchError/GitError는 호출자가 처리)
     if product.code_path:
         product_dir = workspace.resolve_code_path(product.code_path)
-        _ev("clone", "info", f"프로덕트 업데이트(영속): {product_dir} ← {product.git_url} ({product.git_ref})")
+        _ev("clone", "info", f"프로덕트 업데이트(영속): {product_dir} ← {_masked_url(product.git_url)} ({product.git_ref})")
         # out_tests_rel(생성 테스트 출력 폴더)은 reset --hard로부터 보존한다(staged 포함).
         git_ops.ensure_checkout(
             product.git_url, product.git_ref, product_dir, timeout=git_timeout,
@@ -165,7 +179,7 @@ def run(
         )
     else:
         product_dir = job_root / "product"
-        _ev("clone", "info", f"프로덕트 clone(임시): {product.git_url} ({product.git_ref})")
+        _ev("clone", "info", f"프로덕트 clone(임시): {_masked_url(product.git_url)} ({product.git_ref})")
         git_ops.clone(product.git_url, product.git_ref, product_dir, timeout=git_timeout, on_start=on_process)
     _ev("clone", "info", f"프로덕트 git log:\n{git_ops.recent_log(product_dir, timeout=git_timeout)}")
     for patch in sorted(product.patches, key=lambda p: p.order_index):
@@ -177,12 +191,12 @@ def run(
     if genut.code_path:
         code_root = workspace.resolve_code_path(genut.code_path)
         genut_dir = code_root / "GENUT"
-        _ev("clone", "info", f"GENUT 업데이트(영속): {genut_dir} ← {genut.repo_url} ({genut.repo_ref})")
+        _ev("clone", "info", f"GENUT 업데이트(영속): {genut_dir} ← {_masked_url(genut.repo_url)} ({genut.repo_ref})")
         git_ops.ensure_checkout(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout, on_start=on_process)
     else:
         code_root = None
         genut_dir = job_root / "genut"
-        _ev("clone", "info", f"GENUT clone(임시): {genut.repo_url} ({genut.repo_ref})")
+        _ev("clone", "info", f"GENUT clone(임시): {_masked_url(genut.repo_url)} ({genut.repo_ref})")
         git_ops.clone(genut.repo_url, genut.repo_ref, genut_dir, timeout=git_timeout, on_start=on_process)
     _ev("clone", "info", f"GENUT git log:\n{git_ops.recent_log(genut_dir, timeout=git_timeout)}")
 
@@ -191,11 +205,11 @@ def run(
     if genut.assure_repo_url:
         if genut.code_path:
             assure_dir = code_root / "ASSURE"
-            _ev("clone", "info", f"ASSURE 업데이트(영속): {assure_dir} ← {genut.assure_repo_url}")
+            _ev("clone", "info", f"ASSURE 업데이트(영속): {assure_dir} ← {_masked_url(genut.assure_repo_url)}")
             git_ops.ensure_checkout(genut.assure_repo_url, "", assure_dir, timeout=git_timeout, on_start=on_process)
         else:
             assure_dir = genut_dir.parent / f"{genut_dir.name}_assure"
-            _ev("clone", "info", f"ASSURE clone(임시): {assure_dir} ← {genut.assure_repo_url}")
+            _ev("clone", "info", f"ASSURE clone(임시): {assure_dir} ← {_masked_url(genut.assure_repo_url)}")
             git_ops.clone(genut.assure_repo_url, "", assure_dir, timeout=git_timeout, on_start=on_process)
         _ev("clone", "info", f"ASSURE git log:\n{git_ops.recent_log(assure_dir, timeout=git_timeout)}")
 

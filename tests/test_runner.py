@@ -484,3 +484,42 @@ def test_runner_crash_has_no_result(db_session, make_virtual_product, fake_genut
     assert result.success is False
     assert result.returncode not in (0, None)
     assert result.generated_files == []
+
+
+def test_masked_url_hides_userinfo() -> None:
+    from genut_service.runner.genut_runner import _masked_url
+
+    assert (
+        _masked_url("https://x-access-token:ghp_secret@github.com/org/repo.git")
+        == "https://***@github.com/org/repo.git"
+    )
+    assert _masked_url("ssh://git@host/repo.git") == "ssh://***@host/repo.git"
+    # userinfo가 없으면 그대로 (SCP 스타일 git@host:repo는 ://가 없어 대상 아님)
+    assert _masked_url("https://github.com/org/repo.git") == "https://github.com/org/repo.git"
+    assert _masked_url("git@github.com:org/repo.git") == "git@github.com:org/repo.git"
+    assert _masked_url(None) == ""
+
+
+def test_runner_masks_git_url_credentials_in_events(
+    db_session, make_virtual_product, fake_genut_repo, tmp_path
+):
+    """git URL에 박힌 토큰이 job 이벤트 로그로 새지 않는다."""
+    vp = make_virtual_product("mask", sources={"src/a.cpp": "// @genut-fn: foo\n"})
+    product, genut, job = _setup(db_session, vp, fake_genut_repo, ["src/a.cpp"])
+    # 자격증명이 박힌 URL로 clone을 시도하다 실패하는 상황(사설 repo 모사)
+    product.git_url = "https://user:supersecret@example.invalid/repo.git"
+    db_session.commit()
+
+    events: list[str] = []
+    with pytest.raises(Exception):  # noqa: B017 - clone 실패(GitError)면 충분
+        genut_runner.run(
+            job,
+            product,
+            genut,
+            workspace_root=str(tmp_path),
+            git_timeout=60,
+            on_event=lambda _phase, _level, message: events.append(message),
+        )
+    joined = "\n".join(events)
+    assert "supersecret" not in joined  # 토큰 비노출
+    assert "***@example.invalid" in joined  # URL 자체는 식별 가능하게 남는다
