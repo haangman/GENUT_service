@@ -36,6 +36,47 @@ describe('GenutsPage', () => {
     expect(screen.getByText('sys-A')).toBeInTheDocument()
   })
 
+  it('워커 상태와 요청 큐(수동/자동 구분)를 함께 보여준다', async () => {
+    server.use(
+      http.get('/api/genuts', () =>
+        HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
+      ),
+      http.get('/api/workers', () =>
+        HttpResponse.json([
+          { id: 1, name: 'worker-a', worker_status: 'busy', current_job_id: 5, enabled: true },
+        ]),
+      ),
+      http.get('/api/queue', () =>
+        HttpResponse.json([
+          {
+            job_id: 6,
+            product_id: 2,
+            submitted_at: '2026-06-15T00:00:00Z',
+            waiting_on_product: true,
+            origin: 'manual',
+          },
+          {
+            job_id: 7,
+            product_id: 3,
+            submitted_at: '2026-06-15T00:00:01Z',
+            waiting_on_product: false,
+            origin: 'auto',
+          },
+        ]),
+      ),
+    )
+
+    renderWithProviders(<GenutsPage />)
+    // 워커 카드: 이름 + 상태 + 현재 job
+    expect(await screen.findByText('worker-a')).toBeInTheDocument()
+    expect(screen.getByText('job #5')).toBeInTheDocument()
+    // 요청 큐: origin 배지로 수동/자동 구분 + 프로덕트 사용 중 대기 표시
+    expect(await screen.findByText('job #6')).toBeInTheDocument()
+    expect(screen.getByText('수동')).toBeInTheDocument()
+    expect(screen.getByText('자동')).toBeInTheDocument()
+    expect(screen.getByText('대기(프로덕트 사용 중)')).toBeInTheDocument()
+  })
+
   it('edits a GENUT and omits the blank credential key on PUT', async () => {
     let putBody: Record<string, unknown> | null = null
     server.use(

@@ -92,6 +92,7 @@ export interface QueueItem {
   product_id: number
   submitted_at: string
   waiting_on_product: boolean
+  origin: JobOrigin
 }
 
 // 실행 경로: genut(워커 실행) | auto_scan(누락 스캔) | auto_diff(변경 감지)

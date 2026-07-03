@@ -12,7 +12,7 @@ describe('AppLayout', () => {
     expect(screen.getByText('테스트 요청')).toBeInTheDocument()
     expect(screen.getByText('프로덕트')).toBeInTheDocument()
     expect(screen.getByText('GENUT')).toBeInTheDocument()
-    expect(screen.getByText('모니터링')).toBeInTheDocument()
+    expect(screen.getByText('수동 실행 이력')).toBeInTheDocument()
     expect(screen.getByText('자동 실행 이력')).toBeInTheDocument()
   })
 

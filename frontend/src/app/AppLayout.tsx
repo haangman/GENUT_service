@@ -5,7 +5,7 @@ const navItems = [
   { to: '/request', label: '테스트 요청' },
   { to: '/products', label: '프로덕트' },
   { to: '/genuts', label: 'GENUT' },
-  { to: '/monitoring', label: '모니터링' },
+  { to: '/manual-jobs', label: '수동 실행 이력' },
   { to: '/auto-jobs', label: '자동 실행 이력' },
   { to: '/test-status', label: '테스트 파일 현황' },
 ]
