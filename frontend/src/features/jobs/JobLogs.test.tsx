@@ -70,6 +70,28 @@ describe('JobLogs (증분 폴링)', () => {
     expect(screen.queryByRole('button', { name: '재수행' })).toBeNull()
   })
 
+  it('아주 긴 로그는 최근 2,000줄만 렌더링하고 생략 안내를 보여준다', async () => {
+    // 수만 줄을 한 텍스트 노드로 그리면 스크롤이 버벅인다 — 표시는 최근 줄로 제한하고
+    // 전체는 로그 저장으로 받는다.
+    const events = Array.from({ length: 2050 }, (_, index) =>
+      ev(index + 1, 'run', `line-${index + 1}`),
+    )
+    server.use(
+      http.get('/api/jobs/7/logs', ({ request }) => {
+        const since = Number(new URL(request.url).searchParams.get('since') ?? '0')
+        return HttpResponse.json(events.filter((event) => event.id > since))
+      }),
+    )
+
+    renderWithProviders(<JobLogs jobId={7} status="done" />)
+    expect(await screen.findByText(/이전 50줄 표시 생략/)).toBeInTheDocument()
+
+    const lines = (screen.getByTestId('job-log').textContent ?? '').split('\n')
+    expect(lines).toHaveLength(2000)
+    expect(lines[0]).toBe('[run] line-51') // 앞 50줄은 표시 생략
+    expect(lines[1999]).toBe('[run] line-2050') // 마지막 줄까지 표시
+  })
+
   it('로그 패널은 박스 안에서 상하·좌우로 스크롤된다 (줄바꿈하지 않음)', async () => {
     server.use(
       http.get('/api/jobs/7/logs', () =>
