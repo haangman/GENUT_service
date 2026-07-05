@@ -183,7 +183,7 @@ def test_reap_stuck_jobs_recovers_overlong_running(db_session: Session) -> None:
 
 
 def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
-    """서브프로세스가 살아 등록된 job은 느린 정상 실행으로 보고 회수하지 않는다."""
+    """서브프로세스가 살아 등록된 job은 하드캡(2배) 전까지 느린 정상 실행으로 유예한다."""
     from datetime import datetime, timedelta, timezone
 
     from genut_service.runner import process_registry
@@ -192,7 +192,8 @@ def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
     job = Job(
         product_id=product.id,
         status=JobStatus.RUNNING.value,
-        started_at=datetime.now(timezone.utc) - timedelta(seconds=10_000),
+        # 상한(60s)은 넘었지만 하드캡(120s)은 안 넘은 구간
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=90),
     )
     db_session.add(job)
     db_session.commit()
@@ -205,7 +206,7 @@ def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
 
     process_registry.register(job.id, _FakeProc())
     try:
-        assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 0  # 생존 → 회수 금지
+        assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 0  # 생존 → 유예
         db_session.expire_all()
         assert db_session.get(Job, job.id).status == JobStatus.RUNNING.value
     finally:
@@ -215,6 +216,45 @@ def test_reap_skips_job_with_live_subprocess(db_session: Session) -> None:
     assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 1
     db_session.expire_all()
     assert db_session.get(Job, job.id).status == JobStatus.FAILED.value
+
+
+def test_reap_hard_cap_recovers_despite_live_subprocess(db_session: Session) -> None:
+    """상한의 2배를 넘기면 잔존 프로세스가 있어도 트리를 죽이고 회수한다.
+
+    워커 스레드가 멈춘 채 파이프를 쥔 고아 프로세스만 살아 있으면 유예가 영원히
+    끝나지 않기 때문이다(회수 불가 → 그 프로덕트 영구 정지).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from genut_service.runner import process_registry
+
+    product = _product(db_session)
+    job = Job(
+        product_id=product.id,
+        status=JobStatus.RUNNING.value,
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=10_000),  # 하드캡 초과
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    kills: list[str] = []
+
+    class _FakeProc:
+        pid = None
+
+        def terminate(self) -> None:
+            kills.append("terminate")
+
+        def kill(self) -> None:
+            kills.append("kill")
+
+    process_registry.register(job.id, _FakeProc())
+
+    assert reap_stuck_jobs(db_session, max_runtime_seconds=60) == 1
+    db_session.expire_all()
+    assert db_session.get(Job, job.id).status == JobStatus.FAILED.value
+    assert kills  # 잔존 프로세스 트리 강제 종료 시도
+    assert process_registry.has_process(job.id) is False  # 레지스트리 정리됨
 
 
 def test_purge_old_job_events_removes_only_old_terminal(db_session: Session) -> None:

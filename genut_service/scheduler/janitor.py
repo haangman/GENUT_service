@@ -27,6 +27,11 @@ def reap_stuck_jobs(session: Session, max_runtime_seconds: float) -> int:
     회수하지 않는다 — 살아있는 워커를 회수하면 락이 조기 해제되어 같은 프로덕트에 다른
     job이 배정되고, 같은 체크아웃에서 실행이 겹치는 경합이 생기기 때문이다(각 서브프로세스는
     자기 타임아웃으로 언젠가 끝난다).
+
+    다만 상한의 **2배**를 넘기면 서브프로세스가 살아 있어도 하드캡으로 회수한다 —
+    워커 스레드가 죽거나 멈춘 채 잔존 프로세스만 살아 있으면(예: 파이프를 쥔 고아
+    빌드) 유예가 영원히 끝나지 않기 때문이다. 이때 등록된 프로세스 트리를 강제
+    종료한 뒤 회수한다.
     """
     now = datetime.now(timezone.utc)
     stuck_ids: list[int] = []
@@ -36,17 +41,24 @@ def reap_stuck_jobs(session: Session, max_runtime_seconds: float) -> int:
             continue
         if started.tzinfo is None:  # SQLite 등에서 naive로 돌아오면 UTC로 간주
             started = started.replace(tzinfo=timezone.utc)
-        if (now - started).total_seconds() > max_runtime_seconds:
-            if process_registry.has_process(job.id):
-                continue  # 서브프로세스 생존 → 죽은 워커가 아니라 느린 실행
-            stuck_ids.append(job.id)
+        elapsed = (now - started).total_seconds()
+        if elapsed <= max_runtime_seconds:
+            continue
+        if process_registry.has_process(job.id) and elapsed <= max_runtime_seconds * 2:
+            continue  # 서브프로세스 생존 → 하드캡 전까지는 느린 실행으로 유예
+        stuck_ids.append(job.id)
     for job_id in stuck_ids:
+        # 잔존 프로세스 트리가 있으면 강제 종료(취소 플래그도 세워 워커가 깨어나면
+        # CANCELED/no-op으로 정리되게 한다 — finish_job의 터미널 가드가 이중 종료를 막는다)
+        process_registry.cancel(job_id)
         finish_job(
             session,
             job_id,
             JobStatus.FAILED,
             error="실행이 비정상적으로 오래 지속되어 회수됨 (watchdog)",
         )
+        # 걸린 워커 스레드가 없을 수 있으므로 레지스트리 항목은 직접 정리한다
+        process_registry.unregister(job_id)
     return len(stuck_ids)
 
 
