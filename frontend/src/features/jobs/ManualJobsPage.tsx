@@ -1,17 +1,26 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
-import { listAllJobs } from '../../api/jobs'
+import { Pagination } from '../../components/Pagination'
+import { listJobs } from '../../api/jobs'
 import { JobTable } from './JobTable'
+
+// 한 페이지에 보여줄 job 수 — 하단 게시판식 페이지네이션으로 이동한다
+const PAGE_SIZE = 20
 
 // 수동(테스트 요청 페이지) 제출 job의 이력 — auto 생성 job은 '자동 실행 이력'에서 본다.
 export function ManualJobsPage() {
-  // 전체 이력을 페이지 워크로 모두 가져온다(렌더링은 JobTable이 200행씩 청크로 제한).
-  // 이력이 커질 수 있어 폴링은 3초 — 취소/재수행은 즉시 무효화로 바로 반영된다.
+  const [page, setPage] = useState(1)
+  // 현재 페이지(20건)만 조회하므로 이력이 커져도 폴링 비용이 일정하다.
+  // 취소/재수행은 즉시 무효화로 바로 반영된다.
   const { data } = useQuery({
-    queryKey: ['jobs', 'history', 'manual'],
-    queryFn: () => listAllJobs({ origin: 'manual' }),
+    queryKey: ['jobs', 'history', 'manual', page],
+    queryFn: () => listJobs({ origin: 'manual', page, page_size: PAGE_SIZE }),
     refetchInterval: 3000,
+    // 페이지 전환 중에는 직전 페이지를 그대로 보여준다(깜빡임 방지)
+    placeholderData: (previous) => previous,
   })
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
   return (
     <div className="space-y-6">
       <PageHeader
@@ -19,7 +28,8 @@ export function ManualJobsPage() {
         description="테스트 요청 페이지로 제출한 job 이력/로그를 본다."
       />
       {/* showKind: 어떤 GENUT 인스턴스가 실행했는지(배정 전이면 GENUT) 표시 */}
-      <JobTable jobs={data ?? []} showKind emptyMessage="job 이력이 없습니다." />
+      <JobTable jobs={data?.items ?? []} showKind emptyMessage="job 이력이 없습니다." />
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
     </div>
   )
 }

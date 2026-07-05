@@ -163,6 +163,36 @@ describe('ManualJobsPage', () => {
     expect(await screen.findByText('서버 재시작으로 실행이 중단됨.')).toBeInTheDocument()
   })
 
+  it('20개씩 게시판식 페이지네이션으로 보여준다', async () => {
+    const all = Array.from({ length: 45 }, (_, index) => job({ id: 500 - index }))
+    server.use(
+      http.get('/api/jobs', ({ request }) => {
+        const url = new URL(request.url)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const size = Number(url.searchParams.get('page_size') ?? '20')
+        return HttpResponse.json({
+          items: all.slice((page - 1) * size, page * size),
+          total: 45,
+          page,
+          page_size: size,
+        })
+      }),
+    )
+
+    renderWithProviders(<ManualJobsPage />)
+    // 1페이지: id 500..481(20개)만 보인다
+    expect(await screen.findByText('481')).toBeInTheDocument()
+    expect(screen.queryByText('480')).toBeNull()
+    // 페이지 번호 1..3(총 45건/20)과 화살표
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: '3' })).toBeInTheDocument()
+
+    // 마지막 페이지로 이동 → 마지막 job(456)까지 보인다
+    fireEvent.click(screen.getByRole('button', { name: '마지막 페이지' }))
+    expect(await screen.findByText('456')).toBeInTheDocument()
+    expect(screen.queryByText('500')).toBeNull()
+  })
+
   it('shows a force-kill button for running jobs and posts cancel', async () => {
     let canceled = false
     const runningJob = job({ id: 8, product_id: 3, status: 'running' })
