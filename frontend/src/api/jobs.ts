@@ -26,6 +26,23 @@ export function listJobs(params: ListJobsParams = {}): Promise<Page<Job>> {
   return apiFetch<Page<Job>>('/jobs', { query: { ...params } })
 }
 
+// 페이지 상한(200)을 넘는 목록을 끝까지 걸어 전부 모은다.
+// 페이지를 도는 사이 새 job이 끼어들면 경계가 밀려 중복될 수 있어 id로 걸러낸다.
+export async function listAllJobs(
+  params: Omit<ListJobsParams, 'page' | 'page_size'> = {},
+): Promise<Job[]> {
+  const pageSize = 200
+  const first = await listJobs({ ...params, page: 1, page_size: pageSize })
+  const jobs = [...first.items]
+  const totalPages = Math.ceil(first.total / pageSize)
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await listJobs({ ...params, page, page_size: pageSize })
+    jobs.push(...next.items)
+  }
+  const seen = new Set<number>()
+  return jobs.filter((job) => (seen.has(job.id) ? false : (seen.add(job.id), true)))
+}
+
 // auto 프로덕트별 자동 실행 job 이력(프로덕트당 최근 perProduct개 + 전체 수)
 export function listAutoHistory(perProduct = 3): Promise<AutoHistoryGroup[]> {
   return apiFetch<AutoHistoryGroup[]>('/jobs/auto-history', {

@@ -10,6 +10,7 @@ function job(overrides: Record<string, unknown> = {}) {
     id: 5,
     product_id: 2,
     genut_instance_id: 1,
+    genut_name: null,
     status: 'done',
     kind: 'genut',
     origin: 'manual',
@@ -56,6 +57,28 @@ describe('ManualJobsPage', () => {
     // 행을 클릭하면 바로 그 행 아래에 로그 패널이 펼쳐진다(인라인)
     fireEvent.click(resultCell)
     expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
+  })
+
+  it('종류 컬럼에 배정된 GENUT 인스턴스 이름을 보여준다', async () => {
+    server.use(
+      http.get('/api/jobs', () =>
+        HttpResponse.json({
+          items: [
+            job({ id: 21, genut_name: 'GENUT1', result_summary: 'ok-21' }),
+            job({ id: 20, genut_name: null, status: 'queued', result_summary: 'ok-20' }),
+          ],
+          total: 2,
+          page: 1,
+          page_size: 200,
+        }),
+      ),
+    )
+
+    renderWithProviders(<ManualJobsPage />)
+    expect(await screen.findByText('GENUT1')).toBeInTheDocument() // 배정된 인스턴스 이름
+    expect(screen.getByText('GENUT')).toBeInTheDocument() // 미배정(queued)은 폴백 라벨
+    expect(screen.getByText('종류')).toBeInTheDocument()
+    expect(screen.getByText('제품')).toBeInTheDocument() // product 컬럼은 유지
   })
 
   it('shows start time, end time, and total duration for jobs', async () => {

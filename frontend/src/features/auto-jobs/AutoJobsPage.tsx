@@ -1,39 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
-import { listAutoHistory, listJobs } from '../../api/jobs'
+import { listAllJobs, listAutoHistory } from '../../api/jobs'
 import { runAutoNow } from '../../api/products'
-import type { AutoHistoryGroup, Job } from '../../types/api'
+import type { AutoHistoryGroup } from '../../types/api'
 import { JobTable } from '../jobs/JobTable'
 
 // 접힌 상태에서 프로덕트당 보여줄 최근 job 수
 const RECENT_COUNT = 3
-// 백엔드 page_size 상한 — 전체 이력은 페이지를 끝까지 걸어 모은다
-const FULL_PAGE_SIZE = 200
-
-// 확장 시 그 프로덕트의 auto job 이력 전체를 가져온다(페이지 워크).
-async function fetchAllAutoJobs(productId: number): Promise<Job[]> {
-  const first = await listJobs({
-    product_id: productId,
-    origin: 'auto',
-    page: 1,
-    page_size: FULL_PAGE_SIZE,
-  })
-  const jobs = [...first.items]
-  const totalPages = Math.ceil(first.total / FULL_PAGE_SIZE)
-  for (let page = 2; page <= totalPages; page += 1) {
-    const next = await listJobs({
-      product_id: productId,
-      origin: 'auto',
-      page,
-      page_size: FULL_PAGE_SIZE,
-    })
-    jobs.push(...next.items)
-  }
-  // 페이지를 도는 사이 새 job이 끼어들면 경계가 밀려 중복될 수 있어 id로 걸러낸다
-  const seen = new Set<number>()
-  return jobs.filter((job) => (seen.has(job.id) ? false : (seen.add(job.id), true)))
-}
 
 function AutoProductGroup({
   group,
@@ -49,7 +23,7 @@ function AutoProductGroup({
   // 잦은 최근 항목은 접힘 그룹 쿼리(2초)와 취소/재수행의 즉시 무효화가 커버한다.
   const fullQuery = useQuery({
     queryKey: ['jobs', 'auto', 'byProduct', group.product_id],
-    queryFn: () => fetchAllAutoJobs(group.product_id),
+    queryFn: () => listAllJobs({ product_id: group.product_id, origin: 'auto' }),
     refetchInterval: 5000,
     enabled: expanded,
   })
