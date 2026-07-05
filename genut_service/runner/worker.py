@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import stat
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -100,16 +101,21 @@ def process_job(
 
     # 실행 중 발생하는 단계/출력 이벤트를 즉시 기록한다.
     # (1) DB JobEvent → 모니터링 로그 실시간 갱신, (2) job.log 파일 append → 진행 중 다운로드.
+    # emit은 출력 스트리밍 reader 스레드에서도 호출되는데 SQLAlchemy 세션은 스레드
+    # 안전하지 않으므로 락으로 직렬화한다(세션 손상 → job 영구 멈춤 방지).
+    emit_lock = threading.Lock()
+
     def emit(phase: str, level: str, message: str) -> None:
         text = message or ""
-        session.add(JobEvent(job_id=job_id, level=level, phase=phase, message=text[:8000]))
-        session.commit()
-        try:
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(log_path, "a", encoding="utf-8") as handle:
-                handle.write(f"[{phase}] {text}\n")
-        except OSError:
-            pass
+        with emit_lock:
+            session.add(JobEvent(job_id=job_id, level=level, phase=phase, message=text[:8000]))
+            session.commit()
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as handle:
+                    handle.write(f"[{phase}] {text}\n")
+            except OSError:
+                pass
 
     emit(JobPhase.SCHEDULE.value, "info", f"job 시작: product={product.name}, genut={genut.name}")
 

@@ -28,7 +28,13 @@ def kill_tree(proc: object) -> None:
                     timeout=10,
                 )
                 return
-            os.killpg(os.getpgid(pid), getattr(signal, "SIGKILL", 9))
+            try:
+                pgid = os.getpgid(pid)
+            except ProcessLookupError:
+                # 리더(직계 자식)가 이미 죽어도 setsid로 만든 프로세스 그룹 id는
+                # 리더 pid와 같으므로, 남은 손자들을 그룹으로 정리할 수 있다.
+                pgid = pid
+            os.killpg(pgid, getattr(signal, "SIGKILL", 9))
             return
         except Exception:  # noqa: BLE001 - 이미 죽었거나 권한/플랫폼 문제면 폴백
             pass
@@ -128,20 +134,55 @@ def run_streaming(
             pass
 
     lines: list[str] = []
+    # 반환 이후 잔존 reader의 콜백/누적을 차단한다 — 잔존 reader가 다음 단계와
+    # 겹쳐 on_line(→DB 세션 emit)을 계속 호출하면 로그가 섞이고, 스레드 안전하지
+    # 않은 세션이 교차 사용되어 job이 영구히 멈출 수 있다.
+    stop = threading.Event()
 
     def _reader() -> None:
-        assert proc.stdout is not None
-        for raw in proc.stdout:
-            line = raw.rstrip("\n")
-            lines.append(line)
-            if on_line is not None:
-                try:
-                    on_line(line)
-                except Exception:  # noqa: BLE001 - 로그 콜백 실패가 실행을 막지 않도록
-                    pass
+        try:
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                if stop.is_set():
+                    break
+                line = raw.rstrip("\n")
+                lines.append(line)
+                if on_line is not None:
+                    try:
+                        on_line(line)
+                    except Exception:  # noqa: BLE001 - 로그 콜백 실패가 실행을 막지 않도록
+                        pass
+        except (OSError, ValueError):
+            pass  # 파이프가 강제로 닫힌 경우(아래 정리 단계)
 
     reader = threading.Thread(target=_reader, daemon=True)
     reader.start()
+
+    def _finalize_reader() -> None:
+        """직계 자식 종료 후에도 reader가 살아 있으면(손자가 파이프 점유) 정리한다.
+
+        예: pip가 rc=0으로 끝났지만 빌드 손자가 stdout을 쥐고 계속 쓰는 경우.
+        (1) 콜백을 차단하고, (2) 남은 프로세스 트리를 강제 종료한 뒤, (3) 파이프를
+        닫아 손자의 다음 write가 broken pipe로 끝나게 한다. close()가 reader의
+        io 락에 걸려 블록될 수 있어 별도 daemon 스레드에서 닫는다.
+        """
+        reader.join(timeout=5)
+        if not reader.is_alive():
+            return
+        stop.set()
+        kill_tree(proc)
+        reader.join(timeout=2)
+        if reader.is_alive() and proc.stdout is not None:
+            stdout = proc.stdout
+
+            def _close_quietly() -> None:
+                try:
+                    stdout.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            threading.Thread(target=_close_quietly, daemon=True).start()
+
     try:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -152,13 +193,13 @@ def run_streaming(
             proc.wait(timeout=10)
         except Exception:  # noqa: BLE001
             pass
-        reader.join(timeout=2)
+        _finalize_reader()
         return {
             "success": False,
             "returncode": None,
             "stdout": "\n".join(lines),
             "stderr": f"timeout after {timeout}s",
         }
-    reader.join(timeout=5)
+    _finalize_reader()
     rc = proc.returncode
     return {"success": rc == 0, "returncode": rc, "stdout": "\n".join(lines), "stderr": ""}
