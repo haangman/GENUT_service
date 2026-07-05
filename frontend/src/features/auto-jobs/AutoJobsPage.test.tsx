@@ -171,4 +171,28 @@ describe('AutoJobsPage', () => {
     renderWithProviders(<AutoJobsPage />)
     expect(await screen.findByText('자동 실행 프로덕트가 없습니다.')).toBeInTheDocument()
   })
+
+  it('▶ 지금 실행 버튼은 주기와 무관하게 auto 사이클을 큐잉한다(토글과 독립)', async () => {
+    let runPosted = false
+    server.use(
+      http.get('/api/jobs/auto-history', () =>
+        HttpResponse.json([group({ total: 4, jobs: [makeJob({ id: 40 })] })]),
+      ),
+      http.post('/api/products/1/auto/run', () => {
+        runPosted = true
+        return HttpResponse.json(
+          [makeJob({ id: 41, kind: 'auto_diff' }), makeJob({ id: 42, kind: 'auto_scan' })],
+          { status: 201 },
+        )
+      }),
+    )
+
+    renderWithProviders(<AutoJobsPage />)
+    await screen.findByText('auto-demo')
+
+    fireEvent.click(screen.getByRole('button', { name: '▶ 지금 실행' }))
+    await waitFor(() => expect(runPosted).toBe(true))
+    // 실행 버튼 클릭이 그룹 토글을 건드리지 않는다(접힘 유지 → "외 N건 보기" 그대로)
+    expect(screen.getByText(/외 3건 보기/)).toBeInTheDocument()
+  })
 })

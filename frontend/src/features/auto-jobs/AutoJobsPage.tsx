@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { listAutoHistory, listJobs } from '../../api/jobs'
+import { runAutoNow } from '../../api/products'
 import type { AutoHistoryGroup, Job } from '../../types/api'
 import { JobTable } from '../jobs/JobTable'
 
@@ -53,25 +54,46 @@ function AutoProductGroup({
   // 확장 직후 전체 이력이 로딩되는 동안에는 최근 N개를 그대로 보여준다(깜빡임 방지)
   const jobs = expanded && fullQuery.data ? fullQuery.data : group.jobs
   const hiddenCount = Math.max(0, group.total - group.jobs.length)
+
+  // 주기와 무관한 즉시 실행: 사이클(변경 감지→누락 스캔)을 지금 큐잉한다
+  const queryClient = useQueryClient()
+  const runMut = useMutation({
+    mutationFn: () => runAutoNow(group.product_id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    onError: () =>
+      window.alert('실행 요청에 실패했습니다. 이미 진행 중인 자동 실행이 있는지 확인하세요.'),
+  })
   return (
     <section className="space-y-3">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-left text-sm transition hover:bg-surface-hover"
-      >
-        <span className="text-xs text-muted">{expanded ? '▾' : '▸'}</span>
-        <span className="font-semibold text-fg">{group.product_name}</span>
-        <span className="badge badge-primary">auto</span>
-        <span className="font-mono text-xs text-muted">{group.product_code}</span>
-        {group.auto_interval_seconds ? (
-          <span className="text-xs text-subtle">주기 {group.auto_interval_seconds}s</span>
-        ) : null}
-        <span className="ml-auto text-xs text-muted">
-          전체 {group.total}건
-          {!expanded && hiddenCount > 0 ? ` · 외 ${hiddenCount}건 보기` : ''}
-        </span>
-      </button>
+      {/* 헤더: 토글(접기/펼치기) 버튼과 즉시 실행 버튼을 나란히 둔다(중첩 버튼 방지) */}
+      <div className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm transition hover:bg-surface-hover">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <span className="text-xs text-muted">{expanded ? '▾' : '▸'}</span>
+          <span className="font-semibold text-fg">{group.product_name}</span>
+          <span className="badge badge-primary">auto</span>
+          <span className="font-mono text-xs text-muted">{group.product_code}</span>
+          {group.auto_interval_seconds ? (
+            <span className="text-xs text-subtle">주기 {group.auto_interval_seconds}s</span>
+          ) : null}
+          <span className="ml-auto text-xs text-muted">
+            전체 {group.total}건
+            {!expanded && hiddenCount > 0 ? ` · 외 ${hiddenCount}건 보기` : ''}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => runMut.mutate()}
+          disabled={runMut.isPending}
+          title="주기와 무관하게 지금 실행 (변경 감지 → 누락 테스트 스캔)"
+          className="btn btn-primary btn-sm shrink-0"
+        >
+          {runMut.isPending ? '요청 중…' : '▶ 지금 실행'}
+        </button>
+      </div>
       {/* 프로덕트별로 이미 그룹돼 있으므로 product 컬럼은 숨긴다 */}
       <JobTable jobs={jobs} showKind showProduct={false} emptyMessage="실행 이력이 없습니다." />
     </section>
