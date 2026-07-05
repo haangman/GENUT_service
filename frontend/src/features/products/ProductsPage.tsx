@@ -134,7 +134,7 @@ export function ProductsPage() {
 
   return (
     <div>
-      <PageHeader title="프로덕트" description="테스트 생성 대상 프로덕트를 등록/관리한다." />
+      <PageHeader title="프로덕트 등록" description="테스트 생성 대상 프로덕트를 등록/관리한다." />
 
       <button
         className={`mb-5 ${showForm ? 'btn' : 'btn btn-primary'}`}

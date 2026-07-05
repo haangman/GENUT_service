@@ -9,9 +9,9 @@ afterEach(() => document.documentElement.classList.remove('dark'))
 describe('AppLayout', () => {
   it('renders navigation links', () => {
     renderWithProviders(<AppLayout />)
-    expect(screen.getByText('테스트 요청')).toBeInTheDocument()
-    expect(screen.getByText('프로덕트')).toBeInTheDocument()
-    expect(screen.getByText('GENUT')).toBeInTheDocument()
+    expect(screen.getByText('수동 실행 요청')).toBeInTheDocument()
+    expect(screen.getByText('프로덕트 등록')).toBeInTheDocument()
+    expect(screen.getByText('GENUT 등록')).toBeInTheDocument()
     expect(screen.getByText('수동 실행 이력')).toBeInTheDocument()
     expect(screen.getByText('자동 실행 이력')).toBeInTheDocument()
   })

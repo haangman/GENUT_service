@@ -2,9 +2,9 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/useTheme'
 
 const navItems = [
-  { to: '/request', label: '테스트 요청' },
-  { to: '/products', label: '프로덕트' },
-  { to: '/genuts', label: 'GENUT' },
+  { to: '/products', label: '프로덕트 등록' },
+  { to: '/genuts', label: 'GENUT 등록' },
+  { to: '/request', label: '수동 실행 요청' },
   { to: '/manual-jobs', label: '수동 실행 이력' },
   { to: '/auto-jobs', label: '자동 실행 이력' },
   { to: '/test-status', label: '테스트 파일 현황' },

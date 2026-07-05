@@ -8,7 +8,7 @@ import { JobTable } from './JobTable'
 // 한 페이지에 보여줄 job 수 — 하단 게시판식 페이지네이션으로 이동한다
 const PAGE_SIZE = 20
 
-// 수동(테스트 요청 페이지) 제출 job의 이력 — auto 생성 job은 '자동 실행 이력'에서 본다.
+// 수동 실행 요청 페이지로 제출한 job의 이력 — auto 생성 job은 '자동 실행 이력'에서 본다.
 export function ManualJobsPage() {
   const [page, setPage] = useState(1)
   // 현재 페이지(20건)만 조회하므로 이력이 커져도 폴링 비용이 일정하다.
@@ -25,7 +25,7 @@ export function ManualJobsPage() {
     <div className="space-y-6">
       <PageHeader
         title="수동 실행 이력"
-        description="테스트 요청 페이지로 제출한 job 이력/로그를 본다."
+        description="수동 실행 요청 페이지로 제출한 job 이력/로그를 본다."
       />
       {/* showKind: 어떤 GENUT 인스턴스가 실행했는지(배정 전이면 GENUT) 표시 */}
       <JobTable jobs={data?.items ?? []} showKind emptyMessage="job 이력이 없습니다." />

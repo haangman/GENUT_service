@@ -158,7 +158,7 @@ export function GenutsPage() {
   return (
     <div>
       <PageHeader
-        title="GENUT"
+        title="GENUT 등록"
         description="GENUT 인스턴스(=워커)를 등록/관리하고, 워커 상태·요청 큐를 본다."
       />
 
