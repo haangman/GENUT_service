@@ -168,6 +168,45 @@ describe('AutoJobsPage', () => {
     await waitFor(() => expect(canceled).toBe(true))
   })
 
+  it('확장 시 20개씩 게시판식 페이지네이션으로 보여준다', async () => {
+    const all = Array.from({ length: 100 }, (_, index) => makeJob({ id: 1000 - index }))
+    server.use(
+      http.get('/api/jobs/auto-history', () =>
+        HttpResponse.json([group({ total: 100, jobs: all.slice(0, 3) })]),
+      ),
+      http.get('/api/jobs', ({ request }) => {
+        const url = new URL(request.url)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const size = Number(url.searchParams.get('page_size') ?? '20')
+        return HttpResponse.json({
+          items: all.slice((page - 1) * size, page * size),
+          total: 100,
+          page,
+          page_size: size,
+        })
+      }),
+    )
+
+    renderWithProviders(<AutoJobsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /auto-demo/ }))
+
+    // 1페이지: id 1000..981(20개)만 보인다
+    expect(await screen.findByText('981')).toBeInTheDocument()
+    expect(screen.queryByText('980')).toBeNull()
+    // 하단에 페이지 번호(1..5)와 화살표가 나열된다
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: '5' })).toBeInTheDocument()
+
+    // 2페이지 클릭 → 980..961
+    fireEvent.click(screen.getByRole('button', { name: '2' }))
+    expect(await screen.findByText('980')).toBeInTheDocument()
+    expect(screen.queryByText('1000')).toBeNull()
+
+    // » (마지막 페이지) → 마지막 job(901)까지 이동
+    fireEvent.click(screen.getByRole('button', { name: '마지막 페이지' }))
+    expect(await screen.findByText('901')).toBeInTheDocument()
+  })
+
   it('auto 프로덕트가 없으면 빈 상태 안내를 보여준다', async () => {
     renderWithProviders(<AutoJobsPage />)
     expect(await screen.findByText('자동 실행 프로덕트가 없습니다.')).toBeInTheDocument()

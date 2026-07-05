@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
-import { listAllJobs, listAutoHistory } from '../../api/jobs'
+import { Pagination } from '../../components/Pagination'
+import { listAutoHistory, listJobs } from '../../api/jobs'
 import { runAutoNow } from '../../api/products'
 import type { AutoHistoryGroup } from '../../types/api'
 import { JobTable } from '../jobs/JobTable'
 
 // 접힌 상태에서 프로덕트당 보여줄 최근 job 수
 const RECENT_COUNT = 3
+// 확장(전체 보기) 시 한 페이지에 보여줄 job 수 — 하단 게시판식 페이지네이션으로 이동한다
+const PAGE_SIZE = 20
 
 function AutoProductGroup({
   group,
@@ -18,17 +21,26 @@ function AutoProductGroup({
   expanded: boolean
   onToggle: () => void
 }) {
-  // 확장된 그룹만 전체 이력을 조회한다(접힌 그룹은 auto-history 응답의 최근 N개로 충분).
-  // 전체 이력은 수천 건 × 여러 페이지 요청이라 폴링을 5초로 완화한다 — 상태 변화가
-  // 잦은 최근 항목은 접힘 그룹 쿼리(2초)와 취소/재수행의 즉시 무효화가 커버한다.
-  const fullQuery = useQuery({
-    queryKey: ['jobs', 'auto', 'byProduct', group.product_id],
-    queryFn: () => listAllJobs({ product_id: group.product_id, origin: 'auto' }),
+  const [page, setPage] = useState(1)
+  // 다시 펼칠 때는 1페이지부터 시작한다
+  useEffect(() => {
+    if (expanded) setPage(1)
+  }, [expanded])
+
+  // 확장된 그룹만 페이지 단위로 조회한다(접힌 그룹은 auto-history 응답의 최근 N개로 충분).
+  // 전체를 매번 걷지 않고 현재 페이지(20건)만 가져오므로 폴링 비용이 일정하다.
+  const pageQuery = useQuery({
+    queryKey: ['jobs', 'auto', 'byProduct', group.product_id, page],
+    queryFn: () =>
+      listJobs({ product_id: group.product_id, origin: 'auto', page, page_size: PAGE_SIZE }),
     refetchInterval: 5000,
     enabled: expanded,
+    // 페이지 전환 중에는 직전 페이지를 그대로 보여준다(깜빡임 방지)
+    placeholderData: (previous) => previous,
   })
-  // 확장 직후 전체 이력이 로딩되는 동안에는 최근 N개를 그대로 보여준다(깜빡임 방지)
-  const jobs = expanded && fullQuery.data ? fullQuery.data : group.jobs
+  // 확장 직후 첫 페이지가 로딩되는 동안에는 최근 N개를 그대로 보여준다
+  const jobs = expanded && pageQuery.data ? pageQuery.data.items : group.jobs
+  const totalPages = pageQuery.data ? Math.ceil(pageQuery.data.total / PAGE_SIZE) : 0
   const hiddenCount = Math.max(0, group.total - group.jobs.length)
 
   // 주기와 무관한 즉시 실행: 사이클(변경 감지→누락 스캔)을 지금 큐잉한다
@@ -72,6 +84,7 @@ function AutoProductGroup({
       </div>
       {/* 프로덕트별로 이미 그룹돼 있으므로 product 컬럼은 숨긴다 */}
       <JobTable jobs={jobs} showKind showProduct={false} emptyMessage="실행 이력이 없습니다." />
+      {expanded ? <Pagination page={page} totalPages={totalPages} onChange={setPage} /> : null}
     </section>
   )
 }
