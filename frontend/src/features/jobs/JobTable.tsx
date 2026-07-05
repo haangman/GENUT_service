@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { cancelJob } from '../../api/jobs'
 import type { Job } from '../../types/api'
@@ -11,6 +11,76 @@ import {
   jobKindLabel,
   jobResultLabel,
 } from './jobFormat'
+
+// 한 번에 렌더링하는 행 수. 수천 건 이력을 통째로 DOM에 올리면 로그 토글/폴링마다
+// 페이지 전체가 버벅이므로, 청크로 잘라 '더 보기'로 늘려간다(데이터 자체는 전부 로드됨).
+const RENDER_CHUNK = 200
+
+const cell = 'whitespace-nowrap px-3 py-2.5 text-muted'
+
+// 행 1개 — memo로 감싸 로그 토글(selected)·1초 틱이 관련 행만 다시 그리게 한다.
+// (React Query의 structural sharing이 변하지 않은 job 객체 참조를 유지해 준다)
+const JobRow = memo(function JobRow({
+  job,
+  showKind,
+  showProduct,
+  selected,
+  canceling,
+  runningTick,
+  onToggle,
+  onCancel,
+}: {
+  job: Job
+  showKind: boolean
+  showProduct: boolean
+  selected: boolean
+  canceling: boolean
+  runningTick: number // 실행 중 행만 1초마다 변해 경과 시간을 갱신한다(그 외 행은 0 고정)
+  onToggle: (jobId: number) => void
+  onCancel: (jobId: number) => void
+}) {
+  void runningTick // 값은 리렌더 트리거로만 쓰인다
+  return (
+    <tr
+      className={`cursor-pointer border-t border-border transition hover:bg-surface-hover ${
+        selected ? 'bg-primary-soft' : ''
+      }`}
+      onClick={() => onToggle(job.id)}
+    >
+      <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
+      {showProduct ? <td className="px-3 py-2.5 text-muted">{job.product_id}</td> : null}
+      {showKind ? (
+        <td className="px-3 py-2.5">
+          <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job)}</span>
+        </td>
+      ) : null}
+      <td className="px-3 py-2.5">
+        <span className={jobBadgeClass(job.status)}>{job.status}</span>
+      </td>
+      <td className={cell}>{formatDateTime(job.submitted_at)}</td>
+      <td className={cell}>{formatDateTime(job.started_at)}</td>
+      <td className={cell}>{formatDateTime(job.finished_at)}</td>
+      <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
+      {/* 결과는 잘라내지 않고 줄바꿈으로 전체를 보여준다 */}
+      <td className="break-words px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
+      <td className="px-3 py-2.5 text-right">
+        {job.status === 'running' ? (
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={canceling}
+            onClick={(event) => {
+              event.stopPropagation()
+              onCancel(job.id)
+            }}
+          >
+            {canceling ? '종료 중…' : '강제 종료'}
+          </button>
+        ) : null}
+      </td>
+    </tr>
+  )
+})
 
 // job 이력 테이블: 행 클릭 → 바로 아래에 로그 패널 전개, 실행 중 job은 강제 종료 버튼.
 // 수동/자동 실행 이력 페이지가 공용으로 사용한다.
@@ -29,15 +99,19 @@ export function JobTable({
 }) {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
   const [canceling, setCanceling] = useState<Set<number>>(new Set())
-  const [, setTick] = useState(0) // 1초 틱: 실행 중 job의 총 수행 시간 실시간 갱신용
+  const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK)
+  const [tick, setTick] = useState(0) // 1초 틱: 실행 중 job의 총 수행 시간 실시간 갱신용
   const queryClient = useQueryClient()
-  // 실행 중(시작했고 아직 종료 전)인 job이 있으면 1초마다 리렌더해 총 수행 시간을 실시간 갱신한다.
-  const anyRunning = jobs.some((job) => job.started_at && !job.finished_at)
+
+  const visibleJobs = jobs.length > visibleCount ? jobs.slice(0, visibleCount) : jobs
+  // 화면에 보이는 실행 중 job이 있을 때만 1초 틱을 돌린다.
+  const anyRunning = visibleJobs.some((job) => job.started_at && !job.finished_at)
   useEffect(() => {
     if (!anyRunning) return
     const timer = setInterval(() => setTick((t) => t + 1), 1000)
     return () => clearInterval(timer)
   }, [anyRunning])
+
   const cancelMut = useMutation({
     mutationFn: (jobId: number) => cancelJob(jobId),
     onError: () =>
@@ -45,11 +119,18 @@ export function JobTable({
     // ['jobs'] prefix 무효화: 이 테이블을 쓰는 모든 페이지의 job 쿼리를 갱신
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
   })
-  const requestCancel = (jobId: number) => {
-    setCanceling((prev) => new Set(prev).add(jobId))
-    cancelMut.mutate(jobId)
-  }
-  const cell = 'whitespace-nowrap px-3 py-2.5 text-muted'
+  const { mutate: cancelMutate } = cancelMut
+  const requestCancel = useCallback(
+    (jobId: number) => {
+      setCanceling((prev) => new Set(prev).add(jobId))
+      cancelMutate(jobId)
+    },
+    [cancelMutate],
+  )
+  const toggleSelected = useCallback((jobId: number) => {
+    setSelectedJobId((current) => (current === jobId ? null : jobId))
+  }, [])
+
   if (jobs.length === 0 && emptyMessage) {
     return <p className="text-sm text-subtle">{emptyMessage}</p>
   }
@@ -88,48 +169,18 @@ export function JobTable({
           </tr>
         </thead>
         <tbody>
-          {jobs.map((job) => (
+          {visibleJobs.map((job) => (
             <Fragment key={job.id}>
-              <tr
-                className={`cursor-pointer border-t border-border transition hover:bg-surface-hover ${
-                  selectedJobId === job.id ? 'bg-primary-soft' : ''
-                }`}
-                onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
-              >
-                <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
-                {showProduct ? (
-                  <td className="px-3 py-2.5 text-muted">{job.product_id}</td>
-                ) : null}
-                {showKind ? (
-                  <td className="px-3 py-2.5">
-                    <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job)}</span>
-                  </td>
-                ) : null}
-                <td className="px-3 py-2.5">
-                  <span className={jobBadgeClass(job.status)}>{job.status}</span>
-                </td>
-                <td className={cell}>{formatDateTime(job.submitted_at)}</td>
-                <td className={cell}>{formatDateTime(job.started_at)}</td>
-                <td className={cell}>{formatDateTime(job.finished_at)}</td>
-                <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
-                {/* 결과는 잘라내지 않고 줄바꿈으로 전체를 보여준다 */}
-                <td className="break-words px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
-                <td className="px-3 py-2.5 text-right">
-                  {job.status === 'running' ? (
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      disabled={canceling.has(job.id)}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        requestCancel(job.id)
-                      }}
-                    >
-                      {canceling.has(job.id) ? '종료 중…' : '강제 종료'}
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
+              <JobRow
+                job={job}
+                showKind={showKind}
+                showProduct={showProduct}
+                selected={selectedJobId === job.id}
+                canceling={canceling.has(job.id)}
+                runningTick={job.started_at && !job.finished_at ? tick : 0}
+                onToggle={toggleSelected}
+                onCancel={requestCancel}
+              />
               {selectedJobId === job.id ? (
                 <tr className="bg-surface-2">
                   <td colSpan={columnCount} className="border-t border-border p-3">
@@ -141,6 +192,17 @@ export function JobTable({
           ))}
         </tbody>
       </table>
+      {jobs.length > visibleJobs.length ? (
+        <div className="border-t border-border p-3 text-center">
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setVisibleCount((count) => count + RENDER_CHUNK)}
+          >
+            더 보기 ({visibleJobs.length.toLocaleString()}/{jobs.length.toLocaleString()})
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

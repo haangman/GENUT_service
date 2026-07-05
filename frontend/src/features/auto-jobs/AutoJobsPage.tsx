@@ -44,11 +44,13 @@ function AutoProductGroup({
   expanded: boolean
   onToggle: () => void
 }) {
-  // 확장된 그룹만 전체 이력을 조회한다(접힌 그룹은 auto-history 응답의 최근 N개로 충분)
+  // 확장된 그룹만 전체 이력을 조회한다(접힌 그룹은 auto-history 응답의 최근 N개로 충분).
+  // 전체 이력은 수천 건 × 여러 페이지 요청이라 폴링을 5초로 완화한다 — 상태 변화가
+  // 잦은 최근 항목은 접힘 그룹 쿼리(2초)와 취소/재수행의 즉시 무효화가 커버한다.
   const fullQuery = useQuery({
     queryKey: ['jobs', 'auto', 'byProduct', group.product_id],
     queryFn: () => fetchAllAutoJobs(group.product_id),
-    refetchInterval: 2000,
+    refetchInterval: 5000,
     enabled: expanded,
   })
   // 확장 직후 전체 이력이 로딩되는 동안에는 최근 N개를 그대로 보여준다(깜빡임 방지)
