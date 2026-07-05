@@ -165,3 +165,50 @@ def test_product_read_has_auto_defaults(client: TestClient) -> None:
     assert created["auto_interval_seconds"] is None
     assert created["auto_file_list"] == []
     assert created["cmake_template"] is None
+
+
+def _make_auto_run_product(db_session, name: str = "auto-now", auto_run: bool = True):
+    from genut_service.db.models import Product
+
+    product = Product(
+        name=name,
+        product_code=name,
+        git_url="u",
+        compile_db_rel="build",
+        out_tests_rel="unittests",
+        cmake_configure_cmd="c",
+        cmake_build_cmd="b",
+        test_run_cmd="r",
+        test_generation_mode="c",
+        auto_run=auto_run,
+        auto_interval_seconds=3600 if auto_run else None,
+        auto_file_list=["src/aaa.c"] if auto_run else [],
+    )
+    db_session.add(product)
+    db_session.commit()
+    return product
+
+
+def test_run_auto_now_queues_cycle_pair(client, db_session) -> None:
+    """수동 실행: 주기와 무관하게 diff→scan 준비 job 쌍을 즉시 큐잉한다."""
+    from datetime import datetime, timezone
+
+    product = _make_auto_run_product(db_session)
+    product.last_auto_run_at = datetime.now(timezone.utc)  # 주기상 한참 남은 상태
+    db_session.commit()
+
+    resp = client.post(f"/api/products/{product.id}/auto/run")
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert [job["kind"] for job in body] == ["auto_diff", "auto_scan"]
+    assert all(job["origin"] == "auto" for job in body)
+    assert all(job["status"] == "queued" for job in body)
+
+    # 이전 사이클이 비종료인 동안 재실행 → 409 (중복 사이클 방지)
+    assert client.post(f"/api/products/{product.id}/auto/run").status_code == 409
+
+
+def test_run_auto_now_rejects_non_auto_and_missing(client, db_session) -> None:
+    plain = _make_auto_run_product(db_session, name="plain-now", auto_run=False)
+    assert client.post(f"/api/products/{plain.id}/auto/run").status_code == 409
+    assert client.post("/api/products/999999/auto/run").status_code == 404

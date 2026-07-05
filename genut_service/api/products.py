@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
 from genut_service.schemas.common import Page
+from genut_service.schemas.job import JobRead
 from genut_service.schemas.product import (
     ProductCreate,
     ProductRead,
@@ -84,6 +85,34 @@ def update_auto_product(
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
     return ProductRead.model_validate(product)
+
+
+@router.post(
+    "/{product_id}/auto/run",
+    response_model=list[JobRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def run_auto_now(product_id: int, session: Session = Depends(get_session)) -> list[JobRead]:
+    """주기와 무관하게 auto 사이클(변경 감지→누락 스캔)을 지금 큐잉한다.
+
+    이전 사이클의 준비 job이 아직 대기/실행 중이면 중복을 만들지 않고 409를 반환한다.
+    실행 자체는 백그라운드 스케줄러가 다음 tick에 집어 처리한다.
+    """
+    from genut_service.db.models import Job, Product
+    from genut_service.scheduler import auto_tick
+
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    if not product.auto_run:
+        raise HTTPException(status.HTTP_409_CONFLICT, "자동 실행 프로덕트가 아니다")
+    job_ids = auto_tick.enqueue_cycle_now(session, product)
+    if not job_ids:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "이미 진행 중인 자동 실행이 있다 (완료 후 다시 시도)"
+        )
+    jobs = [session.get(Job, job_id) for job_id in job_ids]
+    return [JobRead.model_validate(job) for job in jobs if job is not None]
 
 
 @router.get("", response_model=Page[ProductRead])

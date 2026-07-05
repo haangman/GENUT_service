@@ -63,31 +63,54 @@ def enqueue_due_cycles(session: Session, now: datetime | None = None) -> list[in
                 last = last.replace(tzinfo=timezone.utc)
             if (now - last).total_seconds() < product.auto_interval_seconds:
                 continue
-        pending_prep = session.scalar(
-            select(Job.id)
-            .where(
-                Job.product_id == product.id,
-                Job.kind.in_(_PREP_KIND_VALUES),
-                Job.status.not_in(_TERMINAL_VALUES),
-            )
-            .limit(1)
+        created.extend(_enqueue_cycle(session, product, now))
+    session.commit()
+    return created
+
+
+def _enqueue_cycle(session: Session, product: Product, now: datetime) -> list[int]:
+    """준비 job 쌍(diff→scan)을 큐잉하고 last_auto_run_at을 갱신한다(커밋은 호출자).
+
+    이전 사이클의 준비 job이 아직 종료되지 않았으면(대기/실행 중) 중복 사이클을
+    만들지 않고 빈 목록을 반환한다.
+    """
+    pending_prep = session.scalar(
+        select(Job.id)
+        .where(
+            Job.product_id == product.id,
+            Job.kind.in_(_PREP_KIND_VALUES),
+            Job.status.not_in(_TERMINAL_VALUES),
         )
-        if pending_prep is not None:
-            continue
-        # diff를 먼저 만들어 id를 작게 → claim이 diff부터 집는다(변경 감지 후 누락 스캔)
-        for kind in (JobKind.AUTO_DIFF, JobKind.AUTO_SCAN):
-            job = Job(
-                product_id=product.id,
-                kind=kind.value,
-                origin=JobOrigin.AUTO.value,
-                file_list=[],
-                excluded_files=[],
-                status=JobStatus.QUEUED.value,
-            )
-            session.add(job)
-            session.flush()
-            created.append(job.id)
-        product.last_auto_run_at = now
+        .limit(1)
+    )
+    if pending_prep is not None:
+        return []
+    created: list[int] = []
+    # diff를 먼저 만들어 id를 작게 → claim이 diff부터 집는다(변경 감지 후 누락 스캔)
+    for kind in (JobKind.AUTO_DIFF, JobKind.AUTO_SCAN):
+        job = Job(
+            product_id=product.id,
+            kind=kind.value,
+            origin=JobOrigin.AUTO.value,
+            file_list=[],
+            excluded_files=[],
+            status=JobStatus.QUEUED.value,
+        )
+        session.add(job)
+        session.flush()
+        created.append(job.id)
+    product.last_auto_run_at = now
+    return created
+
+
+def enqueue_cycle_now(session: Session, product: Product) -> list[int]:
+    """주기와 무관하게 auto 사이클을 **지금** 큐잉한다(이력 페이지의 수동 실행용).
+
+    생성된 준비 job id 목록을 반환하며, 이전 사이클이 아직 진행/대기 중이면 중복을
+    만들지 않고 빈 목록을 반환한다. 큐잉 시 last_auto_run_at이 갱신되어 다음 주기
+    기산점도 지금으로 옮겨진다. 실행 자체는 스케줄러 auto 단계가 다음 tick에 집는다.
+    """
+    created = _enqueue_cycle(session, product, _utcnow())
     session.commit()
     return created
 

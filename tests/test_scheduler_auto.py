@@ -163,6 +163,30 @@ def test_enqueue_skips_non_auto_inactive_and_no_interval(db_session: Session) ->
     assert auto_tick.enqueue_due_cycles(db_session) == []
 
 
+def test_enqueue_cycle_now_ignores_interval(db_session: Session) -> None:
+    """수동 실행은 주기가 도래하지 않아도 사이클 쌍을 즉시 큐잉한다."""
+    product = _auto_product(db_session, interval=3600)
+    product.last_auto_run_at = _now()  # 방금 실행됨 → 주기상으로는 한참 남음
+    db_session.commit()
+    stamp_before = product.last_auto_run_at
+
+    created = auto_tick.enqueue_cycle_now(db_session, product)
+
+    jobs = _jobs(db_session)
+    assert [j.id for j in jobs] == created
+    assert [j.kind for j in jobs] == [JobKind.AUTO_DIFF.value, JobKind.AUTO_SCAN.value]
+    assert all(j.status == JobStatus.QUEUED.value for j in jobs)
+    assert product.last_auto_run_at >= stamp_before  # 기산점이 지금으로 갱신
+
+
+def test_enqueue_cycle_now_skips_while_cycle_pending(db_session: Session) -> None:
+    product = _auto_product(db_session)
+    assert len(auto_tick.enqueue_cycle_now(db_session, product)) == 2
+    # 이전 사이클 준비 job이 비종료인 동안은 중복 사이클을 만들지 않는다
+    assert auto_tick.enqueue_cycle_now(db_session, product) == []
+    assert len(_jobs(db_session)) == 2
+
+
 # ---------------------------------------------------------------------------
 # claim_prep_jobs (배타·순서)
 # ---------------------------------------------------------------------------
