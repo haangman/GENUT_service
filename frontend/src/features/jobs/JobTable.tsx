@@ -42,13 +42,20 @@ const JobRow = memo(function JobRow({
   void runningTick // 값은 리렌더 트리거로만 쓰인다
   return (
     <tr
-      className={`cursor-pointer border-t border-border transition hover:bg-surface-hover ${
+      className={`group cursor-pointer border-t border-border transition hover:bg-surface-hover ${
         selected ? 'bg-primary-soft' : ''
       }`}
       onClick={() => onToggle(job.id)}
     >
       <td className="px-3 py-2.5 font-semibold text-fg">{job.id}</td>
-      {showProduct ? <td className="px-3 py-2.5 text-muted">{job.product_id}</td> : null}
+      {showProduct ? (
+        <td
+          className="truncate px-3 py-2.5 text-muted"
+          title={`${job.product_name ?? ''} (#${job.product_id})`}
+        >
+          {job.product_name ?? '?'} <span className="text-subtle">#{job.product_id}</span>
+        </td>
+      ) : null}
       {showKind ? (
         <td className="px-3 py-2.5">
           <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job)}</span>
@@ -63,7 +70,13 @@ const JobRow = memo(function JobRow({
       <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
       {/* 결과는 잘라내지 않고 줄바꿈으로 전체를 보여준다 */}
       <td className="break-words px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
-      <td className="px-3 py-2.5 text-right">
+      {/* 액션 컬럼은 오른쪽에 고정(sticky) — 테이블이 화면보다 넓어 가로 스크롤이 생겨도
+          강제 종료 버튼이 항상 보인다. 배경을 채워 밑의 내용이 비치지 않게 한다. */}
+      <td
+        className={`sticky right-0 px-3 py-2.5 text-right ${
+          selected ? 'bg-primary-soft' : 'bg-surface group-hover:bg-surface-hover'
+        }`}
+      >
         {job.status === 'running' ? (
           <button
             type="button"
@@ -84,7 +97,7 @@ const JobRow = memo(function JobRow({
 
 // job 이력 테이블: 행 클릭 → 바로 아래에 로그 패널 전개, 실행 중 job은 강제 종료 버튼.
 // 수동/자동 실행 이력 페이지가 공용으로 사용한다.
-// showKind: 종류(GENUT 이름/JJ 스캔/변경 감지) badge 컬럼을 추가한다(자동 실행 이력 전용).
+// showKind: 종류(GENUT 이름/스캔/변경 감지) badge 컬럼을 추가한다.
 // showProduct: product 컬럼 표시 여부 — 프로덕트별로 이미 그룹된 화면에서는 끈다.
 export function JobTable({
   jobs,
@@ -139,25 +152,27 @@ export function JobTable({
     <div className="card overflow-x-auto">
       {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
           결과 컬럼만 폭을 지정하지 않아 남는 공간을 차지하며 줄바꿈으로 전체 내용을 보여준다.
-          min-w-[1120px]는 본문 컨테이너(max-w-6xl) 안에 맞아 데스크톱에서는 좌우 스크롤 없이
-          우측의 강제 종료 버튼까지 보인다(좁은 화면은 overflow-x-auto가 스크롤 제공). */}
-      <table className="w-full min-w-[1120px] table-fixed text-sm">
+          제품(이름+id) 컬럼이 있으면 폭이 컨테이너를 넘을 수 있는데, 액션 컬럼을 sticky로
+          고정해 가로 스크롤이 생겨도 강제 종료 버튼은 항상 보인다. */}
+      <table
+        className={`w-full ${showProduct ? 'min-w-[1200px]' : 'min-w-[1120px]'} table-fixed text-sm`}
+      >
         <colgroup>
           <col className="w-[56px]" />
-          {showProduct ? <col className="w-[84px]" /> : null}
+          {showProduct ? <col className="w-[150px]" /> : null}
           {showKind ? <col className="w-[100px]" /> : null}
           <col className="w-[96px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
-          <col className="w-[150px]" />
+          <col className="w-[140px]" />
           <col />
           <col className="w-[80px]" />
         </colgroup>
         <thead>
           <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5">#</th>
-            {showProduct ? <th className="px-3 py-2.5">product</th> : null}
+            {showProduct ? <th className="px-3 py-2.5">제품</th> : null}
             {showKind ? <th className="px-3 py-2.5">종류</th> : null}
             <th className="px-3 py-2.5">상태</th>
             <th className="px-3 py-2.5">제출 시각</th>
@@ -165,7 +180,7 @@ export function JobTable({
             <th className="px-3 py-2.5">종료 시간</th>
             <th className="px-3 py-2.5">총 수행 시간</th>
             <th className="px-3 py-2.5">결과</th>
-            <th className="px-3 py-2.5"></th>
+            <th className="sticky right-0 bg-surface-2 px-3 py-2.5"></th>
           </tr>
         </thead>
         <tbody>

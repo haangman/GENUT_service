@@ -57,12 +57,12 @@ export function jobResultLabel(job: Job): string {
   }
 }
 
-// job 종류 badge (자동 실행 이력 페이지): GENUT 실행 vs 준비 작업(JJ 스캔/변경 감지).
+// job 종류 badge: GENUT 실행 vs 준비 작업(스캔/변경 감지).
 // GENUT 실행 job은 배정된 인스턴스 이름(예: GENUT1)을 보여준다(미배정이면 'GENUT').
 export function jobKindLabel(job: Pick<Job, 'kind'> & { genut_name?: string | null }): string {
   switch (job.kind) {
     case 'auto_scan':
-      return 'JJ 스캔'
+      return '스캔'
     case 'auto_diff':
       return '변경 감지'
     default:

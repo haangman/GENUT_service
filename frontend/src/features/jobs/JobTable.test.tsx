@@ -8,6 +8,7 @@ function makeJob(id: number, overrides: Partial<Job> = {}): Job {
   return {
     id,
     product_id: 1,
+    product_name: 'prod-a',
     genut_instance_id: null,
     genut_name: null,
     status: 'done',

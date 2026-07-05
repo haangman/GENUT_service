@@ -61,6 +61,7 @@ def test_submit_splits_included_excluded(client: TestClient, checkout: Path) -> 
     assert body["status"] == "queued"
     assert body["kind"] == "genut"
     assert body["origin"] == "manual"
+    assert body["product_name"] == "demo"  # 이력 표시용 프로덕트 이름
     assert body["file_list"] == ["src/a.cpp"]
     assert body["excluded_files"] == ["src/b.cpp"]
     assert body["function_name"] == "foo"

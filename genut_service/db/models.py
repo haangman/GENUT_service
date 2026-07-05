@@ -208,6 +208,11 @@ class Job(TimestampMixin, Base):
         """배정된 GENUT 인스턴스 이름(미배정/삭제면 None) — 이력 표시용."""
         return self.genut_instance.name if self.genut_instance is not None else None
 
+    @property
+    def product_name(self) -> str | None:
+        """대상 프로덕트 이름 — 이력 표시용(id만으로는 알아보기 어렵다)."""
+        return self.product.name if self.product is not None else None
+
 
 class JobEvent(Base):
     """job 타임라인/로그(append-only). 대용량 stdout/stderr를 message에 담는다."""

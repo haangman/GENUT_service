@@ -103,6 +103,8 @@ export type JobOrigin = 'manual' | 'auto'
 export interface Job {
   id: number
   product_id: number
+  // 대상 프로덕트 이름 — 이력 화면 표시용(id와 함께 보여준다)
+  product_name: string | null
   genut_instance_id: number | null
   // 배정된 GENUT 인스턴스 이름(미배정이면 null) — 이력 화면 표시용
   genut_name: string | null

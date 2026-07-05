@@ -13,6 +13,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   return {
     id: nextId,
     product_id: 1,
+    product_name: 'auto-demo',
     genut_instance_id: null,
     genut_name: null,
     status: 'done',
@@ -74,9 +75,9 @@ describe('AutoJobsPage', () => {
     expect(screen.getByText('30')).toBeInTheDocument()
     expect(screen.getByText('29')).toBeInTheDocument()
     expect(screen.getByText('28')).toBeInTheDocument()
-    // 종류 badge: GENUT 실행은 배정된 인스턴스 이름 / JJ 스캔 / 변경 감지
+    // 종류 badge: GENUT 실행은 배정된 인스턴스 이름 / 스캔 / 변경 감지
     expect(screen.getByText('GENUT1')).toBeInTheDocument()
-    expect(screen.getByText('JJ 스캔')).toBeInTheDocument()
+    expect(screen.getByText('스캔')).toBeInTheDocument()
     expect(screen.getByText('변경 감지')).toBeInTheDocument()
     // 프로덕트별로 그룹돼 있으므로 product 컬럼은 없다
     expect(screen.queryByText('product')).toBeNull()

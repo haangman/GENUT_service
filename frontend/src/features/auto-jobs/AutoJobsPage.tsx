@@ -98,7 +98,7 @@ export function AutoJobsPage() {
     <div className="space-y-6">
       <PageHeader
         title="자동 실행 이력"
-        description="자동 실행 프로덕트별 job 이력(변경 감지/JJ 스캔/GENUT)을 본다."
+        description="자동 실행 프로덕트별 job 이력(변경 감지/스캔/GENUT)을 본다."
       />
       {groups.length === 0 ? (
         <p className="text-sm text-subtle">자동 실행 프로덕트가 없습니다.</p>
