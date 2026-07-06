@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 from pathlib import Path
 
@@ -10,9 +11,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from genut_service.config import get_settings
 from genut_service.db.models import Job, Product
 from genut_service.enums import JobKind, JobOrigin, JobStatus
-from genut_service.services import auto_run_service
+from genut_service.services import auto_run_service, function_extractor
 
 AAA_SOURCE = (
     "int bbb(void) { return 1; }\n"
@@ -319,6 +321,103 @@ def test_scan_loads_compile_db_once_for_many_enqueues(
 
     assert "job 3개 생성" in summary  # bbb/ccc/ddd 모두 누락 → 3건 큐잉
     assert len(calls) == 1  # 큐잉 건수와 무관하게 1회 로드
+
+
+# ---------------------------------------------------------------------------
+# FunctionExtractor(외부 바이너리) 통합
+# ---------------------------------------------------------------------------
+
+
+def _enable_fake_extractor(tmp_path: Path, monkeypatch) -> None:
+    """우분투 22.04 + 배치된 바이너리가 있는 환경을 모사한다(실행은 _execute 모킹)."""
+    tools = tmp_path / "tools"
+    binary = tools / "22_04" / "FunctionExtractor"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_bytes(b"fake-elf")
+    monkeypatch.setattr(
+        platform,
+        "freedesktop_os_release",
+        lambda: {"ID": "ubuntu", "VERSION_ID": "22.04"},
+        raising=False,
+    )
+    monkeypatch.setattr(get_settings(), "func_extractor_dir", str(tools))
+    function_extractor.find_extractor.cache_clear()
+
+
+def test_scan_uses_function_extractor_binary(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """바이너리가 있으면 내장 파서 대신 바이너리 출력으로 누락 함수를 판정한다."""
+    root = _make_root(tmp_path)
+    _write_test_file(root, "unittests", "aaa", "bbb_Test.cpp")  # bbb만 커버
+    product = _make_product(db_session, root)
+    _enable_fake_extractor(tmp_path, monkeypatch)
+    output = json.dumps(
+        [
+            {"name": "bbb", "code": "int bbb(void){\n}", "line": 1},
+            {"name": "ccc", "code": "int ccc(void){\n}", "line": 2},
+            {"name": "ddd", "code": "int ddd(void){\n}", "line": 3},
+        ]
+    )
+    monkeypatch.setattr(
+        function_extractor,
+        "_execute",
+        lambda argv, timeout: {"success": True, "returncode": 0, "stdout": output, "stderr": ""},
+    )
+    scan = _prep_job(db_session, product)
+    emit = _Emit()
+
+    auto_run_service.run_scan_job(db_session, scan, product, emit)
+
+    jobs = _genut_jobs(db_session)
+    assert [j.function_name for j in jobs] == ["ccc", "ddd"]
+    # job 로그에 어떤 추출기를 썼는지 남는다
+    assert any("FunctionExtractor(22_04)" in m for m in emit.messages("info"))
+
+
+def test_scan_extractor_failure_propagates(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """바이너리가 있는 환경에서 실행 실패는 폴백 없이 전파 → 준비 job FAILED."""
+    root = _make_root(tmp_path)
+    _write_test_file(root, "unittests", "aaa", "bbb_Test.cpp")  # 함수 추출 경로 진입
+    product = _make_product(db_session, root)
+    _enable_fake_extractor(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        function_extractor,
+        "_execute",
+        lambda argv, timeout: {"success": False, "returncode": 1, "stdout": "", "stderr": "boom"},
+    )
+    scan = _prep_job(db_session, product)
+
+    with pytest.raises(function_extractor.ExtractorError):
+        auto_run_service.run_scan_job(db_session, scan, product, _Emit())
+
+
+def test_diff_extractor_failure_keeps_baseline(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    root = _make_git_root(tmp_path)
+    product = _make_product(db_session, root)
+    baseline = _head(root)
+    product.last_scanned_commit = baseline
+    db_session.commit()
+    (root / "src" / "aaa.c").write_text(
+        AAA_SOURCE.replace("return 2;", "return 22;"), encoding="utf-8"
+    )
+    _git_commit_all(root, "change ccc")
+
+    _enable_fake_extractor(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        function_extractor,
+        "_execute",
+        lambda argv, timeout: {"success": False, "returncode": 2, "stdout": "", "stderr": "boom"},
+    )
+    diff = _prep_job(db_session, product, kind=JobKind.AUTO_DIFF)
+
+    with pytest.raises(function_extractor.ExtractorError):
+        auto_run_service.run_diff_job(db_session, diff, product, _Emit())
+    assert product.last_scanned_commit == baseline  # 실패 시 기준 미전진 → 다음 주기 재시도
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,20 @@ def _disable_venv_by_default() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _clear_function_extractor_cache() -> Iterator[None]:
+    """FunctionExtractor 탐지 캐시(lru_cache)를 테스트마다 초기화한다.
+
+    한 테스트가 platform/설정을 monkeypatch해 바이너리를 '발견'한 캐시가
+    다른 테스트로 새어 나가지 않게 한다.
+    """
+    from genut_service.services.function_extractor import find_extractor
+
+    find_extractor.cache_clear()
+    yield
+    find_extractor.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _disable_test_status_cache_by_default() -> Iterator[None]:
     """테스트 기본값: 테스트 현황 요약 캐시 비활성(테스트 간 결과 오염 방지).
 

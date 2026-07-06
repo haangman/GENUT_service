@@ -26,11 +26,12 @@ from genut_service.db.models import Job, Product
 from genut_service.enums import JobKind, JobOrigin, JobPhase, JobStatus
 from genut_service.paths import normalize_rel_path
 from genut_service.runner import git_ops
-from genut_service.services import compile_db_service, test_status_service
-from genut_service.services.c_function_parser import (
-    FunctionSpan,
-    extract_functions_from_file,
+from genut_service.services import (
+    compile_db_service,
+    function_extractor,
+    test_status_service,
 )
+from genut_service.services.c_function_parser import FunctionSpan
 
 # (phase, level, message) — runner/worker.py의 emit과 동일 계약
 EmitFn = Callable[[str, str, str], None]
@@ -208,6 +209,7 @@ def run_scan_job(
         f"스캔 시작: 대상 {len(rels)}개, 성공 폴더 stem {len(success)}개, "
         f"실패 폴더 stem {len(failed)}개",
     )
+    emit(phase, "info", f"함수 추출기: {function_extractor.describe_extractor()}")
     ctx = EnqueueContext(session, product, root)  # compile DB·pending 인덱스 1회 구성
 
     created = 0
@@ -234,7 +236,9 @@ def run_scan_job(
             warned += 1
             continue
         try:
-            spans = extract_functions_from_file(src)
+            # FunctionExtractor 바이너리가 있으면 그것으로, 없으면 내장 파서로 추출.
+            # 바이너리 실행 실패(ExtractorError)는 잡지 않고 전파 → 준비 job FAILED.
+            spans = function_extractor.extract_functions(root, product.compile_db_rel, src)
         except OSError as exc:
             emit(phase, "warn", f"소스 읽기 실패 — 스킵: {rel} ({exc})")
             warned += 1
@@ -342,6 +346,7 @@ def run_diff_job(
         "info",
         f"{old[:12]}..{new[:12]}: 변경 파일 {len(changes)}개 (대상 파일 {len(auto_set)}개와 대조)",
     )
+    emit(phase, "info", f"함수 추출기: {function_extractor.describe_extractor()}")
     ctx = EnqueueContext(session, product, root)  # compile DB·pending 인덱스 1회 구성
 
     created = 0
@@ -363,7 +368,9 @@ def run_diff_job(
             # 수정을 동반한 리네임: 옛 경로와의 라인 대응이 어려우므로 안전하게
             # 파일의 전 함수를 재생성 대상으로 본다(dedup이 중복을 흡수한다).
             try:
-                spans = extract_functions_from_file(root / rel_norm)
+                spans = function_extractor.extract_functions(
+                    root, product.compile_db_rel, root / rel_norm
+                )
             except OSError as exc:
                 emit(phase, "warn", f"소스 읽기 실패 — 스킵: {rel_norm} ({exc})")
                 continue
@@ -385,7 +392,9 @@ def run_diff_job(
             continue
         ranges = git_ops.diff_new_line_ranges(root, old, new, rel_norm, timeout=git_timeout)
         try:
-            spans = extract_functions_from_file(root / rel_norm)
+            spans = function_extractor.extract_functions(
+                root, product.compile_db_rel, root / rel_norm
+            )
         except OSError as exc:
             emit(phase, "warn", f"소스 읽기 실패 — 스킵: {rel_norm} ({exc})")
             continue

@@ -378,6 +378,27 @@ def test_process_prep_job_passes_cancel_hooks_to_diff(
     assert callable(captured.get("on_process"))
 
 
+def test_process_prep_job_marks_extractor_failure_failed(
+    db_session: Session, tmp_path: Path, monkeypatch
+) -> None:
+    """FunctionExtractor 실행 실패는 폴백 없이 해당 준비 job을 FAILED로 남긴다."""
+    from genut_service.services import function_extractor
+
+    def boom(session, job, product, emit, **kwargs):  # noqa: ANN001
+        raise function_extractor.ExtractorError("FunctionExtractor 실행 실패(rc=1): boom")
+
+    monkeypatch.setattr(auto_tick.auto_run_service, "run_scan_job", boom)
+    root = _make_root(tmp_path)
+    product = _auto_product(db_session, code_path=str(root))
+    scan = _claimed_prep(db_session, product, JobKind.AUTO_SCAN)
+
+    auto_tick.process_prep_job(db_session, scan.id)
+
+    db_session.refresh(scan)
+    assert scan.status == JobStatus.FAILED.value
+    assert "FunctionExtractor" in (scan.error or "")
+
+
 def test_process_prep_job_ignores_non_running(db_session: Session) -> None:
     product = _auto_product(db_session)
     job = Job(

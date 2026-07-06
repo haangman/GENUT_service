@@ -16,11 +16,7 @@ from genut_service.services import function_extractor
 from genut_service.services.c_function_parser import FunctionSpan
 
 
-@pytest.fixture(autouse=True)
-def _clear_extractor_cache():
-    function_extractor.find_extractor.cache_clear()
-    yield
-    function_extractor.find_extractor.cache_clear()
+# 탐지 캐시 초기화는 conftest의 autouse 픽스처(_clear_function_extractor_cache)가 담당한다.
 
 
 def _fake_os_release(id_value: str = "ubuntu", version: str = "22.04"):
