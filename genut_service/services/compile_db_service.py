@@ -12,7 +12,9 @@ def load_compile_db(root: Path, compile_db_rel: str) -> tuple[set[str], set[str]
     """compile_commands.json을 읽어 (root 기준 상대경로 집합, basename 집합)을 반환.
 
     파일이 없거나 비정상이면 빈 집합. `file`이 절대경로면 그대로, 상대면 `directory`
-    기준으로 절대화한 뒤 root 기준 상대경로로 변환한다.
+    기준으로 절대화한 뒤 root 기준 상대경로로 변환한다. `directory`마저 상대(또는 누락)면
+    root 기준으로 해석한다 — repo에 커밋해 두는 포터블 compile DB(상대 경로 항목)가
+    어느 체크아웃 위치에서든 인식되게 하기 위함이다.
     """
     rel_dir = normalize_rel_path(compile_db_rel) if compile_db_rel else ""
     db_path = (root / rel_dir / "compile_commands.json") if rel_dir else (
@@ -37,7 +39,10 @@ def load_compile_db(root: Path, compile_db_rel: str) -> tuple[set[str], set[str]
             continue
         file_path = Path(file_field)
         if not file_path.is_absolute():
-            file_path = Path(entry.get("directory", "")) / file_field
+            dir_path = Path(entry.get("directory", ""))
+            if not dir_path.is_absolute():
+                dir_path = root_resolved / dir_path
+            file_path = dir_path / file_field
         try:
             rels.add(file_path.resolve().relative_to(root_resolved).as_posix())
         except ValueError:

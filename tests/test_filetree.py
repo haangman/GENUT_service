@@ -61,6 +61,23 @@ def test_split_inclusion_handles_bom_compdb(tmp_path: Path) -> None:
     assert excluded == []
 
 
+def test_load_compile_db_relative_entries_resolve_against_root(tmp_path: Path) -> None:
+    # repo에 커밋해 두는 포터블 compile DB: file/directory가 상대 경로여도
+    # 체크아웃 루트 기준으로 해석되어 어느 clone 위치에서든 인식돼야 한다
+    root = _build_checkout(tmp_path)
+    compdb = [
+        {"directory": ".", "command": "cc -c", "file": "src/a.cpp"},
+        {"command": "cc -c", "file": "src/c.cpp"},  # directory 누락도 root 기준
+    ]
+    (root / "build" / "compile_commands.json").write_text(
+        json.dumps(compdb), encoding="utf-8"
+    )
+    rels, bases = compile_db_service.load_compile_db(root, "build")
+    assert rels == {"src/a.cpp", "src/c.cpp"}
+    assert bases == {"a.cpp", "c.cpp"}
+    assert compile_db_service.list_files(root, "build") == ["src/a.cpp", "src/c.cpp"]
+
+
 def test_split_inclusion_partial_compdb(tmp_path: Path) -> None:
     root = _build_checkout(tmp_path)
     included, excluded = compile_db_service.split_inclusion(
