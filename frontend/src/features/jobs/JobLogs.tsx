@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { getJobLogs, rerunJob } from '../../api/jobs'
+import { useLang } from '../../lib/i18n'
 import { TERMINAL, formatStamp } from './jobFormat'
 
 // 로그 패널에 표시하는 최대 줄 수. 수만 줄을 한 텍스트 노드로 올리면 스크롤할 때마다
@@ -29,6 +30,7 @@ export const JobLogs = memo(function JobLogs({
   // 매 폴링마다 바닥으로 끌어내리면 스크롤이 계속 튄다.
   const stickToBottomRef = useRef(true)
   const terminal = TERMINAL.has(status)
+  const { t } = useLang()
 
   // 재수행: 동일 입력의 새 job을 큐에 추가한다(완료된 job에서만 가능).
   const queryClient = useQueryClient()
@@ -38,9 +40,9 @@ export const JobLogs = memo(function JobLogs({
       // ['jobs'] prefix 무효화: 모니터링(['jobs','history',…])·auto 이력(['jobs','auto',…]) 모두 갱신
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
       queryClient.invalidateQueries({ queryKey: ['queue'] })
-      window.alert(`재수행 요청 완료 (새 job #${job.id})`)
+      window.alert(t('재수행 요청 완료 (새 job #{id})', { id: job.id }))
     },
-    onError: () => window.alert('재수행 요청에 실패했습니다.'),
+    onError: () => window.alert(t('재수행 요청에 실패했습니다.')),
   })
 
   // 선택한 job이 바뀌면 누적 로그와 커서를 초기화
@@ -123,10 +125,10 @@ export const JobLogs = memo(function JobLogs({
           좌우 스크롤 밖으로 밀려 보이지 않는다 */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
         <span className="font-medium">
-          job #{jobId} 로그 {terminal ? '(완료)' : '· 실행 중…'}
+          {t('job #{id} 로그', { id: jobId })} {terminal ? t('(완료)') : t('· 실행 중…')}
         </span>
         <button type="button" onClick={handleSave} className="btn btn-sm">
-          로그 저장
+          {t('로그 저장')}
         </button>
         {terminal ? (
           <button
@@ -135,12 +137,14 @@ export const JobLogs = memo(function JobLogs({
             disabled={rerunMut.isPending}
             className="btn btn-sm"
           >
-            {rerunMut.isPending ? '재수행 중…' : '재수행'}
+            {rerunMut.isPending ? t('재수행 중…') : t('재수행')}
           </button>
         ) : null}
         {hiddenCount > 0 ? (
           <span className="text-subtle">
-            이전 {hiddenCount.toLocaleString()}줄 표시 생략 — 전체는 로그 저장으로 받으세요
+            {t('이전 {count}줄 표시 생략 — 전체는 로그 저장으로 받으세요', {
+              count: hiddenCount.toLocaleString(),
+            })}
           </span>
         ) : null}
       </div>
@@ -154,7 +158,7 @@ export const JobLogs = memo(function JobLogs({
         className="max-h-64 overflow-auto whitespace-pre rounded-lg p-3 font-mono text-xs leading-relaxed"
         style={{ background: 'var(--code-bg)', color: 'var(--code-fg)', contain: 'content' }}
       >
-        {text || '로그 없음'}
+        {text || t('로그 없음')}
       </pre>
     </div>
   )

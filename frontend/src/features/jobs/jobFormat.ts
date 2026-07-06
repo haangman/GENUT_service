@@ -25,7 +25,12 @@ export function formatDateTime(iso: string | null): string {
 }
 
 // 총 수행 시간(시작~종료). 종료 전이면 현재까지 경과 + '(진행 중)', 미시작이면 '-'.
-export function formatDuration(startIso: string | null, endIso: string | null): string {
+// runningLabel: 진행 중 표시 문구(i18n — 호출부가 번역된 문구를 넘길 수 있다).
+export function formatDuration(
+  startIso: string | null,
+  endIso: string | null,
+  runningLabel = '진행 중',
+): string {
   if (!startIso) return '-'
   const start = new Date(startIso).getTime()
   const end = endIso ? new Date(endIso).getTime() : Date.now()
@@ -36,7 +41,7 @@ export function formatDuration(startIso: string | null, endIso: string | null): 
   const s = totalSec % 60
   const p = (n: number) => String(n).padStart(2, '0')
   const base = h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`
-  return endIso ? base : `${base} (진행 중)`
+  return endIso ? base : `${base} (${runningLabel})`
 }
 
 // 결과 컬럼 표시: 짧은 요약만 보여준다. 긴 에러 로그(job.error)는 컬럼에 넣지 않고

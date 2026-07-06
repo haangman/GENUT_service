@@ -1,6 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { cancelJob } from '../../api/jobs'
+import { useLang } from '../../lib/i18n'
 import type { Job } from '../../types/api'
 import { JobLogs } from './JobLogs'
 import {
@@ -40,6 +41,7 @@ const JobRow = memo(function JobRow({
   onCancel: (jobId: number) => void
 }) {
   void runningTick // 값은 리렌더 트리거로만 쓰인다
+  const { t } = useLang()
   return (
     <tr
       className={`group cursor-pointer border-t border-border transition hover:bg-surface-hover ${
@@ -58,7 +60,7 @@ const JobRow = memo(function JobRow({
       ) : null}
       {showKind ? (
         <td className="px-3 py-2.5">
-          <span className={jobKindBadgeClass(job.kind)}>{jobKindLabel(job)}</span>
+          <span className={jobKindBadgeClass(job.kind)}>{t(jobKindLabel(job))}</span>
         </td>
       ) : null}
       <td className="px-3 py-2.5">
@@ -67,9 +69,9 @@ const JobRow = memo(function JobRow({
       <td className={cell}>{formatDateTime(job.submitted_at)}</td>
       <td className={cell}>{formatDateTime(job.started_at)}</td>
       <td className={cell}>{formatDateTime(job.finished_at)}</td>
-      <td className={cell}>{formatDuration(job.started_at, job.finished_at)}</td>
+      <td className={cell}>{formatDuration(job.started_at, job.finished_at, t('진행 중'))}</td>
       {/* 결과는 잘라내지 않고 줄바꿈으로 전체를 보여준다 */}
-      <td className="break-words px-3 py-2.5 text-muted">{jobResultLabel(job)}</td>
+      <td className="break-words px-3 py-2.5 text-muted">{t(jobResultLabel(job))}</td>
       {/* 액션 컬럼은 오른쪽에 고정(sticky) — 테이블이 화면보다 넓어 가로 스크롤이 생겨도
           강제 종료 버튼이 항상 보인다. 배경을 채워 밑의 내용이 비치지 않게 한다. */}
       <td
@@ -87,7 +89,7 @@ const JobRow = memo(function JobRow({
               onCancel(job.id)
             }}
           >
-            {canceling ? '종료 중…' : '강제 종료'}
+            {canceling ? t('종료 중…') : t('강제 종료')}
           </button>
         ) : null}
       </td>
@@ -114,6 +116,7 @@ export function JobTable({
   const [canceling, setCanceling] = useState<Set<number>>(new Set())
   const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK)
   const [tick, setTick] = useState(0) // 1초 틱: 실행 중 job의 총 수행 시간 실시간 갱신용
+  const { t } = useLang()
   const queryClient = useQueryClient()
 
   const visibleJobs = jobs.length > visibleCount ? jobs.slice(0, visibleCount) : jobs
@@ -128,7 +131,7 @@ export function JobTable({
   const cancelMut = useMutation({
     mutationFn: (jobId: number) => cancelJob(jobId),
     onError: () =>
-      window.alert('강제 종료 요청에 실패했습니다. 페이지를 새로고침(Ctrl+Shift+R) 후 다시 시도하세요.'),
+      window.alert(t('강제 종료 요청에 실패했습니다. 페이지를 새로고침(Ctrl+Shift+R) 후 다시 시도하세요.')),
     // ['jobs'] prefix 무효화: 이 테이블을 쓰는 모든 페이지의 job 쿼리를 갱신
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
   })
@@ -172,14 +175,14 @@ export function JobTable({
         <thead>
           <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5">#</th>
-            {showProduct ? <th className="px-3 py-2.5">제품</th> : null}
-            {showKind ? <th className="px-3 py-2.5">종류</th> : null}
-            <th className="px-3 py-2.5">상태</th>
-            <th className="px-3 py-2.5">제출 시각</th>
-            <th className="px-3 py-2.5">시작 시간</th>
-            <th className="px-3 py-2.5">종료 시간</th>
-            <th className="px-3 py-2.5">총 수행 시간</th>
-            <th className="px-3 py-2.5">결과</th>
+            {showProduct ? <th className="px-3 py-2.5">{t('제품')}</th> : null}
+            {showKind ? <th className="px-3 py-2.5">{t('종류')}</th> : null}
+            <th className="px-3 py-2.5">{t('상태')}</th>
+            <th className="px-3 py-2.5">{t('제출 시각')}</th>
+            <th className="px-3 py-2.5">{t('시작 시간')}</th>
+            <th className="px-3 py-2.5">{t('종료 시간')}</th>
+            <th className="px-3 py-2.5">{t('총 수행 시간')}</th>
+            <th className="px-3 py-2.5">{t('결과')}</th>
             <th className="sticky right-0 bg-surface-2 px-3 py-2.5"></th>
           </tr>
         </thead>
@@ -214,7 +217,10 @@ export function JobTable({
             className="btn btn-sm"
             onClick={() => setVisibleCount((count) => count + RENDER_CHUNK)}
           >
-            더 보기 ({visibleJobs.length.toLocaleString()}/{jobs.length.toLocaleString()})
+            {t('더 보기 ({visible}/{total})', {
+              visible: visibleJobs.length.toLocaleString(),
+              total: jobs.length.toLocaleString(),
+            })}
           </button>
         </div>
       ) : null}

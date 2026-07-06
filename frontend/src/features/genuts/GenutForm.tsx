@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useLang } from '../../lib/i18n'
 import {
   EMPTY_GENUT_FORM,
   genutEditSchema,
@@ -17,6 +18,7 @@ interface GenutFormProps {
 }
 
 export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create' }: GenutFormProps) {
+  const { t } = useLang()
   const {
     register,
     handleSubmit,
@@ -31,19 +33,19 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="name" className="label">
-            이름
+            {t('이름')}
           </label>
           <input id="name" className={inputClass} {...register('name')} />
           {errors.name ? (
             <p role="alert" className="mt-1 text-xs text-danger-fg">
-              {errors.name.message}
+              {t(errors.name.message ?? '')}
             </p>
           ) : null}
         </div>
 
         <div>
           <label htmlFor="code_path" className="label">
-            코드 저장 경로 (선택, 절대/상대)
+            {t('코드 저장 경로 (선택, 절대/상대)')}
           </label>
           <input id="code_path" className={inputClass} {...register('code_path')} />
         </div>
@@ -55,14 +57,14 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
           <input id="repo_url" className={inputClass} {...register('repo_url')} />
           {errors.repo_url ? (
             <p role="alert" className="mt-1 text-xs text-danger-fg">
-              {errors.repo_url.message}
+              {t(errors.repo_url.message ?? '')}
             </p>
           ) : null}
         </div>
 
         <div>
           <label htmlFor="assure_repo_url" className="label">
-            ASSURE repo URL (선택)
+            {t('ASSURE repo URL (선택)')}
           </label>
           <input id="assure_repo_url" className={inputClass} {...register('assure_repo_url')} />
         </div>
@@ -82,12 +84,12 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
             id="ds_assist_credential_key"
             type="password"
             className={inputClass}
-            placeholder={mode === 'edit' ? '변경 시에만 입력 (비우면 기존 값 유지)' : ''}
+            placeholder={mode === 'edit' ? t('변경 시에만 입력 (비우면 기존 값 유지)') : ''}
             {...register('ds_assist_credential_key')}
           />
           {errors.ds_assist_credential_key ? (
             <p role="alert" className="mt-1 text-xs text-danger-fg">
-              {errors.ds_assist_credential_key.message}
+              {t(errors.ds_assist_credential_key.message ?? '')}
             </p>
           ) : null}
         </div>
@@ -110,7 +112,7 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
           />
           {errors.ds_assist_send_system_name ? (
             <p role="alert" className="mt-1 text-xs text-danger-fg">
-              {errors.ds_assist_send_system_name.message}
+              {t(errors.ds_assist_send_system_name.message ?? '')}
             </p>
           ) : null}
         </div>
@@ -124,14 +126,14 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
 
         <div>
           <label htmlFor="run_command" className="label">
-            실행 명령 (run_command)
+            {t('실행 명령 (run_command)')}
           </label>
           <input id="run_command" className={inputClass} {...register('run_command')} />
         </div>
 
         <div>
           <label htmlFor="llm_model" className="label">
-            LLM_MODEL (.env로 전달)
+            {t('LLM_MODEL (.env로 전달)')}
           </label>
           <select id="llm_model" className={inputClass} {...register('llm_model')}>
             <option value="gptOss">gptOss</option>
@@ -141,7 +143,7 @@ export function GenutForm({ onSubmit, submitting, defaultValues, mode = 'create'
       </div>
 
       <button type="submit" disabled={submitting} className="btn btn-primary px-5">
-        저장
+        {t('저장')}
       </button>
     </form>
   )

@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../lib/useTheme'
+import { useLang } from '../lib/i18n'
 
 const navItems = [
   { to: '/products', label: '프로덕트 등록' },
@@ -12,12 +13,13 @@ const navItems = [
 
 function ThemeToggle() {
   const { isDark, toggle } = useTheme()
+  const { t } = useLang()
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
-      title={isDark ? '라이트 모드' : '다크 모드'}
+      aria-label={isDark ? t('라이트 모드로 전환') : t('다크 모드로 전환')}
+      title={isDark ? t('라이트 모드') : t('다크 모드')}
       className="btn btn-ghost btn-sm h-9 w-9 !px-0 text-muted hover:text-fg"
     >
       {isDark ? (
@@ -36,8 +38,25 @@ function ThemeToggle() {
   )
 }
 
+// 한/영 전환 토글 — 버튼에는 전환될 언어를 표시한다(다크 모드 토글과 같은 관례).
+function LangToggle() {
+  const { lang, toggle, t } = useLang()
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={lang === 'ko' ? t('영어로 전환') : t('한국어로 전환')}
+      title={lang === 'ko' ? t('영어로 전환') : t('한국어로 전환')}
+      className="btn btn-ghost btn-sm h-9 w-9 !px-0 text-xs font-semibold text-muted hover:text-fg"
+    >
+      {lang === 'ko' ? 'EN' : '한'}
+    </button>
+  )
+}
+
 export function AppLayout() {
   const location = useLocation()
+  const { t } = useLang()
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-md">
@@ -63,10 +82,11 @@ export function AppLayout() {
                   }`
                 }
               >
-                {item.label}
+                {t(item.label)}
               </NavLink>
             ))}
           </nav>
+          <LangToggle />
           <ThemeToggle />
         </div>
       </header>

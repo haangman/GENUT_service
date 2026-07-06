@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { EMPTY_PRODUCT_FORM, productFormSchema, type ProductFormValues } from './productSchema'
 import { previewTargetFiles } from '../../api/products'
+import { useLang } from '../../lib/i18n'
 import type { TargetFileItem } from '../../types/api'
 
 type TextFieldName =
@@ -43,6 +44,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFiles }: ProductFormProps) {
+  const { t } = useLang()
   const {
     register,
     handleSubmit,
@@ -105,19 +107,21 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
     <form onSubmit={handleSubmit(submit)} className="card space-y-4 p-5">
       <label className="flex items-center gap-2 text-sm font-medium text-fg">
         <input type="checkbox" {...register('auto_run')} />
-        자동 실행 모드 (주기마다 자동으로 테스트 생성)
+        {t('자동 실행 모드 (주기마다 자동으로 테스트 생성)')}
       </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {TEXT_FIELDS.map((field) => (
           <div key={field.name}>
             <label htmlFor={field.name} className="label">
-              {field.name === 'product_code' && autoRun ? `${field.label} (auto 로 시작)` : field.label}
+              {field.name === 'product_code' && autoRun
+                ? t('{label} (auto 로 시작)', { label: t(field.label) })
+                : t(field.label)}
             </label>
             <input id={field.name} className={inputClass} {...register(field.name)} />
             {errors[field.name] ? (
               <p role="alert" className="mt-1 text-xs text-danger-fg">
-                {errors[field.name]?.message}
+                {t(errors[field.name]?.message ?? '')}
               </p>
             ) : null}
           </div>
@@ -125,7 +129,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
 
         <div>
           <label htmlFor="test_generation_mode" className="label">
-            테스트 모드 {autoRun ? '(c·cpp=gtest, kunit은 추후)' : ''}
+            {t('테스트 모드')} {autoRun ? t('(c·cpp=gtest, kunit은 추후)') : ''}
           </label>
           <select
             id="test_generation_mode"
@@ -141,7 +145,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
         {autoRun ? (
           <div>
             <label htmlFor="auto_interval_value" className="label">
-              자동 수행 주기
+              {t('자동 수행 주기')}
             </label>
             <div className="flex gap-2">
               <input
@@ -152,9 +156,9 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                 {...register('auto_interval_value')}
               />
               <select className={inputClass} {...register('auto_interval_unit')}>
-                <option value="minutes">분</option>
-                <option value="hours">시간</option>
-                <option value="days">일</option>
+                <option value="minutes">{t('분')}</option>
+                <option value="hours">{t('시간')}</option>
+                <option value="days">{t('일')}</option>
               </select>
             </div>
           </div>
@@ -163,7 +167,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
 
       <div>
         <label htmlFor="exclude_patterns" className="label">
-          테스트 대상 제외 패턴 (한 줄에 하나, 예: <code className="font-mono">*test*</code>)
+          {t('테스트 대상 제외 패턴 (한 줄에 하나, 예:')} <code className="font-mono">*test*</code>)
         </label>
         <textarea
           id="exclude_patterns"
@@ -172,7 +176,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
           {...register('exclude_patterns')}
         />
         <p className="mt-1 text-xs text-subtle">
-          compile_commands.json 대상 파일 중 path가 이 글롭에 맞으면 제외됩니다.
+          {t('compile_commands.json 대상 파일 중 path가 이 글롭에 맞으면 제외됩니다.')}
         </p>
       </div>
 
@@ -181,13 +185,16 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
           <div className="rounded-lg border border-border p-4">
             <div className="mb-2 flex items-center gap-2">
               <h4 className="text-sm font-semibold text-fg">
-                대상 파일 미리보기 ({included.length}/{candidates.length})
+                {t('대상 파일 미리보기 ({included}/{total})', {
+                  included: included.length,
+                  total: candidates.length,
+                })}
               </h4>
-              {isFetching ? <span className="text-xs text-muted">스캔 중…</span> : null}
+              {isFetching ? <span className="text-xs text-muted">{t('스캔 중…')}</span> : null}
             </div>
             {candidates.length === 0 ? (
               <p className="text-sm text-subtle">
-                코드 저장 경로와 compile_commands.json 폴더를 입력하면 대상 파일이 표시됩니다.
+                {t('코드 저장 경로와 compile_commands.json 폴더를 입력하면 대상 파일이 표시됩니다.')}
               </p>
             ) : (
               <ul className="max-h-72 overflow-auto">
@@ -209,7 +216,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                       <span className="flex shrink-0 items-center gap-2">
                         {excluded ? (
                           <span className="badge badge-danger">
-                            제외됨{byPattern ? ' (패턴)' : ''}
+                            {t('제외됨')}{byPattern ? t(' (패턴)') : ''}
                           </span>
                         ) : null}
                         <button
@@ -217,7 +224,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                           className="btn btn-sm btn-ghost"
                           onClick={() => toggle(f)}
                         >
-                          {excluded ? '복원' : '제외'}
+                          {excluded ? t('복원') : t('제외')}
                         </button>
                       </span>
                     </li>
@@ -229,7 +236,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
 
           <div>
             <label htmlFor="cmake_template" className="label">
-              CMakeLists.txt 양식 (placeholder <code className="font-mono">filename</code> → 파일 이름으로 치환)
+              {t('CMakeLists.txt 양식 (placeholder')} <code className="font-mono">filename</code> {t('→ 파일 이름으로 치환)')}
             </label>
             <textarea
               id="cmake_template"
@@ -241,17 +248,17 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
       ) : null}
 
       <fieldset className="rounded-lg border border-border p-4">
-        <legend className="px-1.5 text-sm font-medium text-fg">패치 (순서대로 적용)</legend>
+        <legend className="px-1.5 text-sm font-medium text-fg">{t('패치 (순서대로 적용)')}</legend>
         {fields.map((field, index) => (
           <div key={field.id} className="mb-3 space-y-1.5 border-b border-dashed border-border pb-3">
             <input
-              aria-label={`패치 ${index + 1} 이름`}
+              aria-label={t('패치 {n} 이름', { n: index + 1 })}
               className={inputClass}
-              placeholder="이름"
+              placeholder={t('이름')}
               {...register(`patches.${index}.name`)}
             />
             <textarea
-              aria-label={`패치 ${index + 1} 내용`}
+              aria-label={t('패치 {n} 내용', { n: index + 1 })}
               className={`${inputClass} min-h-[72px] font-mono`}
               placeholder="unified diff"
               {...register(`patches.${index}.content`)}
@@ -261,17 +268,17 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
               className="text-xs font-medium text-danger-fg transition hover:opacity-80"
               onClick={() => remove(index)}
             >
-              삭제
+              {t('삭제')}
             </button>
           </div>
         ))}
         <button type="button" className="link text-sm" onClick={() => append({ name: '', content: '' })}>
-          패치 추가
+          {t('패치 추가')}
         </button>
       </fieldset>
 
       <button type="submit" disabled={submitting} className="btn btn-primary px-5">
-        저장
+        {t('저장')}
       </button>
     </form>
   )

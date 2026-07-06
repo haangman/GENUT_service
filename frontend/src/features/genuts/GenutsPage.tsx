@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { GenutForm } from './GenutForm'
 import { createGenut, deleteGenut, listGenuts, updateGenut } from '../../api/genuts'
 import { listQueue, listWorkers } from '../../api/workers'
+import { useLang } from '../../lib/i18n'
 import type { GenutFormValues } from './genutSchema'
 import type { Genut, GenutCreate } from '../../types/api'
 
@@ -22,6 +23,7 @@ function workerBadgeClass(status: string): string {
 
 // 워커(=GENUT 인스턴스) 실시간 상태. 처리 용량을 요청 큐와 나란히 본다.
 function WorkerGrid() {
+  const { t } = useLang()
   const { data } = useQuery({
     queryKey: ['workers'],
     queryFn: listWorkers,
@@ -29,7 +31,7 @@ function WorkerGrid() {
   })
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold text-fg">워커</h2>
+      <h2 className="mb-3 text-sm font-semibold text-fg">{t('워커')}</h2>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         {(data ?? []).map((worker) => (
           <div key={worker.id} className="card p-3.5 text-sm">
@@ -49,6 +51,7 @@ function WorkerGrid() {
 
 // 워커 배정을 기다리는 요청 큐(수동 제출 + auto 생성 GENUT job).
 function QueuePanel() {
+  const { t } = useLang()
   const { data } = useQuery({
     queryKey: ['queue'],
     queryFn: listQueue,
@@ -56,9 +59,9 @@ function QueuePanel() {
   })
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold text-fg">요청 큐</h2>
+      <h2 className="mb-3 text-sm font-semibold text-fg">{t('요청 큐')}</h2>
       {(data ?? []).length === 0 ? (
-        <p className="text-sm text-subtle">대기 중인 요청이 없습니다.</p>
+        <p className="text-sm text-subtle">{t('대기 중인 요청이 없습니다.')}</p>
       ) : (
         <ul className="space-y-2 text-sm">
           {data?.map((item) => (
@@ -69,10 +72,10 @@ function QueuePanel() {
               <span className="font-semibold text-fg">job #{item.job_id}</span>
               <span className="text-muted">product {item.product_id}</span>
               <span className={`badge ${item.origin === 'auto' ? 'badge-neutral' : 'badge-primary'}`}>
-                {item.origin === 'auto' ? '자동' : '수동'}
+                {item.origin === 'auto' ? t('자동') : t('수동')}
               </span>
               {item.waiting_on_product ? (
-                <span className="badge badge-warn ml-auto">대기(프로덕트 사용 중)</span>
+                <span className="badge badge-warn ml-auto">{t('대기(프로덕트 사용 중)')}</span>
               ) : null}
             </li>
           ))}
@@ -99,6 +102,7 @@ function toFormValues(genut: Genut): Partial<GenutFormValues> {
 }
 
 export function GenutsPage() {
+  const { t } = useLang()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Genut | null>(null)
@@ -158,21 +162,21 @@ export function GenutsPage() {
   return (
     <div>
       <PageHeader
-        title="GENUT 등록"
-        description="GENUT 인스턴스(=워커)를 등록/관리하고, 워커 상태·요청 큐를 본다."
+        title={t('GENUT 등록')}
+        description={t('GENUT 인스턴스(=워커)를 등록/관리하고, 워커 상태·요청 큐를 본다.')}
       />
 
       <button
         className={`mb-5 ${showForm ? 'btn' : 'btn btn-primary'}`}
         onClick={showForm ? closeForm : openCreate}
       >
-        {showForm ? '닫기' : '+ 새 GENUT'}
+        {showForm ? t('닫기') : t('+ 새 GENUT')}
       </button>
 
       {showForm ? (
         <div className="mb-6">
           <h3 className="mb-3 text-sm font-semibold text-fg">
-            {editing ? `수정: ${editing.name}` : '새 GENUT'}
+            {editing ? t('수정: {name}', { name: editing.name }) : t('새 GENUT')}
           </h3>
           <GenutForm
             key={editing?.id ?? 'new'}
@@ -183,7 +187,7 @@ export function GenutsPage() {
           />
           {saveMut.isError ? (
             <p role="alert" className="mt-2 text-sm text-danger-fg">
-              저장에 실패했습니다.
+              {t('저장에 실패했습니다.')}
             </p>
           ) : null}
         </div>
@@ -193,12 +197,12 @@ export function GenutsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
-              <th className="px-4 py-3">이름</th>
+              <th className="px-4 py-3">{t('이름')}</th>
               <th className="px-4 py-3">repo</th>
-              <th className="px-4 py-3">시스템</th>
+              <th className="px-4 py-3">{t('시스템')}</th>
               <th className="px-4 py-3">LLM</th>
               <th className="px-4 py-3">max</th>
-              <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3">{t('상태')}</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -219,13 +223,13 @@ export function GenutsPage() {
                 </td>
                 <td className="space-x-3 whitespace-nowrap px-4 py-3 text-right">
                   <button className="link text-xs" onClick={() => openEdit(genut)}>
-                    수정
+                    {t('수정')}
                   </button>
                   <button
                     className="text-xs font-medium text-danger-fg transition hover:opacity-80"
                     onClick={() => deleteMut.mutate(genut.id)}
                   >
-                    삭제
+                    {t('삭제')}
                   </button>
                 </td>
               </tr>

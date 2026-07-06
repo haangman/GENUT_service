@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { Pagination } from '../../components/Pagination'
 import { listAutoHistory, listJobs } from '../../api/jobs'
 import { runAutoNow } from '../../api/products'
+import { useLang } from '../../lib/i18n'
 import type { AutoHistoryGroup } from '../../types/api'
 import { JobTable } from '../jobs/JobTable'
 
@@ -21,6 +22,7 @@ function AutoProductGroup({
   expanded: boolean
   onToggle: () => void
 }) {
+  const { t } = useLang()
   const [page, setPage] = useState(1)
   // 다시 펼칠 때는 1페이지부터 시작한다
   useEffect(() => {
@@ -49,7 +51,7 @@ function AutoProductGroup({
     mutationFn: () => runAutoNow(group.product_id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
     onError: () =>
-      window.alert('실행 요청에 실패했습니다. 이미 진행 중인 자동 실행이 있는지 확인하세요.'),
+      window.alert(t('실행 요청에 실패했습니다. 이미 진행 중인 자동 실행이 있는지 확인하세요.')),
   })
   return (
     <section className="space-y-3">
@@ -65,31 +67,32 @@ function AutoProductGroup({
           <span className="badge badge-primary">auto</span>
           <span className="font-mono text-xs text-muted">{group.product_code}</span>
           {group.auto_interval_seconds ? (
-            <span className="text-xs text-subtle">주기 {group.auto_interval_seconds}s</span>
+            <span className="text-xs text-subtle">{t('주기 {seconds}s', { seconds: group.auto_interval_seconds })}</span>
           ) : null}
           <span className="ml-auto text-xs text-muted">
-            전체 {group.total}건
-            {!expanded && hiddenCount > 0 ? ` · 외 ${hiddenCount}건 보기` : ''}
+            {t('전체 {total}건', { total: group.total })}
+            {!expanded && hiddenCount > 0 ? t(' · 외 {count}건 보기', { count: hiddenCount }) : ''}
           </span>
         </button>
         <button
           type="button"
           onClick={() => runMut.mutate()}
           disabled={runMut.isPending}
-          title="주기와 무관하게 지금 실행 (변경 감지 → 누락 테스트 스캔)"
+          title={t('주기와 무관하게 지금 실행 (변경 감지 → 누락 테스트 스캔)')}
           className="btn btn-primary btn-sm shrink-0"
         >
-          {runMut.isPending ? '요청 중…' : '▶ 지금 실행'}
+          {runMut.isPending ? t('요청 중…') : t('▶ 지금 실행')}
         </button>
       </div>
       {/* 프로덕트별로 이미 그룹돼 있으므로 product 컬럼은 숨긴다 */}
-      <JobTable jobs={jobs} showKind showProduct={false} emptyMessage="실행 이력이 없습니다." />
+      <JobTable jobs={jobs} showKind showProduct={false} emptyMessage={t('실행 이력이 없습니다.')} />
       {expanded ? <Pagination page={page} totalPages={totalPages} onChange={setPage} /> : null}
     </section>
   )
 }
 
 export function AutoJobsPage() {
+  const { t } = useLang()
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const { data } = useQuery({
     queryKey: ['jobs', 'auto', 'groups'],
@@ -110,11 +113,11 @@ export function AutoJobsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="자동 실행 이력"
-        description="자동 실행 프로덕트별 job 이력(변경 감지/스캔/GENUT)을 본다."
+        title={t('자동 실행 이력')}
+        description={t('자동 실행 프로덕트별 job 이력(변경 감지/스캔/GENUT)을 본다.')}
       />
       {groups.length === 0 ? (
-        <p className="text-sm text-subtle">자동 실행 프로덕트가 없습니다.</p>
+        <p className="text-sm text-subtle">{t('자동 실행 프로덕트가 없습니다.')}</p>
       ) : (
         groups.map((group) => (
           <AutoProductGroup

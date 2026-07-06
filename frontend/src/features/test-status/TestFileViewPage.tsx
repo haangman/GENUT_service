@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { getTestFileContent } from '../../api/testStatus'
+import { useLang } from '../../lib/i18n'
 
 // 테스트 코드/로그 뷰어(전용 라우트). 쿼리: code, codePath, logPath, name, tab(code|log).
 // 탭 전환은 tab 파라미터를 replace로 바꿔 히스토리를 더럽히지 않고, 뒤로가기는 목록으로 복귀한다.
 export function TestFileViewPage() {
+  const { t } = useLang()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -32,36 +34,36 @@ export function TestFileViewPage() {
   return (
     <div>
       <button className="link mb-3 inline-block text-sm" onClick={() => navigate(-1)}>
-        ← 뒤로
+        {t('← 뒤로')}
       </button>
-      <PageHeader title={name || '테스트 파일'} description={tab === 'log' ? '생성 로그' : '테스트 코드'} />
+      <PageHeader title={name || t('테스트 파일')} description={tab === 'log' ? t('생성 로그') : t('테스트 코드')} />
 
       <div className="mb-3 flex gap-2">
         <button
           className={`btn btn-sm ${tab === 'code' ? 'btn-primary' : ''}`}
           onClick={() => setTab('code')}
         >
-          코드
+          {t('코드')}
         </button>
         <button
           className={`btn btn-sm ${tab === 'log' ? 'btn-primary' : ''}`}
           onClick={() => setTab('log')}
           disabled={!logPath}
         >
-          로그
+          {t('로그')}
         </button>
       </div>
 
       {activePath ? (
         <p className="mb-2 break-all font-mono text-xs text-muted">{activePath}</p>
       ) : (
-        <p className="text-sm text-subtle">표시할 내용이 없습니다.</p>
+        <p className="text-sm text-subtle">{t('표시할 내용이 없습니다.')}</p>
       )}
 
-      {isLoading ? <p className="text-sm text-muted">불러오는 중…</p> : null}
+      {isLoading ? <p className="text-sm text-muted">{t('불러오는 중…')}</p> : null}
       {isError ? (
         <p role="alert" className="text-sm text-danger-fg">
-          파일을 불러오지 못했습니다.
+          {t('파일을 불러오지 못했습니다.')}
         </p>
       ) : null}
       {data ? (

@@ -1,3 +1,5 @@
+import { useLang } from '../lib/i18n'
+
 // 게시판식 페이지네이션: « ‹ 1 2 3 … 10 › » — 페이지 번호는 10개 블록 단위로 보여준다.
 const BLOCK = 10
 
@@ -17,15 +19,16 @@ export function Pagination({
   totalPages: number
   onChange: (page: number) => void
 }) {
+  const { t } = useLang()
   if (totalPages <= 1) return null
   const go = (target: number) => onChange(Math.min(Math.max(1, target), totalPages))
   const base = 'btn btn-sm min-w-[32px] px-2'
   return (
     <nav
-      aria-label="페이지 이동"
+      aria-label={t('페이지 이동')}
       className="flex flex-wrap items-center justify-center gap-1 text-sm"
     >
-      <button type="button" className={base} onClick={() => go(1)} disabled={page === 1} aria-label="첫 페이지">
+      <button type="button" className={base} onClick={() => go(1)} disabled={page === 1} aria-label={t('첫 페이지')}>
         «
       </button>
       <button
@@ -33,7 +36,7 @@ export function Pagination({
         className={base}
         onClick={() => go(page - 1)}
         disabled={page === 1}
-        aria-label="이전 페이지"
+        aria-label={t('이전 페이지')}
       >
         ‹
       </button>
@@ -53,7 +56,7 @@ export function Pagination({
         className={base}
         onClick={() => go(page + 1)}
         disabled={page === totalPages}
-        aria-label="다음 페이지"
+        aria-label={t('다음 페이지')}
       >
         ›
       </button>
@@ -62,7 +65,7 @@ export function Pagination({
         className={base}
         onClick={() => go(totalPages)}
         disabled={page === totalPages}
-        aria-label="마지막 페이지"
+        aria-label={t('마지막 페이지')}
       >
         »
       </button>

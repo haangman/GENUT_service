@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { getTestStatusByName, getTestStatusSummary } from '../../api/testStatus'
+import { useLang } from '../../lib/i18n'
 import type { TestFileInfo } from '../../types/api'
 
 // 코드/로그 뷰어(전용 라우트)로 가는 링크. tab=code면 codePath, tab=log면 logPath를 본다.
@@ -28,11 +29,12 @@ function TestFileTable({
   variant: 'success' | 'failed'
   emptyText: string
 }) {
+  const { t } = useLang()
   const failed = variant === 'failed'
   return (
     <div className="card overflow-x-auto">
       <div className="flex items-center gap-2 px-4 py-3">
-        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        <h3 className="text-sm font-semibold text-fg">{t(title)}</h3>
         <span className={`badge ${failed ? 'badge-danger' : 'badge-success'}`}>{files.length}</span>
       </div>
       <table className="w-full text-sm">
@@ -42,34 +44,34 @@ function TestFileTable({
               failed ? 'bg-danger-soft text-danger-fg' : 'bg-surface-2 text-muted'
             }`}
           >
-            <th className="px-4 py-3">테스트 파일명</th>
+            <th className="px-4 py-3">{t('테스트 파일명')}</th>
             <th className="px-4 py-3">path</th>
-            {!failed ? <th className="px-4 py-3 text-right">테스트 케이스 수</th> : null}
-            <th className="px-4 py-3 text-right">보기</th>
+            {!failed ? <th className="px-4 py-3 text-right">{t('테스트 케이스 수')}</th> : null}
+            <th className="px-4 py-3 text-right">{t('보기')}</th>
           </tr>
         </thead>
         <tbody>
-          {files.map((t) => (
-            <tr key={t.path} className="border-t border-border">
-              <td className={`px-4 py-3 font-medium ${failed ? 'text-danger-fg' : 'text-fg'}`}>{t.name}</td>
-              <td className="break-all px-4 py-3 font-mono text-xs text-muted">{t.path}</td>
+          {files.map((tf) => (
+            <tr key={tf.path} className="border-t border-border">
+              <td className={`px-4 py-3 font-medium ${failed ? 'text-danger-fg' : 'text-fg'}`}>{tf.name}</td>
+              <td className="break-all px-4 py-3 font-mono text-xs text-muted">{tf.path}</td>
               {!failed ? (
                 <td className="px-4 py-3 text-right">
-                  <span className="badge badge-neutral">{t.case_count ?? 0}</span>
+                  <span className="badge badge-neutral">{tf.case_count ?? 0}</span>
                 </td>
               ) : null}
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-2">
-                  <Link className="btn btn-sm btn-ghost" to={viewHref(t, 'code')}>
-                    코드
+                  <Link className="btn btn-sm btn-ghost" to={viewHref(tf, 'code')}>
+                    {t('코드')}
                   </Link>
-                  {t.log_path ? (
-                    <Link className="btn btn-sm btn-ghost" to={viewHref(t, 'log')}>
-                      로그
+                  {tf.log_path ? (
+                    <Link className="btn btn-sm btn-ghost" to={viewHref(tf, 'log')}>
+                      {t('로그')}
                     </Link>
                   ) : (
                     <button className="btn btn-sm btn-ghost" disabled>
-                      로그
+                      {t('로그')}
                     </button>
                   )}
                 </div>
@@ -78,7 +80,7 @@ function TestFileTable({
           ))}
         </tbody>
       </table>
-      {files.length === 0 ? <p className="px-4 py-6 text-sm text-subtle">{emptyText}</p> : null}
+      {files.length === 0 ? <p className="px-4 py-6 text-sm text-subtle">{t(emptyText)}</p> : null}
     </div>
   )
 }
@@ -86,6 +88,7 @@ function TestFileTable({
 // 3단계 드릴다운(이름 기준): 프로덕트(이름) 목록 → 이름 상세(대상 파일·테스트/실패 수)
 // → 파일 상세(성공/실패 테스트 파일 목록 + 코드/로그 뷰어 링크). 드릴다운 상태는 URL 쿼리에 둔다.
 export function TestStatusPage() {
+  const { t } = useLang()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedName = searchParams.get('name')
   const filePath = searchParams.get('file')
@@ -114,14 +117,14 @@ export function TestStatusPage() {
   return (
     <div>
       <PageHeader
-        title="테스트 파일 현황"
-        description="프로덕트별 테스트 생성 대상 파일과 생성된 테스트(성공/실패) 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다."
+        title={t('테스트 파일 현황')}
+        description={t('프로덕트별 테스트 생성 대상 파일과 생성된 테스트(성공/실패) 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다.')}
       />
 
       {selectedName != null ? (
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-muted">
           <button className="link" onClick={goToRoot}>
-            프로덕트
+            {t('프로덕트')}
           </button>
           <span>/</span>
           {file ? (
@@ -141,18 +144,18 @@ export function TestStatusPage() {
       {/* L1: 이름별 목록 + 집계 */}
       {selectedName == null ? (
         <>
-          {summaryLoading ? <p className="mb-3 text-sm text-muted">스캔 중…</p> : null}
+          {summaryLoading ? <p className="mb-3 text-sm text-muted">{t('스캔 중…')}</p> : null}
           <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
-                  <th className="px-4 py-3">이름</th>
-                  <th className="px-4 py-3">등록 ID</th>
-                  <th className="px-4 py-3">모드</th>
-                  <th className="px-4 py-3 text-right">대상 파일 수</th>
-                  <th className="px-4 py-3 text-right">총 테스트파일 수</th>
-                  <th className="px-4 py-3 text-right">총 테스트 케이스 수</th>
-                  <th className="px-4 py-3 text-right">실패 수</th>
+                  <th className="px-4 py-3">{t('이름')}</th>
+                  <th className="px-4 py-3">{t('등록 ID')}</th>
+                  <th className="px-4 py-3">{t('모드')}</th>
+                  <th className="px-4 py-3 text-right">{t('대상 파일 수')}</th>
+                  <th className="px-4 py-3 text-right">{t('총 테스트파일 수')}</th>
+                  <th className="px-4 py-3 text-right">{t('총 테스트 케이스 수')}</th>
+                  <th className="px-4 py-3 text-right">{t('실패 수')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,7 +196,7 @@ export function TestStatusPage() {
               </tbody>
             </table>
             {!summaryLoading && names.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-subtle">등록된 프로덕트가 없습니다.</p>
+              <p className="px-4 py-6 text-sm text-subtle">{t('등록된 프로덕트가 없습니다.')}</p>
             ) : null}
           </div>
         </>
@@ -202,35 +205,35 @@ export function TestStatusPage() {
       {/* L2: 대상 파일 목록 + 합계 + 출처 */}
       {selectedName != null && file == null ? (
         <>
-          {isLoading ? <p className="text-sm text-muted">스캔 중…</p> : null}
+          {isLoading ? <p className="text-sm text-muted">{t('스캔 중…')}</p> : null}
           {isError ? (
             <p role="alert" className="text-sm text-danger-fg">
-              현황을 불러오지 못했습니다.
+              {t('현황을 불러오지 못했습니다.')}
             </p>
           ) : null}
           {!isLoading && !isError ? (
             <>
               <div className="mb-3 flex gap-2 text-sm">
-                <span className="badge badge-neutral">대상 파일 {files.length}</span>
+                <span className="badge badge-neutral">{t('대상 파일 {count}', { count: files.length })}</span>
                 <span className={`badge ${totalTests > 0 ? 'badge-primary' : 'badge-neutral'}`}>
-                  총 테스트파일 {totalTests}
+                  {t('총 테스트파일 {count}', { count: totalTests })}
                 </span>
                 <span className={`badge ${totalCases > 0 ? 'badge-primary' : 'badge-neutral'}`}>
-                  총 테스트 케이스 {totalCases}
+                  {t('총 테스트 케이스 {count}', { count: totalCases })}
                 </span>
                 <span className={`badge ${totalFails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
-                  총 실패 {totalFails}
+                  {t('총 실패 {count}', { count: totalFails })}
                 </span>
               </div>
               <div className="card overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
-                      <th className="px-4 py-3">파일명</th>
+                      <th className="px-4 py-3">{t('파일명')}</th>
                       <th className="px-4 py-3">path</th>
-                      <th className="px-4 py-3 text-right">테스트 파일 수</th>
-                      <th className="px-4 py-3 text-right">테스트 케이스 수</th>
-                      <th className="px-4 py-3 text-right">실패 수</th>
+                      <th className="px-4 py-3 text-right">{t('테스트 파일 수')}</th>
+                      <th className="px-4 py-3 text-right">{t('테스트 케이스 수')}</th>
+                      <th className="px-4 py-3 text-right">{t('실패 수')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -262,7 +265,7 @@ export function TestStatusPage() {
                   </tbody>
                 </table>
                 {files.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-subtle">테스트 생성 대상 파일이 없습니다.</p>
+                  <p className="px-4 py-6 text-sm text-subtle">{t('테스트 생성 대상 파일이 없습니다.')}</p>
                 ) : null}
               </div>
             </>

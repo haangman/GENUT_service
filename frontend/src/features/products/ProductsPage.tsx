@@ -10,6 +10,7 @@ import {
   updateAutoProduct,
   updateProduct,
 } from '../../api/products'
+import { useLang } from '../../lib/i18n'
 import {
   DEFAULT_CMAKE_TEMPLATE,
   INTERVAL_UNIT_SECONDS,
@@ -51,6 +52,7 @@ function toFormValues(product: Product): Partial<ProductFormValues> {
 }
 
 export function ProductsPage() {
+  const { t } = useLang()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -134,19 +136,19 @@ export function ProductsPage() {
 
   return (
     <div>
-      <PageHeader title="프로덕트 등록" description="테스트 생성 대상 프로덕트를 등록/관리한다." />
+      <PageHeader title={t('프로덕트 등록')} description={t('테스트 생성 대상 프로덕트를 등록/관리한다.')} />
 
       <button
         className={`mb-5 ${showForm ? 'btn' : 'btn btn-primary'}`}
         onClick={showForm ? closeForm : openCreate}
       >
-        {showForm ? '닫기' : '+ 새 프로덕트'}
+        {showForm ? t('닫기') : t('+ 새 프로덕트')}
       </button>
 
       {showForm ? (
         <div className="mb-6">
           <h3 className="mb-3 text-sm font-semibold text-fg">
-            {editing ? `수정: ${editing.name}` : '새 프로덕트'}
+            {editing ? t('수정: {name}', { name: editing.name }) : t('새 프로덕트')}
           </h3>
           <ProductForm
             key={editing?.id ?? 'new'}
@@ -157,16 +159,16 @@ export function ProductsPage() {
           />
           {saveError ? (
             <p role="alert" className="mt-2 text-sm text-danger-fg">
-              저장에 실패했습니다.
+              {t('저장에 실패했습니다.')}
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {isLoading ? <p className="text-sm text-muted">불러오는 중…</p> : null}
+      {isLoading ? <p className="text-sm text-muted">{t('불러오는 중…')}</p> : null}
       {isError ? (
         <p role="alert" className="text-sm text-danger-fg">
-          목록을 불러오지 못했습니다.
+          {t('목록을 불러오지 못했습니다.')}
         </p>
       ) : null}
 
@@ -174,9 +176,9 @@ export function ProductsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
-              <th className="px-4 py-3">이름</th>
-              <th className="px-4 py-3">프로덕트 ID</th>
-              <th className="px-4 py-3">모드</th>
+              <th className="px-4 py-3">{t('이름')}</th>
+              <th className="px-4 py-3">{t('프로덕트 ID')}</th>
+              <th className="px-4 py-3">{t('모드')}</th>
               <th className="px-4 py-3">repo</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -193,7 +195,7 @@ export function ProductsPage() {
                       className="badge badge-primary"
                       title={
                         product.auto_interval_seconds
-                          ? `주기 ${product.auto_interval_seconds}s`
+                          ? t('주기 {seconds}s', { seconds: product.auto_interval_seconds })
                           : undefined
                       }
                     >
@@ -204,13 +206,13 @@ export function ProductsPage() {
                 <td className="max-w-[280px] truncate px-4 py-3 text-muted">{product.git_url}</td>
                 <td className="space-x-3 whitespace-nowrap px-4 py-3 text-right">
                   <button className="link text-xs" onClick={() => openEdit(product)}>
-                    수정
+                    {t('수정')}
                   </button>
                   <button
                     className="text-xs font-medium text-danger-fg transition hover:opacity-80"
                     onClick={() => deleteMut.mutate(product.id)}
                   >
-                    삭제
+                    {t('삭제')}
                   </button>
                 </td>
               </tr>

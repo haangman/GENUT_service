@@ -5,8 +5,10 @@ import { ProductPicker } from './ProductPicker'
 import { RequestActions } from './RequestActions'
 import { SelectedFilesPanel } from './SelectedFilesPanel'
 import { useRequestBuilder } from './store'
+import { useLang } from '../../lib/i18n'
 
 export function RequestPage() {
+  const { t } = useLang()
   const productId = useRequestBuilder((state) => state.productId)
   const lastSubmittedJobId = useRequestBuilder((state) => state.lastSubmittedJobId)
 
@@ -16,12 +18,12 @@ export function RequestPage() {
   return (
     <div>
       <PageHeader
-        title="수동 실행 요청"
-        description="프로덕트를 선택하고 소스 파일을 구성해 GENUT 테스트 생성을 요청한다."
+        title={t('수동 실행 요청')}
+        description={t('프로덕트를 선택하고 소스 파일을 구성해 GENUT 테스트 생성을 요청한다.')}
       />
       {lastSubmittedJobId ? (
         <p className="mb-5 rounded-lg border border-success bg-success-soft px-4 py-2.5 text-sm font-medium text-success-fg">
-          요청이 접수되었습니다. job #{lastSubmittedJobId}
+          {t('요청이 접수되었습니다. job #{id}', { id: lastSubmittedJobId })}
         </p>
       ) : null}
       <ProductPicker />
@@ -34,7 +36,7 @@ export function RequestPage() {
           <RequestActions />
         </>
       ) : (
-        <p className="mt-5 text-sm text-muted">프로덕트를 선택하세요.</p>
+        <p className="mt-5 text-sm text-muted">{t('프로덕트를 선택하세요.')}</p>
       )}
     </div>
   )

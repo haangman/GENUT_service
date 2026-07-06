@@ -5,6 +5,7 @@ import type { TreeEntry } from '../../types/api'
 import { importFolder } from './folderImport'
 import { makeIsSourceFile } from './sourceFiles'
 import { useRequestBuilder } from './store'
+import { useLang } from '../../lib/i18n'
 
 function useTree(productId: number, path: string) {
   return useQuery({
@@ -34,6 +35,7 @@ function FileNode({ entry }: { entry: TreeEntry }) {
 }
 
 function DirNode({ productId, entry, onImport }: NodeProps) {
+  const { t } = useLang()
   const [expanded, setExpanded] = useState(false)
   return (
     <div className="pl-2">
@@ -50,7 +52,7 @@ function DirNode({ productId, entry, onImport }: NodeProps) {
           className="link text-xs"
           onClick={() => onImport(entry.path)}
         >
-          폴더 가져오기
+          {t('폴더 가져오기')}
         </button>
       </div>
       {expanded ? <DirChildren productId={productId} path={entry.path} onImport={onImport} /> : null}
@@ -79,6 +81,7 @@ function TreeNode(props: NodeProps) {
 }
 
 export function FileTreePanel({ productId }: { productId: number }) {
+  const { t } = useLang()
   const { data, isLoading, isError } = useTree(productId, '')
   const addPaths = useRequestBuilder((state) => state.addPaths)
   const mode = useRequestBuilder((state) => state.mode)
@@ -91,11 +94,11 @@ export function FileTreePanel({ productId }: { productId: number }) {
     addPaths(files)
   }
 
-  if (isLoading) return <p className="text-sm text-muted">트리 로딩…</p>
+  if (isLoading) return <p className="text-sm text-muted">{t('트리 로딩…')}</p>
   if (isError)
     return (
       <p role="alert" className="text-sm text-danger-fg">
-        트리를 불러오지 못했습니다.
+        {t('트리를 불러오지 못했습니다.')}
       </p>
     )
 

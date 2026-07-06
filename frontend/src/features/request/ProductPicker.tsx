@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { listProducts } from '../../api/products'
 import { useRequestBuilder } from './store'
+import { useLang } from '../../lib/i18n'
 
 export function ProductPicker() {
+  const { t } = useLang()
   const { data } = useQuery({ queryKey: ['products'], queryFn: () => listProducts() })
   const productId = useRequestBuilder((state) => state.productId)
   const setProduct = useRequestBuilder((state) => state.setProduct)
@@ -11,7 +13,7 @@ export function ProductPicker() {
   return (
     <div>
       <label htmlFor="product-picker" className="label">
-        프로덕트
+        {t('프로덕트')}
       </label>
       <select
         id="product-picker"
@@ -24,7 +26,7 @@ export function ProductPicker() {
         }}
       >
         <option value="" disabled>
-          프로덕트 선택…
+          {t('프로덕트 선택…')}
         </option>
         {products.map((product) => (
           <option key={product.id} value={product.id}>
