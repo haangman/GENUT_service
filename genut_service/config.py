@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # 흡수한다(그 사이 생성된 테스트는 최대 TTL만큼 늦게 보인다).
     test_status_cache_ttl: float = 30.0
 
+    # FunctionExtractor(우분투 버전별 외부 바이너리) 배치 폴더.
+    # 상대경로면 repo 루트 기준. 빈 문자열이면 비활성(항상 내장 파서 사용).
+    func_extractor_dir: str = "tools/func_extractor"
+
+    # FunctionExtractor 파일 1개 추출 타임아웃(초)
+    func_extractor_timeout: int = 120
+
     # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
     scheduler_autostart: bool = True
 
