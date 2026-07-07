@@ -67,7 +67,7 @@ export function AppLayout() {
                 <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13l0-8z" />
               </svg>
             </span>
-            <span className="text-base font-bold tracking-tight text-fg">GENUT_service</span>
+            <span className="text-base font-bold tracking-tight text-fg">GENUT SERVICE</span>
           </div>
           <nav className="flex flex-1 items-center gap-1 overflow-x-auto">
             {navItems.map((item) => (
