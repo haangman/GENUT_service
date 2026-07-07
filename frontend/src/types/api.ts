@@ -218,6 +218,8 @@ export interface NameTestSummary {
   total_test_count: number
   total_case_count: number
   total_fail_count: number
+  // 스냅샷 생성 시각(스냅샷 응답일 때만; 실시간 폴백 스캔이면 null/미존재)
+  generated_at?: string | null
 }
 
 export interface FileContent {

@@ -102,4 +102,55 @@ describe('TestStatusPage', () => {
     expect(logLinks[0].getAttribute('href')).toContain('tab=log')
     expect(screen.getByRole('button', { name: '로그' })).toBeDisabled()
   })
+
+  it('shows the snapshot freshness time and a refresh button', async () => {
+    server.use(
+      http.get('/api/test-status', () =>
+        HttpResponse.json([
+          {
+            name: 'BB',
+            product_codes: ['BB-1'],
+            test_generation_mode: 'c',
+            target_file_count: 1,
+            total_test_count: 1,
+            total_case_count: 1,
+            total_fail_count: 0,
+            generated_at: '2026-07-07T10:00:00+00:00',
+          },
+        ]),
+      ),
+    )
+
+    renderWithProviders(<TestStatusPage />)
+
+    expect(await screen.findByText('BB')).toBeInTheDocument()
+    // 스냅샷 생성 시각 + 수동 새로고침 버튼
+    expect(screen.getByText(/마지막 갱신/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '새로고침' })).toBeInTheDocument()
+  })
+
+  it('omits the freshness time when responses come from the live-scan fallback', async () => {
+    server.use(
+      http.get('/api/test-status', () =>
+        HttpResponse.json([
+          {
+            name: 'CC',
+            product_codes: ['CC-1'],
+            test_generation_mode: 'c',
+            target_file_count: 0,
+            total_test_count: 0,
+            total_case_count: 0,
+            total_fail_count: 0,
+            generated_at: null,
+          },
+        ]),
+      ),
+    )
+
+    renderWithProviders(<TestStatusPage />)
+
+    expect(await screen.findByText('CC')).toBeInTheDocument()
+    expect(screen.queryByText(/마지막 갱신/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '새로고침' })).toBeInTheDocument()
+  })
 })

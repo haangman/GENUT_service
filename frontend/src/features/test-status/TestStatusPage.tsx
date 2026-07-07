@@ -1,9 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { getTestStatusByName, getTestStatusSummary } from '../../api/testStatus'
+import { formatDateTime } from '../jobs/jobFormat'
 import { useLang } from '../../lib/i18n'
 import type { TestFileInfo } from '../../types/api'
+
+// 스냅샷 폴링 주기 — 서버는 미리 계산된 스냅샷을 반환하므로 요청이 가볍다
+const REFETCH_MS = 30_000
 
 // 코드/로그 뷰어(전용 라우트)로 가는 링크. tab=code면 codePath, tab=log면 logPath를 본다.
 function viewHref(t: TestFileInfo, tab: 'code' | 'log'): string {
@@ -97,16 +101,32 @@ export function TestStatusPage() {
   const goToName = (name: string) => setSearchParams({ name })
   const goToFile = (name: string, path: string) => setSearchParams({ name, file: path })
 
-  const { data: summary, isLoading: summaryLoading } = useQuery({
+  // placeholderData: 재조회 중에도 이전 표를 계속 보여준다("스캔 중…"은 최초 로딩만).
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    isFetching: summaryFetching,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ['test-status-summary'],
     queryFn: getTestStatusSummary,
+    refetchInterval: REFETCH_MS,
+    placeholderData: keepPreviousData,
   })
   const names = summary ?? []
 
-  const { data: status, isLoading, isError } = useQuery({
+  const {
+    data: status,
+    isLoading,
+    isError,
+    isFetching: detailFetching,
+    refetch: refetchDetail,
+  } = useQuery({
     queryKey: ['test-status', selectedName],
     queryFn: () => getTestStatusByName(selectedName as string),
     enabled: selectedName != null,
+    refetchInterval: REFETCH_MS,
+    placeholderData: keepPreviousData,
   })
   const files = status ?? []
   const file = files.find((f) => f.path === filePath) ?? null
@@ -114,12 +134,35 @@ export function TestStatusPage() {
   const totalCases = files.reduce((sum, f) => sum + f.case_count, 0)
   const totalFails = files.reduce((sum, f) => sum + f.fail_count, 0)
 
+  // 스냅샷 생성 시각(가장 최신) — 실시간 폴백 스캔만 있으면 null
+  const generatedTimes = names
+    .map((g) => g.generated_at)
+    .filter((v): v is string => Boolean(v))
+  const generatedAt = generatedTimes.length
+    ? generatedTimes.reduce((a, b) => (a > b ? a : b))
+    : null
+  const refreshing = summaryFetching || detailFetching
+  const refresh = () => {
+    refetchSummary()
+    if (selectedName != null) refetchDetail()
+  }
+
   return (
     <div>
       <PageHeader
         title={t('테스트 파일 현황')}
         description={t('프로덕트별 테스트 생성 대상 파일과 생성된 테스트(성공/실패) 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다.')}
       />
+
+      {/* 스냅샷 신선도 + 수동 새로고침 — 데이터는 백그라운드 스냅샷이라 즉시 뜬다 */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <button type="button" className="btn btn-sm" onClick={refresh} disabled={refreshing}>
+          {refreshing ? t('갱신 중…') : t('새로고침')}
+        </button>
+        {generatedAt ? (
+          <span>{t('마지막 갱신 {time}', { time: formatDateTime(generatedAt) })}</span>
+        ) : null}
+      </div>
 
       {selectedName != null ? (
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-muted">

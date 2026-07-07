@@ -1,17 +1,10 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { LangToggle, ThemeToggle } from '../components/HeaderToggles'
 import { useLang } from '../lib/i18n'
 
-const navItems = [
-  { to: '/products', label: '프로덕트 등록' },
-  { to: '/genuts', label: 'GENUT 등록' },
-  { to: '/request', label: '수동 실행 요청' },
-  { to: '/manual-jobs', label: '수동 실행 이력' },
-  { to: '/auto-jobs', label: '자동 실행 이력' },
-  { to: '/test-status', label: '테스트 파일 현황' },
-]
-
-export function AppLayout() {
+// 독립 테스트 현황 서버(serve-status)용 미니 레이아웃 — 네비게이션 없이
+// 브랜드 + 페이지 이름 + 테마/언어 토글만 둔다(읽기 전용 단일 페이지).
+export function StatusLayout() {
   const location = useLocation()
   const { t } = useLang()
   return (
@@ -25,26 +18,14 @@ export function AppLayout() {
               </svg>
             </span>
             <span className="text-base font-bold tracking-tight text-fg">GENUT SERVICE</span>
+            <span className="whitespace-nowrap text-sm font-medium text-muted">
+              {t('테스트 파일 현황')}
+            </span>
           </div>
-          <nav className="flex flex-1 items-center gap-1 overflow-x-auto">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-primary text-primary-fg shadow-card'
-                      : 'text-muted hover:bg-surface-hover hover:text-fg'
-                  }`
-                }
-              >
-                {t(item.label)}
-              </NavLink>
-            ))}
-          </nav>
-          <LangToggle />
-          <ThemeToggle />
+          <div className="flex flex-1 items-center justify-end gap-1">
+            <LangToggle />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8">

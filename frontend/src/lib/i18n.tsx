@@ -190,6 +190,9 @@ const EN: Record<string, string> = {
   '패치 추가': 'Add patch',
 
   // 테스트 파일 현황
+  새로고침: 'Refresh',
+  '갱신 중…': 'Refreshing…',
+  '마지막 갱신 {time}': 'Last updated {time}',
   '등록 ID': 'Registered IDs',
   '대상 파일 수': 'Target files',
   '총 테스트파일 수': 'Total test files',
