@@ -34,12 +34,19 @@ class Scheduler:
         process: Callable = process_job,
         interval: float = 1.0,
         stuck_timeout: float | None = None,
+        status_refresh_interval: float | None = None,
     ):
         self._session_factory = session_factory
         self._process = process
         self._interval = interval
         self._task: asyncio.Task | None = None
+        self._refresh_task: asyncio.Task | None = None
         self._stop: asyncio.Event | None = None
+        if status_refresh_interval is None:
+            from genut_service.config import get_settings
+
+            status_refresh_interval = get_settings().test_status_refresh_interval
+        self._status_refresh_interval = status_refresh_interval
         if stuck_timeout is None:
             from genut_service.config import get_settings
 
@@ -87,6 +94,32 @@ class Scheduler:
 
         with self._session_factory() as session:
             purge_old_job_events(session, get_settings().job_event_retention_days)
+
+    def _status_refresh_tick(self) -> None:
+        from genut_service.services import test_status_snapshot_service
+
+        with self._session_factory() as session:
+            test_status_snapshot_service.refresh_snapshots(session)
+
+    async def _status_refresh_loop(self) -> None:
+        """테스트 현황 스냅샷 갱신 루프 — 메인 tick 루프와 분리해서 돈다.
+
+        전체 프로덕트 스캔(clone 포함)은 수 분까지 걸릴 수 있어, 메인 루프에
+        인라인하면 그 동안 claim이 멈춰 job 배정이 정지한다. 별도 태스크에서
+        순차 실행(겹침 없음)하고 stop 이벤트를 공유한다.
+        """
+        assert self._stop is not None
+        while not self._stop.is_set():
+            try:
+                await asyncio.to_thread(self._status_refresh_tick)
+            except Exception:  # noqa: BLE001 - 루프는 어떤 오류에도 죽지 않는다
+                pass
+            try:
+                await asyncio.wait_for(
+                    self._stop.wait(), timeout=self._status_refresh_interval
+                )
+            except asyncio.TimeoutError:
+                pass
 
     async def _loop(self) -> None:
         assert self._stop is not None
@@ -143,9 +176,13 @@ class Scheduler:
             pass
         self._stop = asyncio.Event()
         self._task = asyncio.create_task(self._loop())
+        if self._status_refresh_interval > 0:
+            self._refresh_task = asyncio.create_task(self._status_refresh_loop())
 
     async def stop(self) -> None:
         if self._stop is not None:
             self._stop.set()
         if self._task is not None:
             await self._task
+        if self._refresh_task is not None:
+            await self._refresh_task

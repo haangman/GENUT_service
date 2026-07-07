@@ -88,3 +88,63 @@ def test_default_stuck_timeout_covers_normal_worst_case() -> None:
     s = get_settings()
     scheduler = Scheduler(session_factory=None)
     assert scheduler._stuck_timeout > 3 * s.genut_run_timeout + 6 * s.git_timeout
+
+
+def test_status_refresh_loop_creates_snapshots(tmp_path: Path, monkeypatch) -> None:
+    """리프레시 루프가 스냅샷을 만들고, 스캔이 느려도 job 배정(claim)은 계속 돈다."""
+    import genut_service.workspace as workspace
+    from genut_service.db.models import TestStatusSnapshot as StatusSnapshot
+
+    engine = make_engine(f"sqlite:///{(tmp_path / 'refresh.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        _seed(session, 1)
+
+    # 체크아웃/스캔 대체: 빈 out 구조(스냅샷 생성 자체를 검증)
+    root = tmp_path / "checkout"
+    (root / "build").mkdir(parents=True)
+    (root / "build" / "compile_commands.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+
+    def process(session, job_id):  # noqa: ANN001
+        finish_job(session, job_id, JobStatus.DONE)
+
+    async def run() -> int:
+        scheduler = Scheduler(
+            session_factory, process, interval=0.05, status_refresh_interval=0.05
+        )
+        await scheduler.start()
+        assert scheduler._refresh_task is not None  # interval > 0 → 리프레시 루프 스폰
+        rows = 0
+        for _ in range(120):
+            with session_factory() as session:
+                rows = session.scalar(
+                    select(func.count()).select_from(StatusSnapshot)
+                )
+            if rows > 0:
+                break
+            await asyncio.sleep(0.05)
+        await scheduler.stop()
+        return rows
+
+    assert asyncio.run(run()) == 1  # 이름 P0 스냅샷 1행
+    engine.dispose()
+
+
+def test_status_refresh_loop_disabled_when_interval_zero(tmp_path: Path) -> None:
+    """interval이 0 이하이면 start()가 리프레시 태스크를 스폰하지 않는다."""
+    engine = make_engine(f"sqlite:///{(tmp_path / 'noref.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    session_factory = make_session_factory(engine)
+
+    async def run() -> None:
+        scheduler = Scheduler(
+            session_factory, lambda s, j: None, interval=0.05, status_refresh_interval=0
+        )
+        await scheduler.start()
+        assert scheduler._refresh_task is None
+        await scheduler.stop()
+
+    asyncio.run(run())
+    engine.dispose()

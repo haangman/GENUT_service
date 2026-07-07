@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # 흡수한다(그 사이 생성된 테스트는 최대 TTL만큼 늦게 보인다).
     test_status_cache_ttl: float = 30.0
 
+    # 테스트 현황 스냅샷 백그라운드 갱신 주기(초). 0 이하 = 리프레셔 비활성(API는
+    # 실시간 스캔 폴백으로 동작). 스케줄러 tick과 별도 루프에서 돈다 — 전체 스캔이
+    # 느려도 job 배정(claim)이 멈추지 않는다.
+    test_status_refresh_interval: float = 30.0
+
     # FunctionExtractor(우분투 버전별 외부 바이너리) 배치 폴더.
     # 상대경로면 repo 루트 기준. 빈 문자열이면 비활성(항상 내장 파서 사용).
     func_extractor_dir: str = "tools/func_extractor"
