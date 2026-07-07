@@ -27,7 +27,7 @@ from genut_service.schemas.test_status import (
     NameTestSummary,
     TargetFileStatus,
 )
-from genut_service.services import test_status_service
+from genut_service.services import test_status_service, test_status_snapshot_service
 
 router = APIRouter(prefix="/api/test-status", tags=["test-status"])
 
@@ -51,7 +51,11 @@ def _scan_pairs(products: list[Product]) -> list[tuple[str, list[dict]]]:
 def get_test_status_summary(
     session: Session = Depends(get_session),
 ) -> list[NameTestSummary]:
-    """이름으로 묶은 테스트 현황 요약. 같은 이름의 변이는 합집합으로 합산한다."""
+    """이름으로 묶은 테스트 현황 요약. 같은 이름의 변이는 합집합으로 합산한다.
+
+    스냅샷(백그라운드 리프레셔가 미리 계산)이 있으면 즉시 반환하고, 없는 이름만
+    실시간 스캔으로 폴백한다(스케줄러가 꺼진 개발/테스트 환경 포함).
+    """
     products = session.scalars(select(Product).order_by(Product.id)).all()
 
     ttl = get_settings().test_status_cache_ttl
@@ -65,9 +69,16 @@ def get_test_status_summary(
     for product in products:
         groups.setdefault(product.name, []).append(product)
 
+    snapshots = test_status_snapshot_service.load_summaries(session)
+
     out: list[NameTestSummary] = []
     for name in sorted(groups):
         group = groups[name]
+        snapshot = snapshots.get(name)
+        if snapshot is not None:
+            summary, generated_at = snapshot
+            out.append(NameTestSummary(**summary, generated_at=generated_at))
+            continue
         merged = test_status_service.merge_status(_scan_pairs(group))
         out.append(
             NameTestSummary(
@@ -90,12 +101,17 @@ def get_test_status_detail(
     name: str = Query(...),
     session: Session = Depends(get_session),
 ) -> list[TargetFileStatus]:
-    """이름의 모든 변이를 합산한 대상 파일·테스트 파일 상세(파일별 출처 product_codes 포함)."""
+    """이름의 모든 변이를 합산한 대상 파일·테스트 파일 상세(파일별 출처 product_codes 포함).
+
+    스냅샷이 있으면 즉시 반환하고, 없으면 실시간 스캔으로 폴백한다.
+    """
     group = list(session.scalars(select(Product).where(Product.name == name)))
     if not group:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
-    merged = test_status_service.merge_status(_scan_pairs(group))
-    return [TargetFileStatus.model_validate(row) for row in merged]
+    detail = test_status_snapshot_service.load_detail(session, name)
+    if detail is None:
+        detail = test_status_service.merge_status(_scan_pairs(group))
+    return [TargetFileStatus.model_validate(row) for row in detail]
 
 
 def _within(target: Path, base: Path) -> bool:
@@ -113,6 +129,7 @@ def get_test_file(
 
     허용 루트는 프로덕트의 out_tests 폴더와 그 형제 `_Fail`/`_debug_log`뿐이다.
     경로는 `..`를 거부(400)하고, 허용 루트 밖이거나 없는 파일은 404다.
+    체크아웃이 없어도 clone하지 않는다(독립 상태 서버에서 부작용/블로킹 방지) — 404.
     """
     product = session.scalars(
         select(Product).where(Product.product_code == code)
@@ -124,7 +141,9 @@ def get_test_file(
     except PathValidationError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "허용되지 않는 경로다") from exc
 
-    root = workspace.ensure_product_checkout(product)
+    root = workspace.existing_product_checkout(product)
+    if root is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "파일을 찾을 수 없다")
     target = (root / rel).resolve()
     allowed = test_status_service.allowed_roots(root, product)
     if not any(_within(target, base) for base in allowed) or not target.is_file():

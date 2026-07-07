@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -35,7 +37,10 @@ class TargetFileStatus(BaseModel):
 
 
 class NameTestSummary(BaseModel):
-    """이름으로 묶은 프로덕트의 테스트 현황 요약(목록 페이지용)."""
+    """이름으로 묶은 프로덕트의 테스트 현황 요약(목록 페이지용).
+
+    generated_at: 스냅샷 생성 시각(스냅샷에서 응답한 경우). 실시간 폴백 스캔이면 None.
+    """
 
     name: str
     product_codes: list[str]
@@ -44,6 +49,7 @@ class NameTestSummary(BaseModel):
     total_test_count: int
     total_case_count: int
     total_fail_count: int
+    generated_at: datetime | None = None
 
 
 class FileContent(BaseModel):

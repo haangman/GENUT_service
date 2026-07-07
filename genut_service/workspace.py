@@ -48,6 +48,18 @@ def genut_code_dir(genut: GenutInstance) -> Path | None:
     return None
 
 
+def existing_product_checkout(product: Product) -> Path | None:
+    """이미 받아진(.git 존재) 프로덕트 코드 경로만 반환한다 — clone 부작용 없음.
+
+    독립 상태 서버의 파일 뷰어처럼 읽기 전용이어야 하는 경로에서 사용한다.
+    체크아웃이 없으면 None(호출부가 404 등으로 처리).
+    """
+    root = product_code_dir(product)
+    if (root / ".git").is_dir():
+        return root
+    return None
+
+
 def ensure_product_checkout(product: Product) -> Path:
     """요청 페이지용(읽기 전용) 프로덕트 코드 경로를 반환한다.
 

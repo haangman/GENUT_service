@@ -414,7 +414,7 @@ def test_test_status_file_returns_code_and_log(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
-    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    monkeypatch.setattr(workspace, "existing_product_checkout", lambda product: root)
     _create_product(client, name="demo", code="P-1")
 
     code = client.get(
@@ -446,7 +446,7 @@ def test_test_status_file_missing_file_404(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
-    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    monkeypatch.setattr(workspace, "existing_product_checkout", lambda product: root)
     _create_product(client, name="demo", code="P-1")
     resp = client.get(
         "/api/test-status/file",
@@ -459,7 +459,7 @@ def test_test_status_file_rejects_traversal_400(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
-    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    monkeypatch.setattr(workspace, "existing_product_checkout", lambda product: root)
     _create_product(client, name="demo", code="P-1")
     resp = client.get(
         "/api/test-status/file",
@@ -472,7 +472,7 @@ def test_test_status_file_rejects_outside_allowed_404(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _make_checkout(tmp_path)
-    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    monkeypatch.setattr(workspace, "existing_product_checkout", lambda product: root)
     _create_product(client, name="demo", code="P-1")
     # 체크아웃 안에 실재하지만 허용 루트(out/out_Fail/out_debug_log) 밖 → 404
     resp = client.get(
@@ -513,3 +513,81 @@ def test_summary_is_cached_within_ttl_and_invalidated_on_product_change(
     _create_product(client, name="cached-2", code="C-2")
     client.get("/api/test-status")
     assert len(scans) == 3
+
+
+# --- 통합: 스냅샷 우선 + 폴백 ---------------------------------------------
+
+
+def _refresh_snapshots_via_client(client: TestClient) -> None:
+    """client 픽스처의 오버라이드된 세션으로 스냅샷을 생성한다(리프레셔 대행)."""
+    from genut_service.services import test_status_snapshot_service as snap_service
+
+    override = next(iter(client.app.dependency_overrides.values()))
+    gen = override()
+    session = next(gen)
+    try:
+        snap_service.refresh_snapshots(session)
+    finally:
+        gen.close()
+
+
+def test_summary_prefers_snapshot_over_live_scan(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """스냅샷이 있으면 요약은 스캔 없이 스냅샷 값(+generated_at)으로 응답한다."""
+    from genut_service.services import test_status_service as ts_service
+
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="snap", code="S-1")
+    _refresh_snapshots_via_client(client)
+
+    scans: list[int] = []
+
+    def no_scan(products):  # noqa: ANN001
+        scans.append(1)
+        return []
+
+    monkeypatch.setattr(ts_service, "scan_group", no_scan)
+    body = client.get("/api/test-status").json()
+    row = next(r for r in body if r["name"] == "snap")
+    assert row["total_test_count"] == 3
+    assert row["generated_at"] is not None
+    assert scans == []  # 스냅샷 경로 — 실시간 스캔 없음
+
+
+def test_detail_prefers_snapshot_and_falls_back_without_it(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="snap2", code="S-2")
+
+    # 스냅샷 없음 → 폴백(실시간 스캔)으로 정상 응답 + generated_at 없음(요약 기준)
+    body = client.get("/api/test-status/detail", params={"name": "snap2"}).json()
+    assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]
+    summary = client.get("/api/test-status").json()
+    assert next(r for r in summary if r["name"] == "snap2")["generated_at"] is None
+
+    # 스냅샷 생성 후에는 스냅샷 detail로 응답(스캔 불필요)
+    _refresh_snapshots_via_client(client)
+    monkeypatch.setattr(
+        workspace,
+        "ensure_product_checkout",
+        lambda product: (_ for _ in ()).throw(AssertionError("스냅샷 경로에서 스캔 금지")),
+    )
+    body = client.get("/api/test-status/detail", params={"name": "snap2"}).json()
+    assert [f["path"] for f in body] == ["src/calc.c", "src/util.c"]
+
+
+def test_test_status_file_missing_checkout_404(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """체크아웃이 없으면 /file은 clone하지 않고 404를 반환한다."""
+    monkeypatch.setattr(workspace, "existing_product_checkout", lambda product: None)
+    _create_product(client, name="noco", code="N-1")
+    resp = client.get(
+        "/api/test-status/file",
+        params={"code": "N-1", "path": "out/calc/calc_Test_0.cpp"},
+    )
+    assert resp.status_code == 404
