@@ -43,19 +43,8 @@ def clear_summary_cache() -> None:
 
 
 def _scan_pairs(products: list[Product]) -> list[tuple[str, list[dict]]]:
-    """프로덕트들을 (product_code, build_status결과) 쌍으로 스캔한다.
-
-    한 프로덕트 스캔이 실패해도(체크아웃 불가 등) 빈 결과로 격리한다.
-    """
-    pairs: list[tuple[str, list[dict]]] = []
-    for product in products:
-        try:
-            root = workspace.ensure_product_checkout(product)
-            rows = test_status_service.build_status(root, product)
-        except Exception:  # noqa: BLE001 - 한 프로덕트 실패가 전체를 막지 않는다
-            rows = []
-        pairs.append((product.product_code, rows))
-    return pairs
+    """동기 스캔 폴백(스냅샷 부재 시). 구현은 services.test_status_service.scan_group."""
+    return test_status_service.scan_group(products)
 
 
 @router.get("", response_model=list[NameTestSummary])

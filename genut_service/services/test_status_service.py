@@ -24,6 +24,25 @@ from pathlib import Path
 from genut_service.db.models import Product
 from genut_service.services import compile_db_service
 
+
+def scan_group(products: list[Product]) -> list[tuple[str, list[dict]]]:
+    """프로덕트들을 (product_code, build_status결과) 쌍으로 스캔한다.
+
+    한 프로덕트 스캔이 실패해도(체크아웃 불가 등) 빈 결과로 격리한다.
+    API의 동기 폴백과 스냅샷 리프레셔가 공용으로 사용한다.
+    """
+    from genut_service import workspace  # 호출 시점 조회 — 테스트의 monkeypatch 반영
+
+    pairs: list[tuple[str, list[dict]]] = []
+    for product in products:
+        try:
+            root = workspace.ensure_product_checkout(product)
+            rows = build_status(root, product)
+        except Exception:  # noqa: BLE001 - 한 프로덕트 실패가 전체를 막지 않는다
+            rows = []
+        pairs.append((product.product_code, rows))
+    return pairs
+
 # 테스트 케이스 선언 매크로(GoogleTest + KUnit). 긴 토큰을 앞에 두어 부분일치를 막고,
 # 단어경계 + 뒤따르는 `(`로 EXPECT_EQ·INSTANTIATE_TEST_SUITE_P 등 식별자 내부 TEST를 제외한다.
 _CASE_RE = re.compile(
