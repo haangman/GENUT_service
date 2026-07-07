@@ -34,6 +34,7 @@ npm --prefix ./frontend install
 | 도커 포함 테스트 | `pytest -m docker` (Docker 필요, 없으면 자동 skip) |
 | DB 마이그레이션 | `alembic upgrade head` (스키마 변경 시 `alembic revision --autogenerate -m "..."`) |
 | 백엔드 서버 | `genut-service serve` (http://127.0.0.1:8000) |
+| 독립 테스트 현황 서버 | `genut-service serve-status` (http://127.0.0.1:8001, 읽기 전용 — serve와 같은 디렉터리에서 실행) |
 | 프론트 개발 서버 | `npm --prefix ./frontend run dev` (Vite, `/api`→127.0.0.1:8000 프록시) |
 | 프론트 테스트 | `npm --prefix ./frontend test` |
 | 프론트 빌드 | `npm --prefix ./frontend run build` → `frontend/dist` |

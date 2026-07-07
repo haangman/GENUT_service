@@ -41,3 +41,16 @@ def test_mount_frontend_noop_when_dist_missing(tmp_path: Path) -> None:
     mount_frontend(app, tmp_path / "missing")
     client = TestClient(app)
     assert client.get("/").status_code == 404
+
+
+def test_mount_frontend_custom_index_for_status_app(tmp_path: Path) -> None:
+    """멀티 엔트리 빌드: index_name="status.html"이면 status 엔트리로 폴백한다."""
+    dist = _make_dist(tmp_path)
+    (dist / "status.html").write_text("<html>status</html>", encoding="utf-8")
+    app = FastAPI()
+    mount_frontend(app, dist, index_name="status.html")
+    client = TestClient(app)
+
+    assert "<html>status</html>" in client.get("/").text
+    assert "<html>status</html>" in client.get("/test-status").text  # SPA 폴백
+    assert client.get("/assets/app.js").status_code == 200  # 에셋 공유

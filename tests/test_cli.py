@@ -11,3 +11,9 @@ def test_serve_is_recognized_subcommand() -> None:
     result = CliRunner().invoke(cli, ["serve", "--help"])
     assert result.exit_code == 0
     assert "host" in result.output.lower()
+
+
+def test_serve_status_is_recognized_subcommand() -> None:
+    result = CliRunner().invoke(cli, ["serve-status", "--help"])
+    assert result.exit_code == 0
+    assert "port" in result.output.lower()

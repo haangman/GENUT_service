@@ -61,11 +61,15 @@ def create_app() -> FastAPI:
     return app
 
 
-def mount_frontend(app: FastAPI, dist_dir: Path) -> None:
-    """frontend 빌드 산출물을 정적 서빙하고, 비-API 경로는 index.html로 폴백한다."""
+def mount_frontend(app: FastAPI, dist_dir: Path, index_name: str = "index.html") -> None:
+    """frontend 빌드 산출물을 정적 서빙하고, 비-API 경로는 index_name으로 폴백한다.
+
+    멀티 엔트리 빌드(dist에 index.html + status.html)를 공유한다 — 메인 앱은
+    index.html, 독립 상태 앱은 status.html을 SPA fallback으로 쓴다.
+    """
     if not dist_dir.is_dir():
         return
-    index_file = dist_dir / "index.html"
+    index_file = dist_dir / index_name
     assets_dir = dist_dir / "assets"
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
