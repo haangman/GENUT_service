@@ -61,5 +61,9 @@ def update_genut(
 
 @router.delete("/{genut_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_genut(genut_id: int, session: Session = Depends(get_session)) -> None:
-    if not genut_service.delete_genut(session, genut_id):
+    try:
+        deleted = genut_service.delete_genut(session, genut_id)
+    except genut_service.GenutInUseError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "GENUT를 찾을 수 없다")

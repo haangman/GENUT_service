@@ -96,6 +96,39 @@ def test_delete_product(client: TestClient) -> None:
     assert client.get(f"/api/products/{created['id']}").status_code == 404
 
 
+def test_delete_product_removes_finished_job_history(client, db_session) -> None:
+    """종료된 job 이력이 있어도 삭제된다(이력·이벤트 동반 삭제) — FK로 500 나던 회귀 방지."""
+    from sqlalchemy import select
+
+    from genut_service.db.models import Job, JobEvent
+
+    pid = client.post("/api/products", json=_payload("with-history")).json()["id"]
+    job = Job(product_id=pid, status="done")
+    db_session.add(job)
+    db_session.flush()
+    db_session.add(JobEvent(job_id=job.id, message="m"))
+    db_session.commit()
+
+    assert client.delete(f"/api/products/{pid}").status_code == 204
+    db_session.expire_all()
+    assert db_session.scalars(select(Job).where(Job.product_id == pid)).all() == []
+    assert db_session.scalars(select(JobEvent)).all() == []
+
+
+def test_delete_product_with_active_job_conflicts(client, db_session) -> None:
+    """대기/실행 중 job이 있으면 409로 거부하고 프로덕트는 남는다."""
+    from genut_service.db.models import Job
+
+    pid = client.post("/api/products", json=_payload("busy")).json()["id"]
+    db_session.add(Job(product_id=pid, status="running"))
+    db_session.commit()
+
+    resp = client.delete(f"/api/products/{pid}")
+    assert resp.status_code == 409
+    assert "삭제할 수 없다" in resp.json()["detail"]
+    assert client.get(f"/api/products/{pid}").status_code == 200
+
+
 def test_get_missing_returns_404(client: TestClient) -> None:
     assert client.get("/api/products/9999").status_code == 404
 

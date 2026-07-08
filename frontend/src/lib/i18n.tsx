@@ -76,6 +76,15 @@ const EN: Record<string, string> = {
   프로덕트: 'Products',
   '테스트 파일': 'Test file',
   '저장에 실패했습니다.': 'Save failed.',
+  '삭제에 실패했습니다.': 'Delete failed.',
+  '{name} 프로덕트를 삭제할까요? 관련 job 이력도 함께 삭제됩니다.':
+    'Delete product {name}? Its job history will be deleted too.',
+  '{name} GENUT를 삭제할까요? 종료된 job 이력은 남습니다.':
+    'Delete GENUT {name}? Finished job history is kept.',
+  '실행 중이거나 대기 중인 job이 있는 프로덕트는 삭제할 수 없다':
+    'A product with queued or running jobs cannot be deleted',
+  '실행 중인 job이 배정된 GENUT는 삭제할 수 없다':
+    'A GENUT with a running job assigned cannot be deleted',
 
   // job 테이블 / 로그
   '제출 시각': 'Submitted',

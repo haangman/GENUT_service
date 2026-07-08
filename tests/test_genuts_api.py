@@ -127,3 +127,48 @@ def test_list_and_delete(client: TestClient) -> None:
     assert listing.json()["total"] == 1
     assert client.delete(f"/api/genuts/{genut_id}").status_code == 204
     assert client.get(f"/api/genuts/{genut_id}").status_code == 404
+
+
+def _add_job(db_session: Session, genut_id: int, status: str) -> int:
+    """이 GENUT에 배정된 job 1건을 만든다(프로덕트 포함)."""
+    from genut_service.db.models import Job, Product
+
+    product = Product(
+        name="jp", product_code=f"jp-{genut_id}-{status}", git_url="u",
+        compile_db_rel="build", out_tests_rel="tests", cmake_configure_cmd="c",
+        cmake_build_cmd="b", test_run_cmd="r", test_generation_mode="cpp",
+    )
+    db_session.add(product)
+    db_session.flush()
+    job = Job(product_id=product.id, genut_instance_id=genut_id, status=status)
+    db_session.add(job)
+    db_session.commit()
+    return job.id
+
+
+def test_delete_genut_keeps_finished_history_unassigned(
+    client: TestClient, db_session: Session
+) -> None:
+    """종료 job 이력은 남기고 배정 표시만 지운 채 삭제된다 — FK로 500 나던 회귀 방지."""
+    from genut_service.db.models import Job
+
+    genut_id = client.post("/api/genuts", json=_payload("del-hist")).json()["id"]
+    job_id = _add_job(db_session, genut_id, status="done")
+
+    assert client.delete(f"/api/genuts/{genut_id}").status_code == 204
+    db_session.expire_all()
+    job = db_session.get(Job, job_id)
+    assert job is not None  # 이력 보존
+    assert job.genut_instance_id is None  # 배정 표시만 해제
+
+
+def test_delete_genut_with_running_job_conflicts(
+    client: TestClient, db_session: Session
+) -> None:
+    genut_id = client.post("/api/genuts", json=_payload("del-busy")).json()["id"]
+    _add_job(db_session, genut_id, status="running")
+
+    resp = client.delete(f"/api/genuts/{genut_id}")
+    assert resp.status_code == 409
+    assert "삭제할 수 없다" in resp.json()["detail"]
+    assert client.get(f"/api/genuts/{genut_id}").status_code == 200

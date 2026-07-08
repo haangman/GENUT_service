@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from genut_service.db.models import Patch, Product
+from genut_service.db.models import Job, Patch, Product
+from genut_service.enums import INFLIGHT_STATUSES, JobStatus
 from genut_service.schemas.product import PatchIn, ProductCreate, ProductUpdate
+
+
+class ProductInUseError(ValueError):
+    """대기/실행 중 job이 있어 삭제할 수 없는 프로덕트."""
 
 
 def _set_patches(product: Product, patches: list[PatchIn]) -> None:
@@ -62,9 +67,25 @@ def update_product(
 
 
 def delete_product(session: Session, product_id: int) -> bool:
+    """프로덕트와 그 job 이력을 삭제한다.
+
+    jobs.product_id FK는 CASCADE가 아니므로(이력 보존이 기본), 삭제 전에 이 프로덕트의
+    job을 함께 지워야 한다. 대기/실행 중 job이 있으면 ProductInUseError — 실행 중
+    삭제로 워커·락이 꼬이는 것을 막는다. 이벤트/패치/락은 DB FK CASCADE로 정리된다.
+    """
     product = session.get(Product, product_id)
     if product is None:
         return False
-    session.delete(product)
+    active_statuses = [s.value for s in INFLIGHT_STATUSES] + [JobStatus.QUEUED.value]
+    active = session.scalar(
+        select(func.count())
+        .select_from(Job)
+        .where(Job.product_id == product_id, Job.status.in_(active_statuses))
+    )
+    if active:
+        raise ProductInUseError("실행 중이거나 대기 중인 job이 있는 프로덕트는 삭제할 수 없다")
+    # ORM cascade 간섭 없이 core delete로 처리(job_events는 FK CASCADE로 함께 삭제)
+    session.execute(delete(Job).where(Job.product_id == product_id))
+    session.execute(delete(Product).where(Product.id == product_id))
     session.commit()
     return True

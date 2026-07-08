@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { GenutForm } from './GenutForm'
 import { createGenut, deleteGenut, listGenuts, updateGenut } from '../../api/genuts'
 import { listQueue, listWorkers } from '../../api/workers'
+import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import type { GenutFormValues } from './genutSchema'
 import type { Genut, GenutCreate } from '../../types/api'
@@ -122,7 +123,23 @@ export function GenutsPage() {
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteGenut(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['genuts'] }),
+    // 서버 거부(예: 실행 중 job 409)를 조용히 삼키지 않는다 — 사유를 그대로 보여준다
+    onError: (error: unknown) => {
+      const detail =
+        error instanceof ApiError ? (error.body as { detail?: string } | null)?.detail : undefined
+      window.alert(detail ? t(detail) : t('삭제에 실패했습니다.'))
+    },
   })
+
+  const confirmDelete = (genut: Genut) => {
+    if (
+      !window.confirm(
+        t('{name} GENUT를 삭제할까요? 종료된 job 이력은 남습니다.', { name: genut.name }),
+      )
+    )
+      return
+    deleteMut.mutate(genut.id)
+  }
 
   const handleSubmit = (values: GenutFormValues) => {
     const code_path = values.code_path.trim() || undefined
@@ -227,7 +244,7 @@ export function GenutsPage() {
                   </button>
                   <button
                     className="text-xs font-medium text-danger-fg transition hover:opacity-80"
-                    onClick={() => deleteMut.mutate(genut.id)}
+                    onClick={() => confirmDelete(genut)}
                   >
                     {t('삭제')}
                   </button>

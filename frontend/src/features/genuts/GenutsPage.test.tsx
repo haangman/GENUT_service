@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -99,5 +99,32 @@ describe('GenutsPage', () => {
     await waitFor(() => expect(putBody).not.toBeNull())
     expect(putBody!.name).toBe('genut-a')
     expect(putBody!.ds_assist_credential_key).toBeUndefined()
+  })
+
+  it('deletes only after the user confirms', async () => {
+    let deleted = false
+    server.use(
+      http.get('/api/genuts', () =>
+        HttpResponse.json({ items: [genut()], total: 1, page: 1, page_size: 50 }),
+      ),
+      http.delete('/api/genuts/1', () => {
+        deleted = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    renderWithProviders(<GenutsPage />)
+    await screen.findByText('genut-a')
+
+    // 취소 → 요청 없음
+    confirmSpy.mockReturnValueOnce(false)
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    expect(deleted).toBe(false)
+
+    // 확인 → 삭제
+    confirmSpy.mockReturnValueOnce(true)
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(deleted).toBe(true))
+    confirmSpy.mockRestore()
   })
 })

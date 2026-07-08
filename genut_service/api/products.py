@@ -154,5 +154,9 @@ def update_product(
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(product_id: int, session: Session = Depends(get_session)) -> None:
-    if not product_service.delete_product(session, product_id):
+    try:
+        deleted = product_service.delete_product(session, product_id)
+    except product_service.ProductInUseError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")

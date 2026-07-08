@@ -10,6 +10,7 @@ import {
   updateAutoProduct,
   updateProduct,
 } from '../../api/products'
+import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import {
   DEFAULT_CMAKE_TEMPLATE,
@@ -84,7 +85,23 @@ export function ProductsPage() {
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteProduct(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
+    // 서버 거부(예: 실행 중 job 409)를 조용히 삼키지 않는다 — 사유를 그대로 보여준다
+    onError: (error: unknown) => {
+      const detail =
+        error instanceof ApiError ? (error.body as { detail?: string } | null)?.detail : undefined
+      window.alert(detail ? t(detail) : t('삭제에 실패했습니다.'))
+    },
   })
+
+  const confirmDelete = (product: Product) => {
+    if (
+      !window.confirm(
+        t('{name} 프로덕트를 삭제할까요? 관련 job 이력도 함께 삭제됩니다.', { name: product.name }),
+      )
+    )
+      return
+    deleteMut.mutate(product.id)
+  }
 
   const saving = saveMut.isPending || autoMut.isPending
   const saveError = saveMut.isError || autoMut.isError
@@ -210,7 +227,7 @@ export function ProductsPage() {
                   </button>
                   <button
                     className="text-xs font-medium text-danger-fg transition hover:opacity-80"
-                    onClick={() => deleteMut.mutate(product.id)}
+                    onClick={() => confirmDelete(product)}
                   >
                     {t('삭제')}
                   </button>

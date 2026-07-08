@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -105,5 +105,59 @@ describe('ProductsPage', () => {
     await waitFor(() => expect(autoPut).not.toBeNull())
     expect(autoPut!.auto_run).toBe(true)
     expect(autoPut!.auto_file_list).toEqual(['src/aaa.c'])
+  })
+
+  it('deletes only after the user confirms, and surfaces server rejections', async () => {
+    let deleted = false
+    server.use(
+      http.get('/api/products', () =>
+        HttpResponse.json({ items: [product(1, 'alpha', 'c')], total: 1, page: 1, page_size: 50 }),
+      ),
+      http.delete('/api/products/1', () => {
+        deleted = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    renderWithProviders(<ProductsPage />)
+    await screen.findByText('alpha')
+
+    // 취소하면 삭제 요청을 보내지 않는다
+    confirmSpy.mockReturnValueOnce(false)
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    expect(deleted).toBe(false)
+
+    // 확인하면 삭제한다
+    confirmSpy.mockReturnValueOnce(true)
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(deleted).toBe(true))
+    confirmSpy.mockRestore()
+  })
+
+  it('alerts with the server detail when delete is rejected', async () => {
+    server.use(
+      http.get('/api/products', () =>
+        HttpResponse.json({ items: [product(1, 'alpha', 'c')], total: 1, page: 1, page_size: 50 }),
+      ),
+      http.delete('/api/products/1', () =>
+        HttpResponse.json(
+          { detail: '실행 중이거나 대기 중인 job이 있는 프로덕트는 삭제할 수 없다' },
+          { status: 409 },
+        ),
+      ),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderWithProviders(<ProductsPage />)
+    await screen.findByText('alpha')
+
+    await userEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        '실행 중이거나 대기 중인 job이 있는 프로덕트는 삭제할 수 없다',
+      ),
+    )
+    confirmSpy.mockRestore()
+    alertSpy.mockRestore()
   })
 })
