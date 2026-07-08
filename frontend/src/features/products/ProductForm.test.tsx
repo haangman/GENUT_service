@@ -96,4 +96,18 @@ describe('ProductForm', () => {
     ).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
+
+  it('hides the CMakeLists template editor in auto mode when the test mode is kunit', async () => {
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
+
+    await userEvent.click(screen.getByRole('checkbox'))
+    // cpp(기본) → 양식창 노출
+    expect(screen.getByLabelText(/CMakeLists.txt 양식/)).toBeInTheDocument()
+
+    // kunit으로 바꾸면 양식창이 사라지고, 되돌리면 다시 나타난다
+    await userEvent.selectOptions(screen.getByLabelText(/테스트 모드/), 'kunit')
+    expect(screen.queryByLabelText(/CMakeLists.txt 양식/)).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText(/테스트 모드/), 'cpp')
+    expect(screen.getByLabelText(/CMakeLists.txt 양식/)).toBeInTheDocument()
+  })
 })

@@ -58,6 +58,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
   const { fields, append, remove } = useFieldArray({ control, name: 'patches' })
 
   const autoRun = watch('auto_run')
+  const testMode = watch('test_generation_mode')
   const codePath = watch('code_path')
   const compileDbRel = watch('compile_db_rel')
   const excludePatterns = watch('exclude_patterns')
@@ -234,16 +235,19 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
             )}
           </div>
 
-          <div>
-            <label htmlFor="cmake_template" className="label">
-              {t('CMakeLists.txt 양식 (placeholder')} <code className="font-mono">filename</code> {t('→ 파일 이름으로 치환)')}
-            </label>
-            <textarea
-              id="cmake_template"
-              className={`${inputClass} min-h-[220px] font-mono text-xs`}
-              {...register('cmake_template')}
-            />
-          </div>
+          {/* kunit은 gtest용 CMakeLists 스캐폴딩을 쓰지 않으므로 양식창을 숨긴다 */}
+          {testMode !== 'kunit' ? (
+            <div>
+              <label htmlFor="cmake_template" className="label">
+                {t('CMakeLists.txt 양식 (placeholder')} <code className="font-mono">filename</code> {t('→ 파일 이름으로 치환)')}
+              </label>
+              <textarea
+                id="cmake_template"
+                className={`${inputClass} min-h-[220px] font-mono text-xs`}
+                {...register('cmake_template')}
+              />
+            </div>
+          ) : null}
         </>
       ) : null}
 
