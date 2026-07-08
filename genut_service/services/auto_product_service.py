@@ -20,24 +20,27 @@ from genut_service.schemas.product import ProductCreate, ProductUpdate
 from genut_service.services import product_service
 
 # 사용자가 양식을 비워 두면 쓰는 기본 양식2(gtest). placeholder `filename` → 파일 stem.
+# if(SOURCES) 가드: 테스트 소스가 아직 없는 stem 폴더에서도 configure가 실패하지 않는다.
 DEFAULT_CMAKE_TEMPLATE = """set(MODULE_TEST_NAME filename_UnitTest)
 
 file(GLOB SOURCES
     *.cpp
 )
 
-add_executable(${MODULE_TEST_NAME} ${SOURCES})
+if(SOURCES)
+    add_executable(${MODULE_TEST_NAME} ${SOURCES})
 
-target_link_libraries(${MODULE_TEST_NAME} PRIVATE UnitTest)
-target_link_libraries(${MODULE_TEST_NAME} PRIVATE Json)
-target_link_libraries(${MODULE_TEST_NAME} PRIVATE Util)
-target_link_libraries(${MODULE_TEST_NAME} PRIVATE Kstub)
+    target_link_libraries(${MODULE_TEST_NAME} PRIVATE UnitTest)
+    target_link_libraries(${MODULE_TEST_NAME} PRIVATE Json)
+    target_link_libraries(${MODULE_TEST_NAME} PRIVATE Util)
+    target_link_libraries(${MODULE_TEST_NAME} PRIVATE Kstub)
 
-if (LCOV_ENABLE STREQUAL True)
-    add_custom_command(TARGET ${MODULE_TEST_NAME} POST_BUILD COMMAND find ${PROJECT_BINARY_DIR} -name *.gcda -type f -delete | true)
+    if (LCOV_ENABLE STREQUAL True)
+        add_custom_command(TARGET ${MODULE_TEST_NAME} POST_BUILD COMMAND find ${PROJECT_BINARY_DIR} -name *.gcda -type f -delete | true)
+    endif()
+
+    gtest_discover_tests(${MODULE_TEST_NAME} EXTRA_ARGS --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/gtest_results.xml)
 endif()
-
-gtest_discover_tests(${MODULE_TEST_NAME} EXTRA_ARGS --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/gtest_results.xml)
 """
 
 

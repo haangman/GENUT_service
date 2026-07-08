@@ -8,18 +8,20 @@ file(GLOB SOURCES
     *.cpp
 )
 
-add_executable(\${MODULE_TEST_NAME} \${SOURCES})
+if(SOURCES)
+    add_executable(\${MODULE_TEST_NAME} \${SOURCES})
 
-target_link_libraries(\${MODULE_TEST_NAME} PRIVATE UnitTest)
-target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Json)
-target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Util)
-target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Kstub)
+    target_link_libraries(\${MODULE_TEST_NAME} PRIVATE UnitTest)
+    target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Json)
+    target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Util)
+    target_link_libraries(\${MODULE_TEST_NAME} PRIVATE Kstub)
 
-if (LCOV_ENABLE STREQUAL True)
-    add_custom_command(TARGET \${MODULE_TEST_NAME} POST_BUILD COMMAND find \${PROJECT_BINARY_DIR} -name *.gcda -type f -delete | true)
+    if (LCOV_ENABLE STREQUAL True)
+        add_custom_command(TARGET \${MODULE_TEST_NAME} POST_BUILD COMMAND find \${PROJECT_BINARY_DIR} -name *.gcda -type f -delete | true)
+    endif()
+
+    gtest_discover_tests(\${MODULE_TEST_NAME} EXTRA_ARGS --gtest_output=xml:\${CMAKE_CURRENT_BINARY_DIR}/gtest_results.xml)
 endif()
-
-gtest_discover_tests(\${MODULE_TEST_NAME} EXTRA_ARGS --gtest_output=xml:\${CMAKE_CURRENT_BINARY_DIR}/gtest_results.xml)
 `
 
 export const patchSchema = z.object({

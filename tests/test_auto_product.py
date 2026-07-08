@@ -21,6 +21,18 @@ def test_render_cmake_replaces_filename() -> None:
     assert out == "set(MODULE_TEST_NAME bb_UnitTest)"
 
 
+def test_default_template_guards_targets_with_if_sources() -> None:
+    """기본 양식2는 add_executable부터 끝까지 if(SOURCES) 블록으로 감싼다 —
+    테스트 소스가 아직 없는 stem 폴더에서도 configure가 실패하지 않는다."""
+    template = auto_product_service.DEFAULT_CMAKE_TEMPLATE
+    guard = template.index("if(SOURCES)")
+    assert guard < template.index("add_executable")
+    assert guard < template.index("gtest_discover_tests")
+    # 블록이 마지막 줄의 endif()로 닫힌다 (내부 LCOV endif와 별개)
+    assert template.rstrip().endswith("endif()")
+    assert template.count("endif()") == 2
+
+
 def test_write_scaffolding_creates_base_and_per_file(tmp_path: Path) -> None:
     base = auto_product_service.write_scaffolding(
         tmp_path, "UnitTest", ["src/aaa.c", "src/bbb.c"], auto_product_service.DEFAULT_CMAKE_TEMPLATE
