@@ -60,6 +60,24 @@ describe('ManualJobsPage', () => {
     expect(await screen.findByText(/job #5 로그/)).toBeInTheDocument()
   })
 
+  it('프로젝트 선택에 따라 해당 프로젝트 job만 조회한다', async () => {
+    const projectsSeen: (string | null)[] = []
+    server.use(
+      http.get('/api/jobs', ({ request }) => {
+        projectsSeen.push(new URL(request.url).searchParams.get('project'))
+        return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })
+      }),
+    )
+
+    renderWithProviders(<ManualJobsPage />)
+    await waitFor(() => expect(projectsSeen.length).toBeGreaterThan(0))
+    expect(projectsSeen[0]).toBe('Ulysses') // 기본 프로젝트
+
+    // 프로젝트 전환 → 해당 프로젝트 파라미터로 재조회
+    fireEvent.change(screen.getByLabelText('프로젝트'), { target: { value: 'Thetis' } })
+    await waitFor(() => expect(projectsSeen).toContain('Thetis'))
+  })
+
   it('종류 컬럼에 배정된 GENUT 인스턴스 이름을 보여준다', async () => {
     server.use(
       http.get('/api/jobs', () =>

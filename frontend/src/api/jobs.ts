@@ -7,6 +7,7 @@ import type {
   JobKind,
   JobOrigin,
   Page,
+  Project,
 } from '../types/api'
 
 export function createJob(data: JobCreate): Promise<Job> {
@@ -18,6 +19,8 @@ export interface ListJobsParams {
   product_id?: number
   origin?: JobOrigin
   kind?: JobKind
+  // 프로젝트 필터(프로덕트 경유). 미지정이면 전체.
+  project?: Project
   page?: number
   page_size?: number
 }
@@ -44,9 +47,12 @@ export async function listAllJobs(
 }
 
 // auto 프로덕트별 자동 실행 job 이력(프로덕트당 최근 perProduct개 + 전체 수)
-export function listAutoHistory(perProduct = 3): Promise<AutoHistoryGroup[]> {
+export function listAutoHistory(
+  perProduct = 3,
+  project?: Project,
+): Promise<AutoHistoryGroup[]> {
   return apiFetch<AutoHistoryGroup[]>('/jobs/auto-history', {
-    query: { per_product: perProduct },
+    query: { per_product: perProduct, project },
   })
 }
 

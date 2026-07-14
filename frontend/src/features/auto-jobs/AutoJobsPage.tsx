@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../components/PageHeader'
 import { Pagination } from '../../components/Pagination'
+import { ProjectSelect } from '../../components/ProjectSelect'
 import { listAutoHistory, listJobs } from '../../api/jobs'
 import { runAutoNow } from '../../api/products'
 import { useLang } from '../../lib/i18n'
-import type { AutoHistoryGroup } from '../../types/api'
+import { DEFAULT_PROJECT } from '../../lib/projects'
+import type { AutoHistoryGroup, Project } from '../../types/api'
 import { JobTable } from '../jobs/JobTable'
 
 // 접힌 상태에서 프로덕트당 보여줄 최근 job 수
@@ -93,10 +95,11 @@ function AutoProductGroup({
 
 export function AutoJobsPage() {
   const { t } = useLang()
+  const [project, setProject] = useState<Project>(DEFAULT_PROJECT)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const { data } = useQuery({
-    queryKey: ['jobs', 'auto', 'groups'],
-    queryFn: () => listAutoHistory(RECENT_COUNT),
+    queryKey: ['jobs', 'auto', 'groups', project],
+    queryFn: () => listAutoHistory(RECENT_COUNT, project),
     refetchInterval: 2000, // 준비 job 상태/새 사이클 반영을 빠르게
   })
   const groups = data ?? []
@@ -116,6 +119,7 @@ export function AutoJobsPage() {
         title={t('자동 실행 이력')}
         description={t('자동 실행 프로덕트별 job 이력(변경 감지/스캔/GENUT)을 본다.')}
       />
+      <ProjectSelect value={project} onChange={setProject} id="auto-jobs-project" />
       {groups.length === 0 ? (
         <p className="text-sm text-subtle">{t('자동 실행 프로덕트가 없습니다.')}</p>
       ) : (

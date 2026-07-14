@@ -212,6 +212,23 @@ describe('AutoJobsPage', () => {
     expect(await screen.findByText('자동 실행 프로덕트가 없습니다.')).toBeInTheDocument()
   })
 
+  it('프로젝트 선택에 따라 auto-history를 프로젝트로 필터해 조회한다', async () => {
+    const projectsSeen: (string | null)[] = []
+    server.use(
+      http.get('/api/jobs/auto-history', ({ request }) => {
+        projectsSeen.push(new URL(request.url).searchParams.get('project'))
+        return HttpResponse.json([])
+      }),
+    )
+
+    renderWithProviders(<AutoJobsPage />)
+    await waitFor(() => expect(projectsSeen.length).toBeGreaterThan(0))
+    expect(projectsSeen[0]).toBe('Ulysses') // 기본 프로젝트
+
+    fireEvent.change(screen.getByLabelText('프로젝트'), { target: { value: 'Thetis' } })
+    await waitFor(() => expect(projectsSeen).toContain('Thetis'))
+  })
+
   it('▶ 지금 실행 버튼은 주기와 무관하게 auto 사이클을 큐잉한다(토글과 독립)', async () => {
     let runPosted = false
     server.use(
