@@ -32,6 +32,7 @@ function secondsToInterval(seconds: number | null): {
 function toFormValues(product: Product): Partial<ProductFormValues> {
   const interval = secondsToInterval(product.auto_interval_seconds)
   return {
+    project: product.project,
     name: product.name,
     product_code: product.product_code,
     git_url: product.git_url,
@@ -193,6 +194,7 @@ export function ProductsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <th className="px-4 py-3">{t('프로젝트')}</th>
               <th className="px-4 py-3">{t('이름')}</th>
               <th className="px-4 py-3">{t('프로덕트 ID')}</th>
               <th className="px-4 py-3">{t('모드')}</th>
@@ -203,6 +205,9 @@ export function ProductsPage() {
           <tbody>
             {data?.items.map((product) => (
               <tr key={product.id} className="border-t border-border transition hover:bg-surface-hover">
+                <td className="px-4 py-3">
+                  <span className="badge badge-neutral">{product.project}</span>
+                </td>
                 <td className="px-4 py-3 font-medium text-fg">{product.name}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted">{product.product_code}</td>
                 <td className="space-x-1.5 px-4 py-3">

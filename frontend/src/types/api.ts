@@ -1,5 +1,8 @@
 // 백엔드 API 타입. (추후 openapi-typescript 생성으로 대체 가능)
 
+// 프로덕트가 속한 상위 프로젝트. 선택지 목록은 lib/projects.ts의 PROJECTS.
+export type Project = 'Ulysses' | 'Thetis'
+
 export type TestGenerationMode = 'c' | 'cpp' | 'kunit'
 
 export interface Page<T> {
@@ -24,6 +27,7 @@ export interface PatchIn {
 
 export interface Product {
   id: number
+  project: Project
   name: string
   product_code: string
   git_url: string
@@ -162,6 +166,7 @@ export interface CompileCheckResult {
 }
 
 export interface ProductCreate {
+  project: Project
   name: string
   product_code: string
   git_url: string
@@ -211,6 +216,7 @@ export interface TargetFileStatus {
 }
 
 export interface NameTestSummary {
+  project: Project
   name: string
   product_codes: string[]
   test_generation_mode: TestGenerationMode

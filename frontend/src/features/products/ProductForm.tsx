@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { EMPTY_PRODUCT_FORM, productFormSchema, type ProductFormValues } from './productSchema'
 import { previewTargetFiles } from '../../api/products'
 import { useLang } from '../../lib/i18n'
+import { PROJECTS } from '../../lib/projects'
 import type { TargetFileItem } from '../../types/api'
 
 type TextFieldName =
@@ -112,6 +113,19 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
       </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="project" className="label">
+            {t('프로젝트')}
+          </label>
+          <select id="project" className={inputClass} {...register('project')}>
+            {PROJECTS.map((project) => (
+              <option key={project} value={project}>
+                {project}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {TEXT_FIELDS.map((field) => (
           <div key={field.name}>
             <label htmlFor={field.name} className="label">

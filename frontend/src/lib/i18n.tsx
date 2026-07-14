@@ -159,6 +159,7 @@ const EN: Record<string, string> = {
   '+ 새 프로덕트': '+ New product',
   '새 프로덕트': 'New product',
   '목록을 불러오지 못했습니다.': 'Failed to load the list.',
+  프로젝트: 'Project',
   '프로덕트 ID': 'Product ID',
   '프로덕트 ID를 입력하세요': 'Enter the product ID',
   'git URL을 입력하세요': 'Enter the git URL',

@@ -9,6 +9,7 @@ import { ProductsPage } from './ProductsPage'
 function product(id: number, name: string, mode = 'cpp', extra: Record<string, unknown> = {}) {
   return {
     id,
+    project: 'Ulysses',
     name,
     product_code: `P-${id}`,
     git_url: `https://example.com/${name}.git`,

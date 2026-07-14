@@ -31,6 +31,7 @@ export const patchSchema = z.object({
 
 export const productFormSchema = z
   .object({
+    project: z.enum(['Ulysses', 'Thetis']),
     name: z.string().min(1, '이름을 입력하세요'),
     product_code: z.string().min(1, '프로덕트 ID를 입력하세요'),
     git_url: z.string().min(1, 'git URL을 입력하세요'),
@@ -59,6 +60,7 @@ export const productFormSchema = z
 export type ProductFormValues = z.infer<typeof productFormSchema>
 
 export const EMPTY_PRODUCT_FORM: ProductFormValues = {
+  project: 'Ulysses',
   name: '',
   product_code: '',
   git_url: '',

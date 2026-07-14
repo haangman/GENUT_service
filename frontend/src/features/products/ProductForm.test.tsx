@@ -8,6 +8,7 @@ import { ProductForm } from './ProductForm'
 import type { ProductFormValues } from './productSchema'
 
 const VALID: ProductFormValues = {
+  project: 'Ulysses',
   name: 'demo',
   product_code: 'P-1',
   git_url: 'https://example.com/repo.git',
@@ -48,8 +49,19 @@ describe('ProductForm', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
     const values = onSubmit.mock.calls[0][0]
     expect(values.name).toBe('demo')
+    expect(values.project).toBe('Ulysses') // 기본 프로젝트
     expect(values.patches).toHaveLength(1)
     expect(values.patches[0].name).toBe('p0')
+  })
+
+  it('selects a project and includes it in the submitted values', async () => {
+    const onSubmit = vi.fn()
+    renderWithProviders(<ProductForm onSubmit={onSubmit} defaultValues={VALID} />)
+
+    await userEvent.selectOptions(screen.getByLabelText('프로젝트'), 'Thetis')
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].project).toBe('Thetis')
   })
 
   it('adds and removes patch rows', async () => {
