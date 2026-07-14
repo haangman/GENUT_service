@@ -38,6 +38,13 @@ export function previewTargetFiles(body: {
   return apiFetch<TargetFilesResponse>('/products/target-files', { method: 'POST', body })
 }
 
+export interface PullCodeResult {
+  path: string
+  detail: string
+  // 폼 로그창용 부가 정보(최근 커밋 등)
+  log: string
+}
+
 // 코드 저장 경로로 git 코드를 받아온다(없으면 clone, 있으면 제자리 업데이트).
 // 폼 값 기반이라 저장 전 신규 등록 중에도 동작한다.
 export function pullCode(body: {
@@ -45,11 +52,23 @@ export function pullCode(body: {
   git_ref: string
   code_path: string
   out_tests_rel?: string
-}): Promise<{ path: string; detail: string }> {
-  return apiFetch<{ path: string; detail: string }>('/products/pull-code', {
-    method: 'POST',
-    body,
-  })
+}): Promise<PullCodeResult> {
+  return apiFetch<PullCodeResult>('/products/pull-code', { method: 'POST', body })
+}
+
+export interface RunCommandResult {
+  exit_code: number
+  output: string
+  duration_seconds: number
+}
+
+// 폼의 명령(CMAKE_CONFIGURE_CMD 등)을 code_path에서 시험 실행한다.
+// 명령 자체의 실패(비0 exit)는 HTTP 오류가 아니라 exit_code로 온다.
+export function runCommand(body: {
+  command: string
+  code_path: string
+}): Promise<RunCommandResult> {
+  return apiFetch<RunCommandResult>('/products/run-command', { method: 'POST', body })
 }
 
 export function updateProduct(id: number, data: ProductCreate): Promise<Product> {

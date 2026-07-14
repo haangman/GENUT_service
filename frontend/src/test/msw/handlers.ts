@@ -8,7 +8,14 @@ export const handlers = [
   ),
   http.post('/api/products/target-files', () => HttpResponse.json({ files: [] })),
   http.post('/api/products/pull-code', () =>
-    HttpResponse.json({ path: 'C:/checkout', detail: '클론 완료' }),
+    HttpResponse.json({
+      path: 'C:/checkout',
+      detail: '클론 완료',
+      log: '최근 커밋:\nabc1234 2026-07-14 tester init',
+    }),
+  ),
+  http.post('/api/products/run-command', () =>
+    HttpResponse.json({ exit_code: 0, output: 'ok', duration_seconds: 0.1 }),
   ),
   http.get('/api/genuts', () =>
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),

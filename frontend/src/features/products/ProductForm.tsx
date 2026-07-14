@@ -8,7 +8,7 @@ import {
   productFormSchema,
   type ProductFormValues,
 } from './productSchema'
-import { previewTargetFiles, pullCode } from '../../api/products'
+import { previewTargetFiles, pullCode, runCommand } from '../../api/products'
 import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import { PROJECTS } from '../../lib/projects'
@@ -41,6 +41,9 @@ const TEXT_FIELDS: { name: TextFieldName; label: string }[] = [
 
 const inputClass = 'input'
 
+// 실행 버튼이 붙는 명령 필드(코드 저장 경로를 작업 디렉터리로 시험 실행)
+const RUNNABLE_FIELDS: TextFieldName[] = ['cmake_configure_cmd', 'cmake_build_cmd']
+
 interface ProductFormProps {
   // autoFileList: 자동 실행 모드에서 최종 포함된 대상 파일 목록(비자동이면 빈 배열)
   onSubmit: (values: ProductFormValues, autoFileList: string[]) => void
@@ -72,6 +75,47 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
   const gitUrl = watch('git_url')
   const gitRef = watch('git_ref')
   const outTestsRel = watch('out_tests_rel')
+  const runnableValues: Record<string, string> = {
+    cmake_configure_cmd: watch('cmake_configure_cmd'),
+    cmake_build_cmd: watch('cmake_build_cmd'),
+  }
+
+  // 공용 실행 로그창: 다운로드/명령 실행 결과가 순서대로 누적된다
+  const [consoleLog, setConsoleLog] = useState<string[]>([])
+  const consoleRef = useRef<HTMLPreElement>(null)
+  const appendConsole = (text: string) =>
+    setConsoleLog((prev) => [...prev, text.replace(/\s+$/, '')])
+  useEffect(() => {
+    const el = consoleRef.current
+    if (el) el.scrollTop = el.scrollHeight // 새 로그가 붙으면 맨 아래로
+  }, [consoleLog])
+
+  // 명령 시험 실행(CMAKE_CONFIGURE_CMD/CMAKE_BUILD_CMD) — code_path에서 실행
+  const [runningField, setRunningField] = useState<string | null>(null)
+  const runMut = useMutation({
+    mutationFn: (command: string) => runCommand({ command, code_path: codePath.trim() }),
+  })
+  const executeCommand = (fieldName: string, command: string) => {
+    const cmd = command.trim()
+    if (!cmd) return
+    setRunningField(fieldName)
+    appendConsole(`$ ${cmd}`)
+    runMut.mutate(cmd, {
+      onSuccess: (res) => {
+        const lines = [res.output, `[exit ${res.exit_code} · ${res.duration_seconds}s]`]
+        appendConsole(lines.filter(Boolean).join('\n'))
+      },
+      onError: (error) => {
+        const detail =
+          error instanceof ApiError
+            ? (error.body as { detail?: string } | null)?.detail
+            : undefined
+        appendConsole(`[오류] ${detail ?? t('명령 실행에 실패했습니다.')}`)
+      },
+      onSettled: () => setRunningField(null),
+    })
+  }
+  const codePathReady = ABSOLUTE_PATH_RE.test(codePath.trim())
 
   // 코드 저장 경로 다운로드(git clone/pull). 폼 값 기반이라 저장 전에도 동작한다.
   const pullMut = useMutation({
@@ -82,9 +126,21 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
         code_path: codePath.trim(),
         out_tests_rel: outTestsRel.trim() || undefined,
       }),
+    // 다운로드 결과도 공용 로그창에 남긴다
+    onSuccess: (res) => appendConsole(`${t(res.detail)} — ${res.path}\n${res.log}`),
+    onError: (error) => {
+      const detail =
+        error instanceof ApiError
+          ? (error.body as { detail?: string } | null)?.detail
+          : undefined
+      appendConsole(`[오류] ${t('다운로드 실패')}${detail ? `: ${detail}` : ''}`)
+    },
   })
-  const canPull =
-    Boolean(gitUrl.trim()) && ABSOLUTE_PATH_RE.test(codePath.trim()) && !pullMut.isPending
+  const startPull = () => {
+    appendConsole(`$ ${t('다운로드')}: ${gitUrl.trim()} → ${codePath.trim()}`)
+    pullMut.mutate()
+  }
+  const canPull = Boolean(gitUrl.trim()) && codePathReady && !pullMut.isPending
   const pullReset = pullMut.reset
   // 경로/URL을 고치면 이전 성공/실패 표시는 무효 — 상태를 지운다
   useEffect(() => {
@@ -172,7 +228,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                   <button
                     type="button"
                     className="btn btn-sm shrink-0 self-center"
-                    onClick={() => pullMut.mutate()}
+                    onClick={startPull}
                     disabled={!canPull}
                     title={t('이 경로로 git 코드를 받아온다 (없으면 clone, 있으면 업데이트)')}
                   >
@@ -191,6 +247,22 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                   </p>
                 ) : null}
               </>
+            ) : RUNNABLE_FIELDS.includes(field.name) ? (
+              // 명령 필드: 입력 옆 실행 버튼 — code_path에서 시험 실행하고 아래 로그창에 출력
+              <div className="flex gap-2">
+                <input id={field.name} className={inputClass} {...register(field.name)} />
+                <button
+                  type="button"
+                  className="btn btn-sm shrink-0 self-center"
+                  onClick={() => executeCommand(field.name, runnableValues[field.name])}
+                  disabled={
+                    !codePathReady || !runnableValues[field.name].trim() || runMut.isPending
+                  }
+                  title={t('코드 저장 경로에서 이 명령을 실행해 본다')}
+                >
+                  {runningField === field.name ? t('실행 중…') : t('실행')}
+                </button>
+              </div>
             ) : (
               <input id={field.name} className={inputClass} {...register(field.name)} />
             )}
@@ -201,6 +273,32 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
             ) : null}
           </div>
         ))}
+
+        {/* 공용 실행 로그창 — 다운로드/명령 실행 로그가 시간 순으로 누적된다 */}
+        <div className="sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <span className="label">{t('실행 로그')}</span>
+            <button
+              type="button"
+              className="link text-xs"
+              onClick={() => setConsoleLog([])}
+              disabled={consoleLog.length === 0}
+            >
+              {t('지우기')}
+            </button>
+          </div>
+          <pre
+            ref={consoleRef}
+            data-testid="form-console"
+            className={`max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs ${
+              consoleLog.length ? 'text-fg' : 'text-subtle'
+            }`}
+          >
+            {consoleLog.length
+              ? consoleLog.join('\n')
+              : t('다운로드/실행 버튼의 로그가 여기에 표시됩니다.')}
+          </pre>
+        </div>
 
         <div>
           <label htmlFor="test_generation_mode" className="label">

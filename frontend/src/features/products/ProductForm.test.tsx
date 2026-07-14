@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
@@ -86,7 +86,49 @@ describe('ProductForm', () => {
     await userEvent.click(button)
     // 기본 MSW 핸들러가 성공(클론 완료)을 반환한다
     expect(await screen.findByText(/다운로드 성공/)).toBeInTheDocument()
-    expect(screen.getByText(/클론 완료/)).toBeInTheDocument()
+    // 공용 로그창에도 다운로드 로그(시작 라인 + 결과 + 최근 커밋)가 남는다
+    const consoleEl = screen.getByTestId('form-console')
+    expect(consoleEl.textContent).toContain('$ 다운로드:')
+    expect(consoleEl.textContent).toContain('클론 완료')
+    expect(consoleEl.textContent).toContain('최근 커밋')
+  })
+
+  it('runs a cmake command and prints the output in the shared console', async () => {
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
+    const runButtons = screen.getAllByRole('button', { name: '실행' })
+    expect(runButtons).toHaveLength(2) // CMAKE_CONFIGURE_CMD + CMAKE_BUILD_CMD
+
+    await userEvent.click(runButtons[0])
+    const consoleEl = screen.getByTestId('form-console')
+    // 명령 에코 + 출력 + exit code가 로그창에 누적된다(기본 MSW: exit 0, 'ok')
+    expect(consoleEl.textContent).toContain('$ cmake -S . -B build')
+    await waitFor(() => expect(consoleEl.textContent).toContain('ok'))
+    expect(consoleEl.textContent).toContain('[exit 0')
+  })
+
+  it('shows failing command output with its exit code in the console', async () => {
+    server.use(
+      http.post('/api/products/run-command', () =>
+        HttpResponse.json({ exit_code: 2, output: 'CMake Error: boom', duration_seconds: 0.2 }),
+      ),
+    )
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
+    await userEvent.click(screen.getAllByRole('button', { name: '실행' })[1])
+    const consoleEl = screen.getByTestId('form-console')
+    await waitFor(() => expect(consoleEl.textContent).toContain('CMake Error: boom'))
+    expect(consoleEl.textContent).toContain('[exit 2')
+  })
+
+  it('disables run buttons until the code path is absolute and the command is filled', () => {
+    renderWithProviders(
+      <ProductForm
+        onSubmit={vi.fn()}
+        defaultValues={{ ...VALID, code_path: 'relative/path', cmake_build_cmd: '' }}
+      />,
+    )
+    for (const button of screen.getAllByRole('button', { name: '실행' })) {
+      expect(button).toBeDisabled()
+    }
   })
 
   it('shows the server detail when the download fails', async () => {
@@ -99,9 +141,13 @@ describe('ProductForm', () => {
       <ProductForm onSubmit={vi.fn()} defaultValues={{ ...VALID, code_path: 'C:/checkout' }} />,
     )
     await userEvent.click(screen.getByRole('button', { name: '다운로드' }))
-    expect(
-      await screen.findByText(/다운로드 실패: git clone failed: repository not found/),
-    ).toBeInTheDocument()
+    // 버튼 옆 인라인 표시와 공용 로그창 모두에 실패 원인이 남는다
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '다운로드 실패: git clone failed: repository not found',
+    )
+    expect(screen.getByTestId('form-console').textContent).toContain(
+      'git clone failed: repository not found',
+    )
   })
 
   it('disables the download button while git_url or code_path is empty', () => {
