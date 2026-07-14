@@ -251,16 +251,17 @@ class ProductLock(Base):
 
 
 class TestStatusSnapshot(Base):
-    """이름별 테스트 현황 스냅샷(백그라운드 리프레셔가 갱신, API는 읽기만).
+    """(프로젝트, 이름)별 테스트 현황 스냅샷(백그라운드 리프레셔가 갱신, API는 읽기만).
 
     실시간 풀스캔 대신 이 스냅샷을 읽어 테스트 현황 페이지가 즉시 응답한다.
     쓰기는 메인 프로세스(스케줄러 리프레셔)만 수행하고, 독립 상태 서버는 읽기 전용으로
-    공유한다(SQLite WAL). fingerprint는 이름 그룹의 (id, updated_at) 직렬화 — 프로덕트
+    공유한다(SQLite WAL). fingerprint는 그룹의 (id, updated_at) 직렬화 — 프로덕트
     등록/수정 시 스냅샷이 오래됐음을 판별하는 용도다.
     """
 
     __tablename__ = "test_status_snapshots"
 
+    project: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), primary_key=True)
     fingerprint: Mapped[str] = mapped_column(String(2048))
     summary: Mapped[dict] = mapped_column(JSON)  # NameTestSummary dict

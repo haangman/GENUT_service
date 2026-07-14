@@ -37,11 +37,12 @@ class TargetFileStatus(BaseModel):
 
 
 class NameTestSummary(BaseModel):
-    """이름으로 묶은 프로덕트의 테스트 현황 요약(목록 페이지용).
+    """(프로젝트, 이름)으로 묶은 프로덕트의 테스트 현황 요약(목록 페이지용).
 
     generated_at: 스냅샷 생성 시각(스냅샷에서 응답한 경우). 실시간 폴백 스캔이면 None.
     """
 
+    project: str
     name: str
     product_codes: list[str]
     test_generation_mode: str

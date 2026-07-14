@@ -18,9 +18,10 @@ from tests.test_test_status import _make_checkout
 
 
 def _add_product(
-    session: Session, name: str = "demo", code: str = "P-1"
+    session: Session, name: str = "demo", code: str = "P-1", project: str = "Ulysses"
 ) -> Product:
     product = Product(
+        project=project,
         name=name,
         product_code=code,
         git_url="https://example.com/repo.git",
@@ -47,8 +48,9 @@ def test_refresh_creates_snapshot_with_summary_and_detail(
 
     assert snap.refresh_snapshots(db_session) == 1
 
-    row = db_session.get(StatusSnapshot, "demo")
+    row = db_session.get(StatusSnapshot, ("Ulysses", "demo"))
     assert row is not None
+    assert row.summary["project"] == "Ulysses"
     assert row.summary["name"] == "demo"
     assert row.summary["product_codes"] == ["P-1"]
     assert row.summary["target_file_count"] == 2  # calc.c, util.c (build/gen.c 제외)
@@ -70,11 +72,28 @@ def test_refresh_merges_same_name_variants(
     _add_product(db_session, name="A", code="A-1")
     _add_product(db_session, name="A", code="A-2")
 
-    assert snap.refresh_snapshots(db_session) == 1  # 이름 1개 → 스냅샷 1행
+    assert snap.refresh_snapshots(db_session) == 1  # (project, 이름) 1개 → 스냅샷 1행
 
-    row = db_session.get(StatusSnapshot, "A")
+    row = db_session.get(StatusSnapshot, ("Ulysses", "A"))
     assert row.summary["product_codes"] == ["A-1", "A-2"]
     assert row.summary["target_file_count"] == 2  # 합집합(2배 아님)
+
+
+def test_refresh_splits_same_name_across_projects(
+    db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 같은 이름이라도 프로젝트가 다르면 별도 스냅샷으로 나뉜다(합산 금지)
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _add_product(db_session, name="A", code="A-U", project="Ulysses")
+    _add_product(db_session, name="A", code="A-T", project="Thetis")
+
+    assert snap.refresh_snapshots(db_session) == 2
+
+    ulysses = db_session.get(StatusSnapshot, ("Ulysses", "A"))
+    thetis = db_session.get(StatusSnapshot, ("Thetis", "A"))
+    assert ulysses.summary["product_codes"] == ["A-U"]
+    assert thetis.summary["product_codes"] == ["A-T"]
 
 
 def test_refresh_updates_and_deletes_stale_names(
@@ -84,16 +103,16 @@ def test_refresh_updates_and_deletes_stale_names(
     monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
     product = _add_product(db_session, name="old", code="O-1")
     snap.refresh_snapshots(db_session)
-    assert db_session.get(StatusSnapshot, "old") is not None
-    first_fingerprint = db_session.get(StatusSnapshot, "old").fingerprint
+    assert db_session.get(StatusSnapshot, ("Ulysses", "old")) is not None
+    first_fingerprint = db_session.get(StatusSnapshot, ("Ulysses", "old")).fingerprint
 
     # 이름 변경 → 기존 이름 스냅샷은 삭제되고 새 이름으로 생성된다
     product = db_session.get(Product, product.id)
     product.name = "new"
     db_session.commit()
     snap.refresh_snapshots(db_session)
-    assert db_session.get(StatusSnapshot, "old") is None
-    new_row = db_session.get(StatusSnapshot, "new")
+    assert db_session.get(StatusSnapshot, ("Ulysses", "old")) is None
+    new_row = db_session.get(StatusSnapshot, ("Ulysses", "new"))
     assert new_row is not None
     assert new_row.fingerprint != first_fingerprint  # updated_at 변화가 지문에 반영
 
@@ -123,7 +142,7 @@ def test_refresh_isolates_scan_failure_per_product(
     _add_product(db_session, name="broken", code="B-1")
 
     assert snap.refresh_snapshots(db_session) == 1
-    row = db_session.get(StatusSnapshot, "broken")
+    row = db_session.get(StatusSnapshot, ("Ulysses", "broken"))
     assert row.summary["target_file_count"] == 0
     assert row.detail == []
 
@@ -136,13 +155,16 @@ def test_load_summaries_and_detail(
     _add_product(db_session, name="demo", code="P-1")
     snap.refresh_snapshots(db_session)
 
-    summaries = snap.load_summaries(db_session)
+    summaries = snap.load_summaries(db_session, "Ulysses")
     assert set(summaries) == {"demo"}
     summary, generated_at = summaries["demo"]
     assert summary["total_test_count"] == 3
     assert generated_at is not None
+    # 다른 프로젝트로는 조회되지 않는다
+    assert snap.load_summaries(db_session, "Thetis") == {}
 
-    detail = snap.load_detail(db_session, "demo")
+    detail = snap.load_detail(db_session, "Ulysses", "demo")
     assert detail is not None
     assert [r["path"] for r in detail] == ["src/calc.c", "src/util.c"]
-    assert snap.load_detail(db_session, "nope") is None
+    assert snap.load_detail(db_session, "Ulysses", "nope") is None
+    assert snap.load_detail(db_session, "Thetis", "demo") is None

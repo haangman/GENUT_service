@@ -187,8 +187,10 @@ def _create_product(
     name: str = "demo",
     code: str = "P-1",
     exclude_globs: list[str] | None = None,
+    project: str = "Ulysses",
 ) -> int:
     payload = {
+        "project": project,
         "name": name,
         "product_code": code,
         "git_url": "https://example.com/repo.git",
@@ -400,11 +402,48 @@ def test_test_status_summary_groups_by_name(
     rows = [r for r in body if r["name"] == "A"]
     assert len(rows) == 1  # 이름 1행으로 합산
     row = rows[0]
+    assert row["project"] == "Ulysses"
     assert row["target_file_count"] == 2  # calc.c, util.c (2배 아님)
     assert row["total_test_count"] == 3  # calc 2 + util 1 (테스트 파일 수)
     assert row["total_case_count"] == 4  # calc 3(2+1) + util 1 (케이스 수)
     assert row["total_fail_count"] == 1  # calc 실패 1
     assert sorted(row["product_codes"]) == ["A-1", "A-2"]
+
+
+def test_test_status_summary_partitions_by_project(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """같은 이름이라도 프로젝트가 다르면 합산되지 않고 프로젝트 필터로만 보인다."""
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="A", code="A-U", project="Ulysses")
+    _create_product(client, name="A", code="A-T", project="Thetis")
+
+    # 기본(미지정)은 Ulysses만
+    default_rows = client.get("/api/test-status").json()
+    assert [r["product_codes"] for r in default_rows if r["name"] == "A"] == [["A-U"]]
+
+    thetis_rows = client.get("/api/test-status", params={"project": "Thetis"}).json()
+    assert [r["product_codes"] for r in thetis_rows if r["name"] == "A"] == [["A-T"]]
+
+    # 잘못된 프로젝트 값은 422
+    assert client.get("/api/test-status", params={"project": "Atlantis"}).status_code == 422
+
+
+def test_test_status_detail_partitions_by_project(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_checkout(tmp_path)
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+    _create_product(client, name="A", code="A-T", project="Thetis")
+
+    # Thetis에만 있는 이름 → 기본(Ulysses) 조회는 404, project 지정 시 200
+    assert client.get("/api/test-status/detail", params={"name": "A"}).status_code == 404
+    body = client.get(
+        "/api/test-status/detail", params={"name": "A", "project": "Thetis"}
+    ).json()
+    calc = next(f for f in body if f["path"] == "src/calc.c")
+    assert calc["product_codes"] == ["A-T"]
 
 
 # --- 통합: 파일 내용(코드/로그) 엔드포인트 -------------------------------
