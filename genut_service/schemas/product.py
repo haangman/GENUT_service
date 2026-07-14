@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from genut_service.enums import TestGenerationMode
+from genut_service.enums import Project, TestGenerationMode
 from genut_service.paths import normalize_code_path, normalize_rel_path
 
 
@@ -34,6 +34,7 @@ class PatchRead(BaseModel):
 
 
 class ProductBase(BaseModel):
+    project: Project = Project.ULYSSES
     name: str
     product_code: str
     git_url: str
@@ -77,6 +78,7 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     """부분 수정. 제공된 필드만 갱신한다. patches가 주어지면 전체 교체."""
 
+    project: Project | None = None
     name: str | None = None
     product_code: str | None = None
     git_url: str | None = None

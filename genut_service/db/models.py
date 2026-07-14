@@ -30,6 +30,7 @@ from genut_service.enums import (
     JobOrigin,
     JobStatus,
     LlmModel,
+    Project,
     TestGenerationMode,
     WorkerStatus,
 )
@@ -56,7 +57,9 @@ class Product(TimestampMixin, Base):
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # 이름은 중복 허용(서로 다른 id·정보로 등록). 같은 이름끼리는 스케줄러가 병렬 실행을 막는다.
+    # 상위 프로젝트. 배타/현황 집계의 그룹 키는 (project, name)이다.
+    project: Mapped[str] = mapped_column(String(32), default=Project.ULYSSES.value)
+    # 이름은 중복 허용(서로 다른 id·정보로 등록). 같은 (project, 이름)끼리는 스케줄러가 병렬 실행을 막는다.
     name: Mapped[str] = mapped_column(String(255))
     product_code: Mapped[str] = mapped_column(String(255))
     git_url: Mapped[str] = mapped_column(String(1024))

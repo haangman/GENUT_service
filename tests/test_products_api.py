@@ -43,6 +43,26 @@ def test_create_and_get_product(client: TestClient) -> None:
     assert got.json()["name"] == "demo"
 
 
+def test_project_defaults_to_ulysses_and_accepts_thetis(client: TestClient) -> None:
+    # 미지정 시 기본 프로젝트는 Ulysses
+    created = client.post("/api/products", json=_payload("proj-default")).json()
+    assert created["project"] == "Ulysses"
+
+    # 등록 시 Thetis 지정 가능
+    thetis = client.post("/api/products", json=_payload("proj-thetis", project="Thetis")).json()
+    assert thetis["project"] == "Thetis"
+
+    # 수정으로 프로젝트 변경 가능
+    resp = client.put(f"/api/products/{created['id']}", json={"project": "Thetis"})
+    assert resp.status_code == 200
+    assert resp.json()["project"] == "Thetis"
+
+
+def test_project_rejects_unknown_value(client: TestClient) -> None:
+    resp = client.post("/api/products", json=_payload("proj-bad", project="Atlantis"))
+    assert resp.status_code == 422
+
+
 def test_paths_are_normalized(client: TestClient) -> None:
     resp = client.post(
         "/api/products", json=_payload(compile_db_rel="build\\out\\", out_tests_rel="/tests/gen")

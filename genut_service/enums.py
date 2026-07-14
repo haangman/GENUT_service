@@ -5,6 +5,16 @@ from __future__ import annotations
 from enum import StrEnum
 
 
+class Project(StrEnum):
+    """프로덕트가 속한 상위 프로젝트. 저장값 = 표시값.
+
+    새 프로젝트 추가 시 여기와 프론트 `lib/projects.ts`의 PROJECTS에 함께 추가한다.
+    """
+
+    ULYSSES = "Ulysses"
+    THETIS = "Thetis"
+
+
 class TestGenerationMode(StrEnum):
     """GENUT가 생성하는 테스트 종류 (프로덕트 속성)."""
 
