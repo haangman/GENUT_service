@@ -364,3 +364,30 @@ Ulysses — `enums.Project` + 프론트 `lib/projects.ts`의 `PROJECTS`; 추가 
   필터, 현황 분할/스냅샷 복합키, `tests/test_pull_code.py` 6종) · 프론트 86 passed(신규 —
   폼 project 제출, 피커 필터/리셋, 이력·현황 필터 파라미터, 다운로드 성공/실패/비활성).
   커밋 10개(4d7eb87..3c8f898).
+
+---
+
+## 19. 프로덕트 폼 명령 실행 버튼 + 공용 로그창 (2026-07-14)
+
+프로덕트 등록 폼에서 등록 예정 명령을 실제로 실행해 볼 수 있다.
+
+- **run-command API**: `POST /api/products/run-command {command, code_path}` —
+  `services/command_run_service.py`가 code_path를 작업 디렉터리로 명령을 **플랫폼 셸**
+  (`cmd /c` / `/bin/sh -c`)로 실행(subprocess_util.run — 새 세션 + 타임아웃 시 트리 kill,
+  타임아웃은 `FORM_CMD_TIMEOUT`, 기본 600초). **명령의 비0 exit는 HTTP 오류가 아니라
+  결과**(exit_code/output/duration_seconds)로 반환. code_path 미존재 400("먼저 다운로드"),
+  같은 체크아웃을 쓰는 job 실행 중 409 — busy 가드는 pull-code와 공용
+  (`code_pull_service.raise_if_code_path_busy`).
+- **pull-code 로그**: 응답에 `log`(runner와 동일한 `git_ops.recent_log` 최근 커밋) 추가.
+- **폼 UI**: CMAKE_CONFIGURE_CMD·CMAKE_BUILD_CMD 입력 옆 **실행 버튼**(코드 저장 경로가
+  절대 경로이고 명령이 있어야 활성, 실행 중 '실행 중…'). CMD 입력칸 바로 아래 전폭
+  **공용 실행 로그창**(`data-testid="form-console"`, mono·스크롤·자동 하단 스크롤·지우기) —
+  `$ 명령` 에코 → 출력 → `[exit N · Ns]`가 누적되고, **다운로드 버튼 로그**(시작 라인·
+  클론/업데이트 완료·최근 커밋 또는 실패 원인)도 같은 창에 남는다.
+- **code_path 절대 경로 필수화(프로덕트 폼)**: zod `min(1)` + `ABSOLUTE_PATH_RE`
+  (`C:\`·`C:/`·UNC·POSIX `/`). 라벨 "(선택, 절대/상대)" → "(절대 경로)". 다운로드/실행
+  버튼도 절대 경로여야 활성. **백엔드 스키마·GENUT 폼은 기존대로**(옵션·상대 허용 —
+  기존 데이터/API 하위 호환).
+- 테스트: 백엔드 307 passed(`tests/test_run_command.py` 7종 — 출력/exit/작업 디렉터리/
+  400/409/422, pull-code log 검증) · 프론트 90 passed(실행 버튼 로그 누적/실패 exit/
+  비활성 조건, 절대 경로 검증, 다운로드 로그창 출력). 커밋 3개(47d84b7, 8b0a4e3, 320c6d6).
