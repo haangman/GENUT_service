@@ -49,31 +49,36 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
     if not idle_workers:
         return []
 
-    # 배타는 프로덕트 "이름" 기준이다. 같은 이름의 프로덕트(다른 id)끼리도 동시에 돌지 않는다.
-    busy_names = set(
-        session.scalars(
-            select(Product.name).join(ProductLock, ProductLock.product_id == Product.id)
+    # 배타는 (프로젝트, 이름) 기준이다. 같은 프로젝트의 동명 프로덕트(다른 id)끼리는
+    # 동시에 돌지 않고, 프로젝트가 다르면 같은 이름이라도 병렬 실행을 허용한다.
+    busy_keys: set[tuple[str, str]] = {
+        (project, name)
+        for project, name in session.execute(
+            select(Product.project, Product.name).join(
+                ProductLock, ProductLock.product_id == Product.id
+            )
         )
-    )
+    }
     # auto 준비(auto_scan/auto_diff) job이 실행 중인 프로덕트도 배타 — 준비 작업의
     # git reset(제자리 갱신)과 GENUT 실행이 같은 체크아웃에서 충돌하지 않게 한다.
-    busy_names |= set(
-        session.scalars(
-            select(Product.name)
+    busy_keys |= {
+        (project, name)
+        for project, name in session.execute(
+            select(Product.project, Product.name)
             .join(Job, Job.product_id == Product.id)
             .where(
                 Job.status == JobStatus.RUNNING.value,
                 Job.kind.in_(_PREP_KIND_VALUES),
             )
         )
-    )
+    }
 
-    # 후보는 최소 컬럼(id, 이름)만 조회한다 — 매초 도는 핫패스에서 큐 전체의
+    # 후보는 최소 컬럼(id, 프로젝트, 이름)만 조회한다 — 매초 도는 핫패스에서 큐 전체의
     # JSON/TEXT 컬럼(file_list, error 등)까지 역직렬화하지 않도록.
     # 워커는 GENUT job만 집는다. 준비(auto_scan/auto_diff) job은 스케줄러의
     # auto 단계가 직접 실행한다.
     candidates = session.execute(
-        select(Job.id, Product.name)
+        select(Job.id, Product.project, Product.name)
         .join(Product, Product.id == Job.product_id)
         .where(
             Job.status == JobStatus.QUEUED.value,
@@ -82,13 +87,14 @@ def claim_jobs(session: Session) -> list[tuple[int, int]]:
         .order_by(Job.priority.desc(), Job.submitted_at.asc(), Job.id.asc())
     ).all()
 
-    # 락이 없는 이름부터, 같은 이름당 1개씩 — idle 워커 수에 도달하면 중단
+    # 락이 없는 (프로젝트, 이름)부터, 같은 키당 1개씩 — idle 워커 수에 도달하면 중단
     eligible_ids: list[int] = []
-    seen_names = set(busy_names)
-    for job_id, name in candidates:
-        if name in seen_names:
+    seen_keys = set(busy_keys)
+    for job_id, project, name in candidates:
+        key = (project, name)
+        if key in seen_keys:
             continue
-        seen_names.add(name)
+        seen_keys.add(key)
         eligible_ids.append(job_id)
         if len(eligible_ids) >= len(idle_workers):
             break

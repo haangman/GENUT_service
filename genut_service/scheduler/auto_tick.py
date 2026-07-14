@@ -116,24 +116,28 @@ def enqueue_cycle_now(session: Session, product: Product) -> list[int]:
 
 
 def claim_prep_jobs(session: Session) -> list[int]:
-    """실행 가능한 queued 준비 job을 프로덕트 이름당 1개씩 running으로 전이한다."""
-    busy_names = set(
-        session.scalars(
-            select(Product.name).join(ProductLock, ProductLock.product_id == Product.id)
+    """실행 가능한 queued 준비 job을 (프로젝트, 이름)당 1개씩 running으로 전이한다."""
+    busy_keys: set[tuple[str, str]] = {
+        (project, name)
+        for project, name in session.execute(
+            select(Product.project, Product.name).join(
+                ProductLock, ProductLock.product_id == Product.id
+            )
         )
-    )
-    busy_names |= set(
-        session.scalars(
-            select(Product.name)
+    }
+    busy_keys |= {
+        (project, name)
+        for project, name in session.execute(
+            select(Product.project, Product.name)
             .join(Job, Job.product_id == Product.id)
             .where(
                 Job.status == JobStatus.RUNNING.value,
                 Job.kind.in_(_PREP_KIND_VALUES),
             )
         )
-    )
+    }
     candidates = session.execute(
-        select(Job, Product.name)
+        select(Job, Product.project, Product.name)
         .join(Product, Product.id == Job.product_id)
         .where(
             Job.status == JobStatus.QUEUED.value,
@@ -143,10 +147,11 @@ def claim_prep_jobs(session: Session) -> list[int]:
     ).all()
 
     picked: list[int] = []
-    for job, name in candidates:
-        if name in busy_names:
+    for job, project, name in candidates:
+        key = (project, name)
+        if key in busy_keys:
             continue
-        busy_names.add(name)
+        busy_keys.add(key)
         job.status = JobStatus.RUNNING.value
         job.started_at = _utcnow()
         picked.append(job.id)

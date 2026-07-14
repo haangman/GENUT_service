@@ -10,8 +10,9 @@ from genut_service.enums import JobKind, JobStatus, WorkerStatus
 from genut_service.scheduler.engine import claim_jobs, finish_job
 
 
-def _product(session: Session, name: str) -> Product:
+def _product(session: Session, name: str, project: str = "Ulysses") -> Product:
     product = Product(
+        project=project,
         name=name,
         product_code=name,
         git_url="u",
@@ -151,6 +152,20 @@ def test_same_name_products_are_mutually_exclusive(db_session: Session) -> None:
     finish_job(db_session, assignments[0][0], JobStatus.DONE)
     again = claim_jobs(db_session)
     assert len(again) == 1
+
+
+def test_same_name_different_project_products_run_in_parallel(db_session: Session) -> None:
+    # 프로젝트가 다르면 같은 이름이라도 병렬 실행을 허용한다 (배타는 (project, name) 기준)
+    p1 = _product(db_session, "SAME", project="Ulysses")
+    p2 = _product(db_session, "SAME", project="Thetis")
+    _worker(db_session, "w1")
+    _worker(db_session, "w2")
+    _job(db_session, p1.id)
+    _job(db_session, p2.id)
+
+    assignments = claim_jobs(db_session)
+    assert len(assignments) == 2  # 다른 프로젝트 → 동시 실행
+    assert db_session.scalar(select(func.count()).select_from(ProductLock)) == 2
 
 
 def test_disabled_worker_is_not_used(db_session: Session) -> None:

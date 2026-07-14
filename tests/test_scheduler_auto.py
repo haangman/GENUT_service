@@ -62,8 +62,10 @@ def _auto_product(
     code_path: str | None = None,
     active: bool = True,
     auto_run: bool = True,
+    project: str = "Ulysses",
 ) -> Product:
     product = Product(
+        project=project,
         name=name,
         product_code=name,
         git_url="u",
@@ -237,6 +239,16 @@ def test_claim_prep_is_exclusive_by_product_name(db_session: Session) -> None:
 
     picked = auto_tick.claim_prep_jobs(db_session)
     assert len(picked) == 1
+
+
+def test_claim_prep_allows_same_name_across_projects(db_session: Session) -> None:
+    # 배타 키는 (project, name) — 프로젝트가 다르면 같은 이름이라도 동시에 집는다
+    _auto_product(db_session, name="SAME", project="Ulysses")
+    _auto_product(db_session, name="SAME", project="Thetis")
+    auto_tick.enqueue_due_cycles(db_session)
+
+    picked = auto_tick.claim_prep_jobs(db_session)
+    assert len(picked) == 2
 
 
 def test_claim_jobs_excludes_products_with_running_prep(db_session: Session) -> None:
