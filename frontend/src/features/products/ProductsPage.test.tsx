@@ -21,7 +21,7 @@ function product(id: number, name: string, mode = 'cpp', extra: Record<string, u
     test_run_cmd: 'r',
     test_generation_mode: mode,
     active: true,
-    code_path: null,
+    code_path: 'C:/repo',
     auto_run: false,
     auto_interval_seconds: null,
     auto_file_list: [],

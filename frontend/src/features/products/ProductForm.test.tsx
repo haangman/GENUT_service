@@ -19,7 +19,7 @@ const VALID: ProductFormValues = {
   cmake_build_cmd: 'cmake --build build',
   test_run_cmd: 'ctest',
   test_generation_mode: 'cpp',
-  code_path: '',
+  code_path: 'C:/checkout',
   exclude_patterns: '',
   patches: [],
   auto_run: false,
@@ -62,6 +62,18 @@ describe('ProductForm', () => {
     await userEvent.click(screen.getByRole('button', { name: '저장' }))
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0][0].project).toBe('Thetis')
+  })
+
+  it('requires an absolute code_path', async () => {
+    const onSubmit = vi.fn()
+    renderWithProviders(
+      <ProductForm onSubmit={onSubmit} defaultValues={{ ...VALID, code_path: 'repos/foo' }} />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(
+      await screen.findByText('코드 저장 경로는 절대 경로로 입력하세요'),
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('downloads code into code_path and shows the result next to the button', async () => {

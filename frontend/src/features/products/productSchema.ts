@@ -29,6 +29,9 @@ export const patchSchema = z.object({
   content: z.string().min(1, '내용을 입력하세요'),
 })
 
+// 절대 경로 판정: 윈도우 드라이브(C:\ 또는 C:/), UNC(\\server), POSIX(/)
+export const ABSOLUTE_PATH_RE = /^(?:[A-Za-z]:[\\/]|\/|\\\\)/
+
 export const productFormSchema = z
   .object({
     project: z.enum(['Ulysses', 'Thetis']),
@@ -42,7 +45,11 @@ export const productFormSchema = z
     cmake_build_cmd: z.string().min(1, 'build 명령을 입력하세요'),
     test_run_cmd: z.string().min(1, 'test 실행 명령을 입력하세요'),
     test_generation_mode: z.enum(['c', 'cpp', 'kunit']),
-    code_path: z.string(),
+    // 필수 + 절대 경로 — 다운로드/명령 실행이 이 경로를 작업 디렉터리로 쓴다
+    code_path: z
+      .string()
+      .min(1, '코드 저장 경로를 입력하세요')
+      .regex(ABSOLUTE_PATH_RE, '코드 저장 경로는 절대 경로로 입력하세요'),
     // 제외 패턴: 한 줄에 하나(예: *test*). 제출 시 줄 분리해 string[]로 변환한다.
     exclude_patterns: z.string(),
     patches: z.array(patchSchema),

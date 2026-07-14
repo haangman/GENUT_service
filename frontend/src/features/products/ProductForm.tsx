@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { EMPTY_PRODUCT_FORM, productFormSchema, type ProductFormValues } from './productSchema'
+import {
+  ABSOLUTE_PATH_RE,
+  EMPTY_PRODUCT_FORM,
+  productFormSchema,
+  type ProductFormValues,
+} from './productSchema'
 import { previewTargetFiles, pullCode } from '../../api/products'
 import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
@@ -24,7 +29,7 @@ type TextFieldName =
 const TEXT_FIELDS: { name: TextFieldName; label: string }[] = [
   { name: 'name', label: '이름' },
   { name: 'product_code', label: '프로덕트 ID' },
-  { name: 'code_path', label: '코드 저장 경로 (선택, 절대/상대)' },
+  { name: 'code_path', label: '코드 저장 경로 (절대 경로)' },
   { name: 'git_url', label: 'Git URL' },
   { name: 'git_ref', label: 'Git ref' },
   { name: 'compile_db_rel', label: 'compile_commands.json 폴더(상대)' },
@@ -78,7 +83,8 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
         out_tests_rel: outTestsRel.trim() || undefined,
       }),
   })
-  const canPull = Boolean(gitUrl.trim() && codePath.trim()) && !pullMut.isPending
+  const canPull =
+    Boolean(gitUrl.trim()) && ABSOLUTE_PATH_RE.test(codePath.trim()) && !pullMut.isPending
   const pullReset = pullMut.reset
   // 경로/URL을 고치면 이전 성공/실패 표시는 무효 — 상태를 지운다
   useEffect(() => {
