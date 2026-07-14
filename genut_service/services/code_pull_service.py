@@ -49,6 +49,20 @@ def _busy_products(session: Session) -> list[Product]:
     return list(session.scalars(select(Product).where(Product.id.in_(ids))))
 
 
+def raise_if_code_path_busy(session: Session, dest: Path) -> None:
+    """dest를 코드 디렉터리로 쓰는 프로덕트의 job이 실행 중이면 CodePathBusyError.
+
+    다운로드(git reset)·폼 명령 실행이 실행 중 job과 같은 체크아웃에서 경합하지 않게
+    하는 공용 가드다.
+    """
+    dest_key = _normcase(dest)
+    for product in _busy_products(session):
+        if _normcase(workspace.product_code_dir(product)) == dest_key:
+            raise CodePathBusyError(
+                f"프로덕트 '{product.name}'의 작업이 실행 중이라 이 경로를 사용할 수 없다"
+            )
+
+
 def pull_code(session: Session, req: PullCodeRequest) -> PullCodeResponse:
     """code_path로 git 코드를 받아온다 — 없으면 clone, 있으면 fetch+reset 제자리 업데이트.
 
@@ -56,12 +70,7 @@ def pull_code(session: Session, req: PullCodeRequest) -> PullCodeResponse:
     제자리 업데이트의 fetch/reset 실패도 성공으로 오인하지 않는다.
     """
     dest = workspace.resolve_code_path(req.code_path)
-    dest_key = _normcase(dest)
-    for product in _busy_products(session):
-        if _normcase(workspace.product_code_dir(product)) == dest_key:
-            raise CodePathBusyError(
-                f"프로덕트 '{product.name}'의 작업이 실행 중이라 이 경로를 갱신할 수 없다"
-            )
+    raise_if_code_path_busy(session, dest)
 
     existed = (dest / ".git").is_dir()
     preserve = [req.out_tests_rel] if req.out_tests_rel else []
@@ -74,5 +83,8 @@ def pull_code(session: Session, req: PullCodeRequest) -> PullCodeResponse:
         strict=True,
     )
     return PullCodeResponse(
-        path=str(dest), detail="업데이트 완료" if existed else "클론 완료"
+        path=str(dest),
+        detail="업데이트 완료" if existed else "클론 완료",
+        # 폼 로그창용: runner가 job 로그에 남기는 것과 같은 최근 커밋 정보
+        log=f"최근 커밋:\n{git_ops.recent_log(dest)}",
     )

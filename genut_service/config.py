@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # git clone/fetch 등 분석성 명령 타임아웃(초)
     git_timeout: int = 300
 
+    # 프로덕트 폼의 명령 실행 버튼(CMAKE_CONFIGURE_CMD 등 시험 실행) 타임아웃(초)
+    form_cmd_timeout: int = 600
+
     # 인프라성(클론 실패 등) 실패에 대한 서비스 레벨 재시도 횟수
     job_max_infra_retries: int = 1
 

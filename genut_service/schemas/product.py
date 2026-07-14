@@ -157,10 +157,41 @@ class PullCodeRequest(BaseModel):
 
 
 class PullCodeResponse(BaseModel):
-    """다운로드 결과. path는 실제 받은(해석된) 경로."""
+    """다운로드 결과. path는 실제 받은(해석된) 경로, log는 폼 로그창용 부가 정보."""
 
     path: str
     detail: str
+    log: str = ""
+
+
+class RunCommandRequest(BaseModel):
+    """폼 단계 명령 시험 실행 요청 — code_path를 작업 디렉터리로 command를 실행한다."""
+
+    command: str
+    code_path: str
+
+    @field_validator("command")
+    @classmethod
+    def _require_command(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("실행할 명령이 비어 있다")
+        return value.strip()
+
+    @field_validator("code_path")
+    @classmethod
+    def _require_code_path(cls, value: str) -> str:
+        normalized = _norm_code_path(value)
+        if normalized is None:
+            raise ValueError("코드 저장 경로가 비어 있다")
+        return normalized
+
+
+class RunCommandResponse(BaseModel):
+    """명령 실행 결과. 명령 자체의 실패(비0 exit)는 HTTP 오류가 아니라 결과로 전달한다."""
+
+    exit_code: int
+    output: str
+    duration_seconds: float
 
 
 class TargetFilesRequest(BaseModel):

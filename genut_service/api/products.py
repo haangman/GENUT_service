@@ -19,6 +19,8 @@ from genut_service.schemas.product import (
     ProductUpdate,
     PullCodeRequest,
     PullCodeResponse,
+    RunCommandRequest,
+    RunCommandResponse,
     TargetFileItem,
     TargetFilesRequest,
     TargetFilesResponse,
@@ -26,12 +28,14 @@ from genut_service.schemas.product import (
 from genut_service.services import (
     auto_product_service,
     code_pull_service,
+    command_run_service,
     compile_db_service,
     product_service,
     test_status_service,
 )
 from genut_service.services.auto_product_service import AutoProductError
 from genut_service.services.code_pull_service import CodePathBusyError
+from genut_service.services.command_run_service import CodePathMissingError
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -70,6 +74,23 @@ def pull_code(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except GitError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.post("/run-command", response_model=RunCommandResponse)
+def run_command(
+    body: RunCommandRequest, session: Session = Depends(get_session)
+) -> RunCommandResponse:
+    """폼의 명령(CMAKE_CONFIGURE_CMD 등)을 code_path에서 시험 실행하고 출력을 반환한다.
+
+    명령 자체의 실패(비0 exit)는 200 + exit_code로 전달한다. code_path 미존재는 400,
+    같은 경로를 쓰는 job이 실행 중이면 409.
+    """
+    try:
+        return command_run_service.run_command(session, body)
+    except CodePathMissingError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except CodePathBusyError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)

@@ -40,6 +40,9 @@ def test_pull_code_clones_into_new_path(
     assert body["detail"] == "클론 완료"
     assert (dest / ".git").is_dir()
     assert (dest / "src" / "a.cpp").is_file()
+    # 폼 로그창용: 받은 코드의 최근 커밋 정보가 log에 담긴다
+    assert "최근 커밋" in body["log"]
+    assert "init" in body["log"]
 
 
 def test_pull_code_updates_existing_checkout_and_keeps_out_dir(
