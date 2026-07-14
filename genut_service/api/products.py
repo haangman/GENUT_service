@@ -12,21 +12,26 @@ from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobRead
+from genut_service.runner.git_ops import GitError
 from genut_service.schemas.product import (
     ProductCreate,
     ProductRead,
     ProductUpdate,
+    PullCodeRequest,
+    PullCodeResponse,
     TargetFileItem,
     TargetFilesRequest,
     TargetFilesResponse,
 )
 from genut_service.services import (
     auto_product_service,
+    code_pull_service,
     compile_db_service,
     product_service,
     test_status_service,
 )
 from genut_service.services.auto_product_service import AutoProductError
+from genut_service.services.code_pull_service import CodePathBusyError
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -49,6 +54,22 @@ def preview_target_files(body: TargetFilesRequest) -> TargetFilesResponse:
         for rel in candidates
     ]
     return TargetFilesResponse(files=files)
+
+
+@router.post("/pull-code", response_model=PullCodeResponse)
+def pull_code(
+    body: PullCodeRequest, session: Session = Depends(get_session)
+) -> PullCodeResponse:
+    """폼의 코드 저장 경로로 git 코드를 받아온다(없으면 clone, 있으면 제자리 업데이트).
+
+    같은 경로를 쓰는 프로덕트의 job이 실행 중이면 409, git 실패는 400 + 원인.
+    """
+    try:
+        return code_pull_service.pull_code(session, body)
+    except CodePathBusyError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except GitError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)

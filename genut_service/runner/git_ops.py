@@ -109,6 +109,7 @@ def ensure_checkout(
     timeout: int = 300,
     preserve: Iterable[str] = (),
     on_start: Callable[[object], None] | None = None,
+    strict: bool = False,
 ) -> None:
     """dest에 repo를 제자리 업데이트하거나(없으면) clone한다.
 
@@ -122,7 +123,9 @@ def ensure_checkout(
       폴더)이 GENUT 통합 과정에서 staged 되면 다음 실행의 reset에서 사라질 수 있다.
       이를 막기 위해 `preserve`로 받은 dest 기준 경로들은 reset 전에 보관했다가 후에
       덮어써(overlay) 복원한다 → staged/untracked 무관하게 보존된다.
-      fetch/reset 실패는 관용적으로 무시하고 기존 체크아웃을 사용한다.
+      fetch/reset 실패는 관용적으로 무시하고 기존 체크아웃을 사용한다 —
+      단 `strict=True`면(사용자에게 성공/실패를 정확히 보고해야 하는 다운로드 API 등)
+      fetch/rev-parse/reset 실패를 GitError로 올린다.
     - `.git`이 없으면(있던 비-repo 디렉터리는 정리 후) clone한다(실패 시 GitError).
     """
     dest = Path(dest)
@@ -138,13 +141,22 @@ def ensure_checkout(
                 and local["stdout"].strip() == remote["stdout"].strip()
             ):
                 return  # 이미 최신 — reset·preserve 백업/복원 생략
+            if strict and not remote["success"]:
+                detail = (remote.get("stderr") or remote.get("stdout") or "").strip()
+                raise GitError(f"git rev-parse {target} failed: {detail}")
             saved = _backup_preserved(dest, preserve)
-            _git(
+            reset = _git(
                 ["-C", str(dest), "reset", "--hard", target],
                 timeout=timeout,
                 on_start=on_start,
             )
             _restore_preserved(dest, saved)
+            if strict and not reset["success"]:
+                detail = (reset.get("stderr") or reset.get("stdout") or "").strip()
+                raise GitError(f"git reset --hard {target} failed: {detail}")
+        elif strict:
+            detail = (fetch.get("stderr") or fetch.get("stdout") or "").strip()
+            raise GitError(f"git fetch origin failed: {detail}")
         return
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)

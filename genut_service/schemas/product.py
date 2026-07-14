@@ -121,6 +121,48 @@ class ProductRead(ProductBase):
     patches: list[PatchRead] = []
 
 
+class PullCodeRequest(BaseModel):
+    """코드 저장 경로로 git 코드를 받아오는(다운로드) 요청.
+
+    폼 값 기반(id 불필요)이라 저장 전 신규 등록 중에도 동작한다.
+    """
+
+    git_url: str
+    git_ref: str = "main"
+    code_path: str
+    # 지정 시 제자리 업데이트(reset)에서 생성 테스트 폴더를 보존한다(runner와 동일 보호)
+    out_tests_rel: str | None = None
+
+    @field_validator("git_url")
+    @classmethod
+    def _require_git_url(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Git URL이 비어 있다")
+        return value.strip()
+
+    @field_validator("code_path")
+    @classmethod
+    def _require_code_path(cls, value: str) -> str:
+        normalized = _norm_code_path(value)
+        if normalized is None:
+            raise ValueError("코드 저장 경로가 비어 있다")
+        return normalized
+
+    @field_validator("out_tests_rel")
+    @classmethod
+    def _normalize_out_tests(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return normalize_rel_path(value)
+
+
+class PullCodeResponse(BaseModel):
+    """다운로드 결과. path는 실제 받은(해석된) 경로."""
+
+    path: str
+    detail: str
+
+
 class TargetFilesRequest(BaseModel):
     """폼 단계 대상 파일 미리보기 요청(아직 프로덕트 없음). code_path는 로컬 경로."""
 
