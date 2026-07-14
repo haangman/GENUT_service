@@ -391,3 +391,35 @@ Ulysses — `enums.Project` + 프론트 `lib/projects.ts`의 `PROJECTS`; 추가 
 - 테스트: 백엔드 307 passed(`tests/test_run_command.py` 7종 — 출력/exit/작업 디렉터리/
   400/409/422, pull-code log 검증) · 프론트 90 passed(실행 버튼 로그 누적/실패 exit/
   비활성 조건, 절대 경로 검증, 다운로드 로그창 출력). 커밋 3개(47d84b7, 8b0a4e3, 320c6d6).
+
+---
+
+## 20. 웹 터미널 페이지 (2026-07-14)
+
+서비스 실행 환경의 **인터랙티브 셸**을 웹에서 여는 터미널 페이지(`/terminal`)를
+추가했다. 명령 실행·디버깅·파일 정리 등을 하며, 서비스가 Docker 컨테이너 안에서
+돌면 셸도 그 컨테이너 안에서 열린다(서비스 프로세스와 같은 환경). **Linux/WSL·
+Docker 전용** — Windows에는 PTY 모듈이 없어 미지원 안내를 띄운다.
+
+- **백엔드(신규 파이썬 의존성 없음 — uvicorn[standard]의 ws + stdlib pty)**:
+  `services/terminal_service.py`(`terminal_available()`·`resolve_shell()`·
+  `TerminalSession`: `pty.openpty()`+`Popen(start_new_session=True)`, 정리는
+  `subprocess_util.kill_tree` 재사용), `api/terminal.py`(`GET /api/terminal/info`,
+  `WS /api/terminal/ws`). ws는 출력 pump(PTY→ws, 블로킹 os.read를 executor로 →
+  **raw bytes 전송**으로 UTF-8 경계 문제 회피)와 입력 pump(ws JSON→PTY:
+  `{type:input|resize}`, resize는 `TIOCSWINSZ` ioctl)를 `asyncio.wait(FIRST_COMPLETED)`
+  로 돌리다 한쪽 종료 시 `finally`에서 세션 정리. 연결 1개=셸 1개, 전역 레지스트리 없음.
+  `main.py`에 라우터 등록. SPA catch-all은 GET 전용이라 ws와 무충돌.
+  config: `TERMINAL_ENABLED`(기본 true, 보안 스위치)·`TERMINAL_SHELL`(빈 값=자동).
+- **프론트**: `@xterm/xterm`+`@xterm/addon-fit` 추가. `features/terminal/TerminalPage`
+  (info 조회 → 미지원 안내 or 탭바) + `TerminalTab`(xterm+WebSocket, `onData`→ws input,
+  ws binary→`term.write(Uint8Array)`, `ResizeObserver`→fit+resize, 언마운트 정리).
+  멀티탭: 탭별 독립 셸, 새 터미널/닫기, **비활성 탭은 hidden으로 유지**(세션/스크롤백
+  보존). 라우트·네비 탭·i18n 추가. `vite.config.ts` `/api` 프록시에 **`ws: true`**
+  (dev ws 프록시). 터미널 WS URL은 현재 오리진 기준(운영 동일 오리진).
+- **테스트**: 백엔드 313 passed·2 skipped(`tests/test_terminal.py` — info/가용성/셸 해석은
+  플랫폼 무관, ws 실동작·TerminalSession 입출력은 `skipif(os.name=='nt')`로 POSIX 전용,
+  현재 Windows 개발기에선 skip) · 프론트 96 passed(`TerminalPage` 미지원 안내·탭 추가/
+  닫기, `TerminalTab` ws 생성/입력 전송/언마운트 close — xterm·WebSocket·ResizeObserver
+  모킹). 커밋 2개(7d859ab, 0594bf6). **E2E는 Linux/WSL에서 별도 검증 필요**(vim/top 등
+  인터랙티브 동작, 탭별 독립 셸, 닫기 시 프로세스 종료).
