@@ -7,6 +7,9 @@ export const handlers = [
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
   ),
   http.post('/api/products/target-files', () => HttpResponse.json({ files: [] })),
+  http.post('/api/products/pull-code', () =>
+    HttpResponse.json({ path: 'C:/checkout', detail: '클론 완료' }),
+  ),
   http.get('/api/genuts', () =>
     HttpResponse.json({ items: [], total: 0, page: 1, page_size: 50 }),
   ),

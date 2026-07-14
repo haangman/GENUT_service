@@ -64,6 +64,39 @@ describe('ProductForm', () => {
     expect(onSubmit.mock.calls[0][0].project).toBe('Thetis')
   })
 
+  it('downloads code into code_path and shows the result next to the button', async () => {
+    renderWithProviders(
+      <ProductForm onSubmit={vi.fn()} defaultValues={{ ...VALID, code_path: 'C:/checkout' }} />,
+    )
+    const button = screen.getByRole('button', { name: '다운로드' })
+    expect(button).toBeEnabled() // git_url·code_path가 채워져 있으면 활성
+
+    await userEvent.click(button)
+    // 기본 MSW 핸들러가 성공(클론 완료)을 반환한다
+    expect(await screen.findByText(/다운로드 성공/)).toBeInTheDocument()
+    expect(screen.getByText(/클론 완료/)).toBeInTheDocument()
+  })
+
+  it('shows the server detail when the download fails', async () => {
+    server.use(
+      http.post('/api/products/pull-code', () =>
+        HttpResponse.json({ detail: 'git clone failed: repository not found' }, { status: 400 }),
+      ),
+    )
+    renderWithProviders(
+      <ProductForm onSubmit={vi.fn()} defaultValues={{ ...VALID, code_path: 'C:/checkout' }} />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '다운로드' }))
+    expect(
+      await screen.findByText(/다운로드 실패: git clone failed: repository not found/),
+    ).toBeInTheDocument()
+  })
+
+  it('disables the download button while git_url or code_path is empty', () => {
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} />) // 빈 폼
+    expect(screen.getByRole('button', { name: '다운로드' })).toBeDisabled()
+  })
+
   it('adds and removes patch rows', async () => {
     renderWithProviders(<ProductForm onSubmit={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: '패치 추가' }))

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { EMPTY_PRODUCT_FORM, productFormSchema, type ProductFormValues } from './productSchema'
-import { previewTargetFiles } from '../../api/products'
+import { previewTargetFiles, pullCode } from '../../api/products'
+import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import { PROJECTS } from '../../lib/projects'
 import type { TargetFileItem } from '../../types/api'
@@ -63,6 +64,30 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
   const codePath = watch('code_path')
   const compileDbRel = watch('compile_db_rel')
   const excludePatterns = watch('exclude_patterns')
+  const gitUrl = watch('git_url')
+  const gitRef = watch('git_ref')
+  const outTestsRel = watch('out_tests_rel')
+
+  // 코드 저장 경로 다운로드(git clone/pull). 폼 값 기반이라 저장 전에도 동작한다.
+  const pullMut = useMutation({
+    mutationFn: () =>
+      pullCode({
+        git_url: gitUrl.trim(),
+        git_ref: gitRef.trim() || 'main',
+        code_path: codePath.trim(),
+        out_tests_rel: outTestsRel.trim() || undefined,
+      }),
+  })
+  const canPull = Boolean(gitUrl.trim() && codePath.trim()) && !pullMut.isPending
+  const pullReset = pullMut.reset
+  // 경로/URL을 고치면 이전 성공/실패 표시는 무효 — 상태를 지운다
+  useEffect(() => {
+    pullReset()
+  }, [codePath, gitUrl, pullReset])
+  const pullErrorDetail =
+    pullMut.error instanceof ApiError
+      ? (pullMut.error.body as { detail?: string } | null)?.detail
+      : undefined
 
   // 대상 파일 미리보기: code_path/compile_db_rel/제외패턴 변경을 디바운스해 조회한다.
   const [params, setParams] = useState({ code_path: '', compile_db_rel: '', exclude_globs: [] as string[] })
@@ -133,7 +158,36 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                 ? t('{label} (auto 로 시작)', { label: t(field.label) })
                 : t(field.label)}
             </label>
-            <input id={field.name} className={inputClass} {...register(field.name)} />
+            {field.name === 'code_path' ? (
+              // 코드 저장 경로: 입력 옆 다운로드 버튼(git clone/pull) + 결과 표시
+              <>
+                <div className="flex gap-2">
+                  <input id={field.name} className={inputClass} {...register(field.name)} />
+                  <button
+                    type="button"
+                    className="btn btn-sm shrink-0 self-center"
+                    onClick={() => pullMut.mutate()}
+                    disabled={!canPull}
+                    title={t('이 경로로 git 코드를 받아온다 (없으면 clone, 있으면 업데이트)')}
+                  >
+                    {pullMut.isPending ? t('다운로드 중…') : t('다운로드')}
+                  </button>
+                </div>
+                {pullMut.isSuccess ? (
+                  <p className="mt-1 text-xs text-success-fg">
+                    {t('다운로드 성공')} — {t(pullMut.data.detail)}
+                  </p>
+                ) : null}
+                {pullMut.isError ? (
+                  <p role="alert" className="mt-1 text-xs text-danger-fg">
+                    {t('다운로드 실패')}
+                    {pullErrorDetail ? `: ${pullErrorDetail}` : ''}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <input id={field.name} className={inputClass} {...register(field.name)} />
+            )}
             {errors[field.name] ? (
               <p role="alert" className="mt-1 text-xs text-danger-fg">
                 {t(errors[field.name]?.message ?? '')}
