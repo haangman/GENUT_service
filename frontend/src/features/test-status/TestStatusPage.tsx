@@ -1,10 +1,12 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
+import { ProjectSelect } from '../../components/ProjectSelect'
 import { getTestStatusByName, getTestStatusSummary } from '../../api/testStatus'
 import { formatDateTime } from '../jobs/jobFormat'
 import { useLang } from '../../lib/i18n'
-import type { TestFileInfo } from '../../types/api'
+import { DEFAULT_PROJECT, PROJECTS } from '../../lib/projects'
+import type { Project, TestFileInfo } from '../../types/api'
 
 // 스냅샷 폴링 주기 — 서버는 미리 계산된 스냅샷을 반환하므로 요청이 가볍다
 const REFETCH_MS = 30_000
@@ -94,12 +96,19 @@ function TestFileTable({
 export function TestStatusPage() {
   const { t } = useLang()
   const [searchParams, setSearchParams] = useSearchParams()
+  // 프로젝트도 드릴다운(name/file)과 같은 URL 쿼리에 둔다 — 미지정/알 수 없는 값은 기본 프로젝트
+  const projectParam = searchParams.get('project')
+  const project: Project = PROJECTS.includes(projectParam as Project)
+    ? (projectParam as Project)
+    : DEFAULT_PROJECT
   const selectedName = searchParams.get('name')
   const filePath = searchParams.get('file')
 
-  const goToRoot = () => setSearchParams({})
-  const goToName = (name: string) => setSearchParams({ name })
-  const goToFile = (name: string, path: string) => setSearchParams({ name, file: path })
+  const goToRoot = () => setSearchParams({ project })
+  const goToName = (name: string) => setSearchParams({ project, name })
+  const goToFile = (name: string, path: string) => setSearchParams({ project, name, file: path })
+  // 프로젝트 전환: 다른 프로젝트의 name/file은 무효이므로 드릴다운을 함께 클리어한다
+  const changeProject = (next: Project) => setSearchParams({ project: next })
 
   // placeholderData: 재조회 중에도 이전 표를 계속 보여준다("스캔 중…"은 최초 로딩만).
   const {
@@ -108,8 +117,8 @@ export function TestStatusPage() {
     isFetching: summaryFetching,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ['test-status-summary'],
-    queryFn: getTestStatusSummary,
+    queryKey: ['test-status-summary', project],
+    queryFn: () => getTestStatusSummary(project),
     refetchInterval: REFETCH_MS,
     placeholderData: keepPreviousData,
   })
@@ -122,8 +131,8 @@ export function TestStatusPage() {
     isFetching: detailFetching,
     refetch: refetchDetail,
   } = useQuery({
-    queryKey: ['test-status', selectedName],
-    queryFn: () => getTestStatusByName(selectedName as string),
+    queryKey: ['test-status', project, selectedName],
+    queryFn: () => getTestStatusByName(project, selectedName as string),
     enabled: selectedName != null,
     refetchInterval: REFETCH_MS,
     placeholderData: keepPreviousData,
@@ -154,8 +163,9 @@ export function TestStatusPage() {
         description={t('프로덕트별 테스트 생성 대상 파일과 생성된 테스트(성공/실패) 현황을 본다. 같은 이름의 프로덕트는 합산해서 보여준다.')}
       />
 
-      {/* 스냅샷 신선도 + 수동 새로고침 — 데이터는 백그라운드 스냅샷이라 즉시 뜬다 */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted">
+      {/* 프로젝트 필터 + 스냅샷 신선도 + 수동 새로고침 — 데이터는 백그라운드 스냅샷이라 즉시 뜬다 */}
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-muted">
+        <ProjectSelect value={project} onChange={changeProject} id="test-status-project" />
         <button type="button" className="btn btn-sm" onClick={refresh} disabled={refreshing}>
           {refreshing ? t('갱신 중…') : t('새로고침')}
         </button>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
@@ -101,6 +101,38 @@ describe('TestStatusPage', () => {
     expect(logLinks).toHaveLength(2)
     expect(logLinks[0].getAttribute('href')).toContain('tab=log')
     expect(screen.getByRole('button', { name: '로그' })).toBeDisabled()
+  })
+
+  it('passes the selected project to the APIs and clears the drilldown on change', async () => {
+    const projectsSeen: (string | null)[] = []
+    server.use(
+      http.get('/api/test-status', ({ request }) => {
+        projectsSeen.push(new URL(request.url).searchParams.get('project'))
+        return HttpResponse.json([
+          {
+            project: 'Ulysses',
+            name: 'AA',
+            product_codes: ['AA-1'],
+            test_generation_mode: 'cpp',
+            target_file_count: 0,
+            total_test_count: 0,
+            total_case_count: 0,
+            total_fail_count: 0,
+          },
+        ])
+      }),
+      http.get('/api/test-status/detail', () => HttpResponse.json([])),
+    )
+
+    renderWithProviders(<TestStatusPage />)
+    expect(await screen.findByText('AA')).toBeInTheDocument()
+    expect(projectsSeen[0]).toBe('Ulysses') // 기본 프로젝트로 조회
+
+    // 드릴다운 진입 후 프로젝트 전환 → Thetis로 재조회 + L1(목록)으로 복귀
+    await userEvent.click(screen.getByText('AA'))
+    await userEvent.selectOptions(screen.getByLabelText('프로젝트'), 'Thetis')
+    await waitFor(() => expect(projectsSeen).toContain('Thetis'))
+    expect(screen.getByText('등록 ID')).toBeInTheDocument() // L1 테이블 헤더로 복귀
   })
 
   it('shows the snapshot freshness time and a refresh button', async () => {
