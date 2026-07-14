@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LangToggle, ThemeToggle } from '../components/HeaderToggles'
 import { useLang } from '../lib/i18n'
+import { TerminalPage } from '../features/terminal/TerminalPage'
 
 const navItems = [
   { to: '/products', label: '프로덕트 등록' },
@@ -15,6 +16,9 @@ const navItems = [
 export function AppLayout() {
   const location = useLocation()
   const { t } = useLang()
+  // 터미널은 라우트 전환에도 세션이 유지되도록 여기서 항상 마운트하고, 터미널 경로일
+  // 때만 보인다. 다른 페이지는 Outlet으로 렌더된다(터미널 경로에선 Outlet이 비어 있음).
+  const isTerminal = location.pathname === '/terminal'
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur-md">
@@ -49,9 +53,11 @@ export function AppLayout() {
         </div>
       </header>
       <main className="w-full px-4 py-8 xl:px-6 2xl:px-8">
-        <div key={location.pathname} className="animate-fade-in-up">
+        {/* 터미널 경로에선 Outlet 영역을 숨기고, 항상 마운트된 터미널을 보여준다 */}
+        <div key={location.pathname} className="animate-fade-in-up" hidden={isTerminal}>
           <Outlet />
         </div>
+        <TerminalPage visible={isTerminal} />
       </main>
     </div>
   )

@@ -11,7 +11,9 @@ interface Tab {
 }
 
 // 서비스 실행 환경의 인터랙티브 터미널. 탭마다 독립 셸을 열고, 탭을 추가/닫을 수 있다.
-export function TerminalPage() {
+// 라우트 전환에도 세션이 유지되도록 AppLayout에서 항상 마운트하고, 현재 경로가
+// 터미널일 때만 visible=true로 표시한다(숨김 시 언마운트하지 않아 WebSocket·스크롤백 보존).
+export function TerminalPage({ visible = true }: { visible?: boolean }) {
   const { t } = useLang()
   const { data: info, isLoading } = useQuery({
     queryKey: ['terminal-info'],
@@ -40,14 +42,15 @@ export function TerminalPage() {
     })
   }
 
-  // 사용 가능하고 탭이 하나도 없으면 첫 탭을 자동으로 연다
+  // 터미널 페이지가 보이고 사용 가능한데 탭이 없으면 첫 탭을 자동으로 연다.
+  // (앱 로드 시점이 아니라 페이지를 처음 보게 됐을 때 열리도록 visible에 의존한다)
   useEffect(() => {
-    if (info?.available && tabs.length === 0) addTab()
+    if (visible && info?.available && tabs.length === 0) addTab()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info?.available])
+  }, [visible, info?.available])
 
   return (
-    <div>
+    <div style={{ display: visible ? 'block' : 'none' }}>
       <PageHeader
         title={t('터미널')}
         description={t('GENUT SERVICE가 실행 중인 환경의 셸에서 명령을 실행·디버깅한다.')}
@@ -97,7 +100,8 @@ export function TerminalPage() {
             <p className="text-sm text-subtle">{t('열린 터미널이 없습니다. 새 터미널을 여세요.')}</p>
           ) : (
             tabs.map((tab) => (
-              <TerminalTab key={tab.id} hidden={tab.id !== activeId} />
+              // 페이지가 숨겨져 있으면 모든 탭을 hidden 처리(보일 때 활성 탭에서 fit 재실행)
+              <TerminalTab key={tab.id} hidden={!visible || tab.id !== activeId} />
             ))
           )}
         </div>

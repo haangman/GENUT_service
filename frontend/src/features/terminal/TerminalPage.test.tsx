@@ -39,6 +39,15 @@ describe('TerminalPage', () => {
     expect(visible).toHaveLength(1)
   })
 
+  it('does not auto-open a terminal while the page is hidden', async () => {
+    // visible=false(다른 페이지를 보는 중)면 사용 가능해도 자동으로 열지 않는다
+    renderWithProviders(<TerminalPage visible={false} />)
+    expect(
+      await screen.findByText('열린 터미널이 없습니다. 새 터미널을 여세요.'),
+    ).toBeInTheDocument()
+    expect(screen.queryAllByTestId('terminal-tab')).toHaveLength(0)
+  })
+
   it('closes a tab', async () => {
     renderWithProviders(<TerminalPage />)
     await waitFor(() => expect(screen.getAllByTestId('terminal-tab')).toHaveLength(1))
