@@ -1,7 +1,10 @@
 import { create } from 'zustand'
-import type { CompileCheckResult, TestGenerationMode } from '../../types/api'
+import { DEFAULT_PROJECT } from '../../lib/projects'
+import type { CompileCheckResult, Project, TestGenerationMode } from '../../types/api'
 
 interface RequestBuilderState {
+  // 프로젝트 필터. 변경 시 선택된 프로덕트/파일이 함께 리셋된다.
+  project: Project
   productId: number | null
   mode: TestGenerationMode
   selected: string[]
@@ -12,6 +15,7 @@ interface RequestBuilderState {
   // 마지막으로 접수된 job id. 제출 후 초기 화면에서 접수 안내를 표시하기 위해 보존한다.
   lastSubmittedJobId: number | null
 
+  setProject: (project: Project) => void
   setProduct: (id: number, mode: TestGenerationMode) => void
   toggleFile: (path: string) => void
   addPaths: (paths: string[]) => void
@@ -23,6 +27,7 @@ interface RequestBuilderState {
 }
 
 const INITIAL = {
+  project: DEFAULT_PROJECT,
   productId: null,
   mode: 'cpp' as TestGenerationMode,
   selected: [] as string[],
@@ -34,6 +39,18 @@ const INITIAL = {
 
 export const useRequestBuilder = create<RequestBuilderState>((set) => ({
   ...INITIAL,
+
+  // 프로젝트 변경: 이전 프로젝트에서 고른 프로덕트/파일은 무효이므로 함께 리셋한다.
+  setProject: (project) =>
+    set({
+      project,
+      productId: null,
+      mode: 'cpp',
+      selected: [],
+      compileResult: null,
+      compileStale: false,
+      lastSubmittedJobId: null,
+    }),
 
   setProduct: (id, mode) =>
     set({
@@ -75,7 +92,9 @@ export const useRequestBuilder = create<RequestBuilderState>((set) => ({
   setCompileResult: (result) => set({ compileResult: result, compileStale: false }),
 
   // 제출 성공: 빌더를 초기 상태로 되돌리되, 접수된 job id는 안내용으로 보존한다.
-  completeSubmission: (jobId) => set({ ...INITIAL, lastSubmittedJobId: jobId }),
+  // 프로젝트는 필터 선호이므로 유지한다(같은 프로젝트에 이어서 요청하는 흐름).
+  completeSubmission: (jobId) =>
+    set((state) => ({ ...INITIAL, project: state.project, lastSubmittedJobId: jobId })),
 
-  reset: () => set({ ...INITIAL }),
+  reset: () => set((state) => ({ ...INITIAL, project: state.project })),
 }))
