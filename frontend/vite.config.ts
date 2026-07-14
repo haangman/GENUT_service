@@ -22,7 +22,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      // ws: true — 터미널(WebSocket) 요청도 백엔드로 프록시한다
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true, ws: true },
     },
   },
   test: {

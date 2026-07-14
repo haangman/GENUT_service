@@ -7,6 +7,7 @@ import { ManualJobsPage } from './features/jobs/ManualJobsPage'
 import { AutoJobsPage } from './features/auto-jobs/AutoJobsPage'
 import { TestStatusPage } from './features/test-status/TestStatusPage'
 import { TestFileViewPage } from './features/test-status/TestFileViewPage'
+import { TerminalPage } from './features/terminal/TerminalPage'
 
 export const routes = [
   {
@@ -23,6 +24,7 @@ export const routes = [
       { path: 'auto-jobs', element: <AutoJobsPage /> },
       { path: 'test-status', element: <TestStatusPage /> },
       { path: 'test-status/view', element: <TestFileViewPage /> },
+      { path: 'terminal', element: <TerminalPage /> },
     ],
   },
 ]

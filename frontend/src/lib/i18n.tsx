@@ -26,6 +26,14 @@ const EN: Record<string, string> = {
   '수동 실행 이력': 'Manual Run History',
   '자동 실행 이력': 'Auto Run History',
   '테스트 파일 현황': 'Test File Status',
+  터미널: 'Terminal',
+  'GENUT SERVICE가 실행 중인 환경의 셸에서 명령을 실행·디버깅한다.':
+    'Run and debug commands in the shell of the environment where GENUT SERVICE is running.',
+  '터미널을 사용할 수 없습니다.': 'Terminal is not available.',
+  '+ 새 터미널': '+ New terminal',
+  '탭 닫기 {title}': 'Close tab {title}',
+  '열린 터미널이 없습니다. 새 터미널을 여세요.': 'No open terminals. Open a new one.',
+  '\r\n[연결이 종료되었습니다]\r\n': '\r\n[Connection closed]\r\n',
   '테스트 생성 대상 프로덕트를 등록/관리한다.':
     'Register and manage products targeted for test generation.',
   'GENUT 인스턴스(=워커)를 등록/관리하고, 워커 상태·요청 큐를 본다.':

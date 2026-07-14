@@ -29,4 +29,5 @@ export const handlers = [
   http.get('/api/test-status', () => HttpResponse.json([])),
   http.get('/api/test-status/detail', () => HttpResponse.json([])),
   http.get('/api/test-status/file', () => HttpResponse.json({ path: '', content: '' })),
+  http.get('/api/terminal/info', () => HttpResponse.json({ available: true, reason: '' })),
 ]

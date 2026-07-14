@@ -9,6 +9,7 @@ const navItems = [
   { to: '/manual-jobs', label: '수동 실행 이력' },
   { to: '/auto-jobs', label: '자동 실행 이력' },
   { to: '/test-status', label: '테스트 파일 현황' },
+  { to: '/terminal', label: '터미널' },
 ]
 
 export function AppLayout() {
