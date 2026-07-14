@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
-from genut_service.enums import TERMINAL_STATUSES, JobStatus
+from genut_service.enums import TERMINAL_STATUSES, JobStatus, Project
 from genut_service.runner import process_registry
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import AutoHistoryGroup, JobCreate, JobEventRead, JobRead
@@ -32,10 +32,18 @@ def list_jobs(
     product_id: int | None = Query(None),
     origin: str | None = Query(None),
     kind: str | None = Query(None),
+    project: Project | None = Query(None),
     session: Session = Depends(get_session),
 ) -> Page[JobRead]:
     items, total = job_service.list_jobs(
-        session, params.page, params.page_size, status_filter, product_id, origin, kind
+        session,
+        params.page,
+        params.page_size,
+        status_filter,
+        product_id,
+        origin,
+        kind,
+        project=project.value if project else None,
     )
     return Page[JobRead](
         items=[JobRead.model_validate(item) for item in items],
@@ -49,10 +57,13 @@ def list_jobs(
 @router.get("/auto-history", response_model=list[AutoHistoryGroup])
 def auto_history(
     per_product: int = Query(3, ge=1, le=100),
+    project: Project | None = Query(None),
     session: Session = Depends(get_session),
 ) -> list[AutoHistoryGroup]:
     """auto 프로덕트별 자동 실행 job 이력(프로덕트당 최근 per_product개 + 전체 수)."""
-    groups = job_service.list_auto_history(session, per_product)
+    groups = job_service.list_auto_history(
+        session, per_product, project=project.value if project else None
+    )
     return [
         AutoHistoryGroup(
             product_id=product.id,

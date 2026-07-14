@@ -26,8 +26,9 @@ def _build_checkout(base: Path) -> Path:
     return root
 
 
-def _create_product(client: TestClient, name: str = "demo") -> int:
+def _create_product(client: TestClient, name: str = "demo", project: str = "Ulysses") -> int:
     payload = {
+        "project": project,
         "name": name,
         "product_code": "P-1",
         "git_url": "https://example.com/repo.git",
@@ -150,10 +151,13 @@ def test_list_jobs_filters_by_origin_and_kind(
     assert scans["items"][0]["kind"] == "auto_scan"
 
 
-def _make_auto_product(db_session: Session, name: str, auto_run: bool = True):
+def _make_auto_product(
+    db_session: Session, name: str, auto_run: bool = True, project: str = "Ulysses"
+):
     from genut_service.db.models import Product
 
     product = Product(
+        project=project,
         name=name,
         product_code=name,
         git_url="u",
@@ -226,6 +230,52 @@ def test_auto_history_empty_without_auto_products(client: TestClient) -> None:
     resp = client.get("/api/jobs/auto-history")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_list_jobs_filters_by_project(
+    client: TestClient, checkout: Path, db_session: Session
+) -> None:
+    from genut_service.db.models import Job
+
+    ulysses_id = _create_product(client, "u-prod", project="Ulysses")
+    thetis_id = _create_product(client, "t-prod", project="Thetis")
+    db_session.add_all(
+        [
+            Job(product_id=ulysses_id, file_list=["src/a.cpp"]),
+            Job(product_id=thetis_id, file_list=["src/a.cpp"]),
+            Job(product_id=thetis_id, file_list=["src/a.cpp"]),
+        ]
+    )
+    db_session.commit()
+
+    ulysses = client.get("/api/jobs", params={"project": "Ulysses"}).json()
+    assert ulysses["total"] == 1
+    assert ulysses["items"][0]["product_name"] == "u-prod"
+
+    thetis = client.get("/api/jobs", params={"project": "Thetis"}).json()
+    assert thetis["total"] == 2
+
+    # 미지정이면 전체(하위 호환), 잘못된 값은 422
+    assert client.get("/api/jobs").json()["total"] == 3
+    assert client.get("/api/jobs", params={"project": "Atlantis"}).status_code == 422
+
+
+def test_auto_history_filters_by_project(client: TestClient, db_session: Session) -> None:
+    from genut_service.db.models import Job
+    from genut_service.enums import JobOrigin
+
+    ulysses = _make_auto_product(db_session, "auto-u", project="Ulysses")
+    thetis = _make_auto_product(db_session, "auto-t", project="Thetis")
+    db_session.add(Job(product_id=ulysses.id, origin=JobOrigin.AUTO.value))
+    db_session.add(Job(product_id=thetis.id, origin=JobOrigin.AUTO.value))
+    db_session.commit()
+
+    groups = client.get("/api/jobs/auto-history", params={"project": "Thetis"}).json()
+    assert [g["product_name"] for g in groups] == ["auto-t"]
+
+    # 미지정이면 전체(하위 호환)
+    all_groups = client.get("/api/jobs/auto-history").json()
+    assert [g["product_name"] for g in all_groups] == ["auto-u", "auto-t"]
 
 
 def test_cancel_missing_job_404(client: TestClient) -> None:

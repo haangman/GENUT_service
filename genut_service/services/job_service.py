@@ -81,8 +81,14 @@ def list_jobs(
     product_id: int | None = None,
     origin: str | None = None,
     kind: str | None = None,
+    project: str | None = None,
 ) -> tuple[list[Job], int]:
     stmt = select(Job)
+    if project:
+        # 프로젝트 필터만 Product 조인이 필요하다(job은 product를 통해 프로젝트에 속한다)
+        stmt = stmt.join(Product, Product.id == Job.product_id).where(
+            Product.project == project
+        )
     if status:
         stmt = stmt.where(Job.status == status)
     if product_id is not None:
@@ -101,7 +107,7 @@ def list_jobs(
 
 
 def list_auto_history(
-    session: Session, per_product: int = 3
+    session: Session, per_product: int = 3, project: str | None = None
 ) -> list[tuple[Product, int, list[Job]]]:
     """auto 프로덕트별 origin='auto' job 이력을 (프로덕트, 전체 수, 최근 N개)로 반환한다.
 
@@ -111,20 +117,17 @@ def list_auto_history(
     이력이 있으면 포함**한다 — 그렇지 않으면 남은 job(실행 중 포함)의 로그 열람·
     강제 종료 경로가 UI에서 사라진다. 정렬: 프로덕트 id 오름차순, job id 내림차순.
     """
-    products = list(
-        session.scalars(
-            select(Product)
-            .where(
-                or_(
-                    Product.auto_run.is_(True),
-                    Product.id.in_(
-                        select(Job.product_id).where(Job.origin == JobOrigin.AUTO.value)
-                    ),
-                )
-            )
-            .order_by(Product.id)
+    products_stmt = select(Product).where(
+        or_(
+            Product.auto_run.is_(True),
+            Product.id.in_(
+                select(Job.product_id).where(Job.origin == JobOrigin.AUTO.value)
+            ),
         )
     )
+    if project:
+        products_stmt = products_stmt.where(Product.project == project)
+    products = list(session.scalars(products_stmt.order_by(Product.id)))
     if not products:
         return []
 
