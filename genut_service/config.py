@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     # 앱 기동 시 백그라운드 스케줄러 루프를 자동 시작할지 (테스트에서는 끈다)
     scheduler_autostart: bool = True
 
+    # 웹 터미널 페이지 설정
+    # terminal_enabled=False면 터미널 API를 비활성화한다(웹으로 임의 셸을 노출하므로
+    # 신뢰 네트워크에서만 켠다). POSIX(Linux/WSL/Docker)에서만 동작한다.
+    terminal_enabled: bool = True
+    # 터미널 셸. 빈 값이면 $SHELL → /bin/bash → /bin/sh 순으로 자동 선택한다.
+    terminal_shell: str = ""
+
     # Docker 실행 설정
     use_docker: bool = False  # True면 GENUT CLI를 컨테이너에서 실행
     docker_image: str = "genut-runner:latest"
