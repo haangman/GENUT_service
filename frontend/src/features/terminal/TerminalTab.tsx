@@ -10,7 +10,9 @@ import { useLang } from '../../lib/i18n'
 export function TerminalTab({ hidden }: { hidden: boolean }) {
   const { t } = useLang()
   const containerRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -24,19 +26,25 @@ export function TerminalTab({ hidden }: { hidden: boolean }) {
       theme: { background: '#0b0f17' },
     })
     const fit = new FitAddon()
+    termRef.current = term
     fitRef.current = fit
+    wsRef.current = null
     term.loadAddon(fit)
     term.open(container)
-    try {
-      fit.fit()
-    } catch {
-      // 컨테이너가 아직 레이아웃 전이면 무시(ResizeObserver가 곧 다시 맞춘다)
-    }
 
     const ws = new WebSocket(terminalWsUrl())
     ws.binaryType = 'arraybuffer'
+    wsRef.current = ws
 
-    const sendResize = () => {
+    // 컨테이너에 맞춰 크기를 재계산하고, 열려 있으면 서버 PTY에도 알린다.
+    // vim 등 전체화면 앱은 정확한 크기를 모르면 화면·커서가 어긋나 입력이 안 먹는
+    // 것처럼 보이므로, 크기 동기화가 핵심이다.
+    const syncSize = () => {
+      try {
+        fit.fit()
+      } catch {
+        return // 컨테이너가 아직 레이아웃 전(크기 0)이면 다음 기회에 맞춘다
+      }
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
       }
@@ -44,7 +52,8 @@ export function TerminalTab({ hidden }: { hidden: boolean }) {
 
     ws.onopen = () => {
       term.focus()
-      sendResize()
+      // 레이아웃이 확정된 다음 프레임에 크기를 맞춰 정확한 값이 서버로 가도록 한다
+      requestAnimationFrame(syncSize)
     }
     ws.onmessage = (event) => {
       // 서버는 PTY 원시 바이트를 보낸다 — xterm이 UTF-8 디코딩을 처리
@@ -63,14 +72,7 @@ export function TerminalTab({ hidden }: { hidden: boolean }) {
     })
 
     // 컨테이너 크기 변화 → 맞춤 + 서버에 열/행 전달
-    const observer = new ResizeObserver(() => {
-      try {
-        fit.fit()
-        sendResize()
-      } catch {
-        // 숨김 상태 등으로 크기가 0이면 무시
-      }
-    })
+    const observer = new ResizeObserver(() => syncSize())
     observer.observe(container)
 
     return () => {
@@ -78,24 +80,39 @@ export function TerminalTab({ hidden }: { hidden: boolean }) {
       dataSub.dispose()
       ws.close()
       term.dispose()
+      termRef.current = null
       fitRef.current = null
+      wsRef.current = null
     }
   }, [t])
 
-  // 탭이 다시 보이면 크기를 다시 맞춘다(숨김 동안 리사이즈를 놓쳤을 수 있음)
+  // 탭이 다시 보이면: 레이아웃 확정 후 크기를 다시 맞추고(vim이 SIGWINCH로 다시 그림)
+  // 포커스를 되돌린다(숨김 동안 크기 변화를 놓쳤거나 포커스를 잃었을 수 있다).
   useEffect(() => {
-    if (!hidden && fitRef.current) {
+    if (hidden) return
+    const id = requestAnimationFrame(() => {
+      const term = termRef.current
+      const fit = fitRef.current
+      const ws = wsRef.current
+      if (!term || !fit) return
       try {
-        fitRef.current.fit()
+        fit.fit()
       } catch {
-        // no-op
+        return
       }
-    }
+      term.focus()
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+      }
+    })
+    return () => cancelAnimationFrame(id)
   }, [hidden])
 
   return (
     <div
       ref={containerRef}
+      // 클릭 시 입력 포커스를 확실히 잡는다(전체화면 앱 진입 후 포커스 유실 방지)
+      onMouseDown={() => termRef.current?.focus()}
       className="h-[70vh] w-full overflow-hidden rounded-lg border border-border bg-[#0b0f17] p-2"
       style={{ display: hidden ? 'none' : 'block' }}
     />

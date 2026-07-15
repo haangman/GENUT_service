@@ -68,7 +68,7 @@ describe('TerminalTab', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('opens a WebSocket to the terminal endpoint and sends resize on open', () => {
+  it('opens a WebSocket to the terminal endpoint and sends resize on open', async () => {
     renderTab()
     expect(MockWebSocket.instances).toHaveLength(1)
     const ws = MockWebSocket.instances[0]
@@ -76,7 +76,8 @@ describe('TerminalTab', () => {
     expect(ws.binaryType).toBe('arraybuffer')
 
     ws.onopen?.()
-    // 열리면 초기 창 크기(resize)를 보낸다
+    // 크기 동기화는 레이아웃 확정 후(다음 애니메이션 프레임) 이뤄진다
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
     const resize = ws.sent.map((s) => JSON.parse(s)).find((m) => m.type === 'resize')
     expect(resize).toMatchObject({ type: 'resize', cols: 80, rows: 24 })
   })
