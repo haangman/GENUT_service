@@ -50,12 +50,16 @@ def run(
     cwd: str | None = None,
     timeout: int = 600,
     env: dict | None = None,
+    encoding: str = "utf-8",
 ) -> dict:
     """argv를 실행하고 {success, returncode, stdout, stderr}를 반환한다.
 
     타임아웃 시 kill_tree로 **프로세스 트리 전체**를 종료한다 — 부모만 죽이면
     빌드/컴파일러 같은 손자 프로세스가 살아남아 CPU를 소비하고, 락이 해제된 뒤
     같은 체크아웃에 접근하는 다음 job과 경합하기 때문이다.
+
+    encoding: 자식 출력 디코딩. Windows `cmd /c`의 네이티브 출력처럼 콘솔 OEM
+    코드페이지(한글 cp949 등)인 경우 호출자가 "oem"을 지정한다(기본 utf-8).
     """
     try:
         proc = subprocess.Popen(
@@ -65,7 +69,7 @@ def run(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            encoding="utf-8",
+            encoding=encoding,
             errors="replace",
             # 새 세션/프로세스 그룹으로 띄워 kill_tree가 자식까지 통째로 종료할 수 있게 한다
             start_new_session=True,

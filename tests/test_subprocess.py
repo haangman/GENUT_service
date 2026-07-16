@@ -138,3 +138,18 @@ def test_kill_tree_fallback_without_pid() -> None:
 
     subprocess_util.kill_tree(_Fake())
     assert calls  # terminate/kill 중 하나 이상 호출됨
+
+
+def test_run_decodes_output_with_given_encoding() -> None:
+    """run(encoding=...)이 자식 출력의 비-UTF-8 인코딩을 올바르게 디코딩한다.
+
+    Windows 폼 명령 실행(cmd /c)의 네이티브 출력은 콘솔 OEM 코드페이지(한글 cp949)라
+    utf-8 고정 디코딩이면 한글 경로/메시지가 U+FFFD로 깨진다 — 회귀 가드.
+    """
+    code = "import sys; sys.stdout.buffer.write('한글 경로'.encode('cp949'))"
+    result = subprocess_util.run([sys.executable, "-c", code], encoding="cp949")
+    assert result["success"]
+    assert result["stdout"] == "한글 경로"
+
+    garbled = subprocess_util.run([sys.executable, "-c", code])  # 기본 utf-8
+    assert "�" in garbled["stdout"]

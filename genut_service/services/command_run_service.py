@@ -40,14 +40,21 @@ def run_command(session: Session, req: RunCommandRequest) -> RunCommandResponse:
 
     # 등록 명령은 셸 문자열이므로 플랫폼 셸로 감싼다. subprocess_util.run이
     # 새 세션으로 띄우고 타임아웃 시 트리 전체를 종료한다(빌드 손자 프로세스 포함).
+    # Windows cmd의 네이티브 출력은 콘솔 OEM 코드페이지(한글 cp949 등)라 utf-8로
+    # 디코딩하면 한글 경로/메시지가 깨진다 — oem 코덱으로 디코딩한다.
     if os.name == "nt":
         argv = ["cmd", "/c", req.command]
+        output_encoding = "oem"
     else:
         argv = ["/bin/sh", "-c", req.command]
+        output_encoding = "utf-8"
 
     started = time.monotonic()
     result = subprocess_util.run(
-        argv, cwd=str(dest), timeout=get_settings().form_cmd_timeout
+        argv,
+        cwd=str(dest),
+        timeout=get_settings().form_cmd_timeout,
+        encoding=output_encoding,
     )
     duration = time.monotonic() - started
 
