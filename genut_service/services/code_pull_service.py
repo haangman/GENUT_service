@@ -66,25 +66,37 @@ def raise_if_code_path_busy(session: Session, dest: Path) -> None:
 def pull_code(session: Session, req: PullCodeRequest) -> PullCodeResponse:
     """code_path로 git 코드를 받아온다 — 없으면 clone, 있으면 fetch+reset 제자리 업데이트.
 
-    git 실패는 GitError를 그대로 전파한다(호출부가 HTTP로 매핑). strict 모드로 실행해
-    제자리 업데이트의 fetch/reset 실패도 성공으로 오인하지 않는다.
+    체크아웃 후 req.patches를 order_index 순서대로 적용한다(runner와 동일한 멱등 적용 —
+    빈 내용은 건너뜀). git 실패는 GitError, 패치 실패는 PatchError를 그대로 전파한다
+    (호출부가 HTTP로 매핑). strict 모드로 실행해 제자리 업데이트의 fetch/reset 실패도
+    성공으로 오인하지 않는다.
     """
     dest = workspace.resolve_code_path(req.code_path)
     raise_if_code_path_busy(session, dest)
 
+    settings = get_settings()
     existed = (dest / ".git").is_dir()
     preserve = [req.out_tests_rel] if req.out_tests_rel else []
     git_ops.ensure_checkout(
         req.git_url,
         req.git_ref,
         dest,
-        timeout=get_settings().git_timeout,
+        timeout=settings.git_timeout,
         preserve=preserve,
         strict=True,
     )
+    # 폼 로그창용: runner가 job 로그에 남기는 것과 같은 최근 커밋 정보 + 패치 적용 내역
+    log_lines = [f"최근 커밋:\n{git_ops.recent_log(dest)}"]
+    for patch in sorted(req.patches, key=lambda p: p.order_index):
+        if not patch.content.strip():
+            continue
+        try:
+            git_ops.apply_patch(str(dest), patch.content, timeout=settings.git_timeout)
+        except git_ops.PatchError as exc:
+            raise git_ops.PatchError(f"patch '{patch.name}' 적용 실패: {exc}") from exc
+        log_lines.append(f"patch 적용: {patch.name}")
     return PullCodeResponse(
         path=str(dest),
         detail="업데이트 완료" if existed else "클론 완료",
-        # 폼 로그창용: runner가 job 로그에 남기는 것과 같은 최근 커밋 정보
-        log=f"최근 커밋:\n{git_ops.recent_log(dest)}",
+        log="\n".join(log_lines),
     )

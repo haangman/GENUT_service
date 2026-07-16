@@ -46,12 +46,13 @@ export interface PullCodeResult {
 }
 
 // 코드 저장 경로로 git 코드를 받아온다(없으면 clone, 있으면 제자리 업데이트).
-// 폼 값 기반이라 저장 전 신규 등록 중에도 동작한다.
+// 폼 값 기반이라 저장 전 신규 등록 중에도 동작한다. patches는 체크아웃 후 순서대로 적용된다.
 export function pullCode(body: {
   git_url: string
   git_ref: string
   code_path: string
   out_tests_rel?: string
+  patches?: { name: string; content: string; order_index: number }[]
 }): Promise<PullCodeResult> {
   return apiFetch<PullCodeResult>('/products/pull-code', { method: 'POST', body })
 }

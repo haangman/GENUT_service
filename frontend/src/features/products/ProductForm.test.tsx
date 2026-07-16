@@ -131,6 +131,36 @@ describe('ProductForm', () => {
     }
   })
 
+  it('sends the form patches with the download request', async () => {
+    let captured: { patches?: unknown } | null = null
+    server.use(
+      http.post('/api/products/pull-code', async ({ request }) => {
+        captured = (await request.json()) as { patches?: unknown }
+        return HttpResponse.json({ path: 'C:/checkout', detail: '클론 완료', log: '최근 커밋:\nabc' })
+      }),
+    )
+    renderWithProviders(
+      <ProductForm
+        onSubmit={vi.fn()}
+        defaultValues={{
+          ...VALID,
+          // 빈 행(내용 없음)은 전송에서 걸러지고, 나머지는 순서대로 order_index가 붙는다
+          patches: [
+            { name: 'p0', content: 'diff0' },
+            { name: 'blank', content: '   ' },
+            { name: 'p1', content: 'diff1' },
+          ],
+        }}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '다운로드' }))
+    expect(await screen.findByText(/다운로드 성공/)).toBeInTheDocument()
+    expect(captured!.patches).toEqual([
+      { name: 'p0', content: 'diff0', order_index: 0 },
+      { name: 'p1', content: 'diff1', order_index: 1 },
+    ])
+  })
+
   it('shows the server detail when the download fails', async () => {
     server.use(
       http.post('/api/products/pull-code', () =>

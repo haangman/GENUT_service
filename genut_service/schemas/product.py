@@ -132,6 +132,8 @@ class PullCodeRequest(BaseModel):
     code_path: str
     # 지정 시 제자리 업데이트(reset)에서 생성 테스트 폴더를 보존한다(runner와 동일 보호)
     out_tests_rel: str | None = None
+    # 지정 시 체크아웃 직후 order_index 순서대로 적용한다(runner와 동일한 멱등 적용)
+    patches: list[PatchIn] = []
 
     @field_validator("git_url")
     @classmethod

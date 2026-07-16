@@ -12,7 +12,7 @@ from genut_service import workspace
 from genut_service.api.deps import PageParams, get_session
 from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobRead
-from genut_service.runner.git_ops import GitError
+from genut_service.runner.git_ops import GitError, PatchError
 from genut_service.schemas.product import (
     ProductCreate,
     ProductRead,
@@ -66,13 +66,14 @@ def pull_code(
 ) -> PullCodeResponse:
     """폼의 코드 저장 경로로 git 코드를 받아온다(없으면 clone, 있으면 제자리 업데이트).
 
-    같은 경로를 쓰는 프로덕트의 job이 실행 중이면 409, git 실패는 400 + 원인.
+    체크아웃 후 body.patches를 순서대로 적용한다. 같은 경로를 쓰는 프로덕트의 job이
+    실행 중이면 409, git/패치 실패는 400 + 원인.
     """
     try:
         return code_pull_service.pull_code(session, body)
     except CodePathBusyError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except GitError as exc:
+    except (GitError, PatchError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 

@@ -60,6 +60,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
     handleSubmit,
     control,
     watch,
+    getValues,
     formState: { errors },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -118,6 +119,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
   const codePathReady = ABSOLUTE_PATH_RE.test(codePath.trim())
 
   // 코드 저장 경로 다운로드(git clone/pull). 폼 값 기반이라 저장 전에도 동작한다.
+  // 폼의 패치(빈 행 제외)도 함께 보내 runner와 같은 상태(원본+패치)를 받게 한다.
   const pullMut = useMutation({
     mutationFn: () =>
       pullCode({
@@ -125,6 +127,13 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
         git_ref: gitRef.trim() || 'main',
         code_path: codePath.trim(),
         out_tests_rel: outTestsRel.trim() || undefined,
+        patches: getValues('patches')
+          .filter((patch) => patch.content.trim())
+          .map((patch, index) => ({
+            name: patch.name,
+            content: patch.content,
+            order_index: index,
+          })),
       }),
     // 다운로드 결과도 공용 로그창에 남긴다
     onSuccess: (res) => appendConsole(`${t(res.detail)} — ${res.path}\n${res.log}`),
