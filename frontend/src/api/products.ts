@@ -57,6 +57,23 @@ export function pullCode(body: {
   return apiFetch<PullCodeResult>('/products/pull-code', { method: 'POST', body })
 }
 
+export interface GerritPatchResult {
+  name: string
+  content: string
+  ref: string
+  subject: string
+}
+
+// Gerrit change 주소/번호로 diff를 가져온다(Git URL로 change ref fetch — clone과 같은 인증).
+// code_path 체크아웃이 필요하다(먼저 다운로드).
+export function fetchGerritPatch(body: {
+  git_url: string
+  code_path: string
+  change: string
+}): Promise<GerritPatchResult> {
+  return apiFetch<GerritPatchResult>('/products/fetch-gerrit-patch', { method: 'POST', body })
+}
+
 export interface RunCommandResult {
   exit_code: number
   output: string

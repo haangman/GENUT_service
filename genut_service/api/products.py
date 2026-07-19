@@ -14,6 +14,8 @@ from genut_service.schemas.common import Page
 from genut_service.schemas.job import JobRead
 from genut_service.runner.git_ops import GitError, PatchError
 from genut_service.schemas.product import (
+    FetchGerritPatchRequest,
+    FetchGerritPatchResponse,
     ProductCreate,
     ProductRead,
     ProductUpdate,
@@ -30,12 +32,14 @@ from genut_service.services import (
     code_pull_service,
     command_run_service,
     compile_db_service,
+    gerrit_patch_service,
     product_service,
     test_status_service,
 )
 from genut_service.services.auto_product_service import AutoProductError
 from genut_service.services.code_pull_service import CodePathBusyError
 from genut_service.services.command_run_service import CodePathMissingError
+from genut_service.services.gerrit_patch_service import GerritChangeInputError
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -74,6 +78,25 @@ def pull_code(
     except CodePathBusyError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except (GitError, PatchError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.post("/fetch-gerrit-patch", response_model=FetchGerritPatchResponse)
+def fetch_gerrit_patch(
+    body: FetchGerritPatchRequest, session: Session = Depends(get_session)
+) -> FetchGerritPatchResponse:
+    """Gerrit change 주소/번호로 diff를 가져와 폼 패치용 name/content를 반환한다.
+
+    code_path 체크아웃에서 git_url로 change ref를 fetch한다(인증은 clone과 동일).
+    주소 해석 실패·체크아웃 없음·git 실패는 400, 같은 경로의 job 실행 중이면 409.
+    """
+    try:
+        return gerrit_patch_service.fetch_gerrit_patch(session, body)
+    except (GerritChangeInputError, CodePathMissingError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except CodePathBusyError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except GitError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 

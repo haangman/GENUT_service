@@ -166,6 +166,48 @@ class PullCodeResponse(BaseModel):
     log: str = ""
 
 
+class FetchGerritPatchRequest(BaseModel):
+    """Gerrit change 주소/번호로 diff를 가져오는 요청 — 폼 값 기반(저장 전에도 동작).
+
+    diff는 git_url로 change ref를 fetch해 얻는다(code_path 체크아웃 필요).
+    """
+
+    git_url: str
+    code_path: str
+    change: str
+
+    @field_validator("git_url")
+    @classmethod
+    def _require_git_url(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Git URL이 비어 있다")
+        return value.strip()
+
+    @field_validator("code_path")
+    @classmethod
+    def _require_code_path(cls, value: str) -> str:
+        normalized = _norm_code_path(value)
+        if normalized is None:
+            raise ValueError("코드 저장 경로가 비어 있다")
+        return normalized
+
+    @field_validator("change")
+    @classmethod
+    def _require_change(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Gerrit change 주소가 비어 있다")
+        return value.strip()
+
+
+class FetchGerritPatchResponse(BaseModel):
+    """가져온 패치. name/content는 폼 패치 행에 그대로 들어간다."""
+
+    name: str
+    content: str
+    ref: str
+    subject: str = ""
+
+
 class RunCommandRequest(BaseModel):
     """폼 단계 명령 시험 실행 요청 — code_path를 작업 디렉터리로 command를 실행한다."""
 

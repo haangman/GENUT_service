@@ -225,6 +225,16 @@ const EN: Record<string, string> = {
   '패치 {n} 이름': 'Patch {n} name',
   '패치 {n} 내용': 'Patch {n} content',
   '패치 추가': 'Add patch',
+  'Gerrit change 주소': 'Gerrit change URL',
+  'Gerrit change 주소 또는 번호 (예: https://…/+/1234, 1234/5)':
+    'Gerrit change URL or number (e.g. https://…/+/1234, 1234/5)',
+  가져오기: 'Fetch',
+  '가져오는 중…': 'Fetching…',
+  'Gerrit 가져오기': 'Fetch from Gerrit',
+  '패치 행 추가': 'Patch row added',
+  'Gerrit 패치를 가져오지 못했습니다.': 'Failed to fetch the Gerrit patch.',
+  'Git URL로 change ref를 받아 패치로 추가한다 (코드 다운로드 후 사용 가능)':
+    'Fetches the change ref via the Git URL and adds it as a patch (requires downloaded code)',
 
   // 테스트 파일 현황
   새로고침: 'Refresh',

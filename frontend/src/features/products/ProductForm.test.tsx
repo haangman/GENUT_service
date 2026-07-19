@@ -185,6 +185,71 @@ describe('ProductForm', () => {
     expect(screen.getByRole('button', { name: '다운로드' })).toBeDisabled()
   })
 
+  it('fetches a gerrit change and appends it as a patch row', async () => {
+    let captured: { change?: string } | null = null
+    server.use(
+      http.post('/api/products/fetch-gerrit-patch', async ({ request }) => {
+        captured = (await request.json()) as { change?: string }
+        return HttpResponse.json({
+          name: 'gerrit-1234-2',
+          content: 'diff --git a/x b/x',
+          ref: 'refs/changes/34/1234/2',
+          subject: 'Fix timer',
+        })
+      }),
+    )
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
+
+    await userEvent.type(screen.getByLabelText('Gerrit change 주소'), '1234')
+    await userEvent.click(screen.getByRole('button', { name: '가져오기' }))
+
+    // 패치 행이 name/content 채워진 채 추가된다
+    expect(await screen.findByLabelText('패치 1 이름')).toHaveValue('gerrit-1234-2')
+    expect(screen.getByLabelText('패치 1 내용')).toHaveValue('diff --git a/x b/x')
+    expect(captured).toEqual({
+      git_url: VALID.git_url,
+      code_path: VALID.code_path,
+      change: '1234',
+    })
+    // 공용 로그창에 ref·제목이 남고 입력칸은 비워진다
+    const consoleEl = screen.getByTestId('form-console')
+    expect(consoleEl.textContent).toContain('refs/changes/34/1234/2')
+    expect(consoleEl.textContent).toContain('Fix timer')
+    expect(screen.getByLabelText('Gerrit change 주소')).toHaveValue('')
+  })
+
+  it('shows the server detail when the gerrit fetch fails', async () => {
+    server.use(
+      http.post('/api/products/fetch-gerrit-patch', () =>
+        HttpResponse.json(
+          { detail: 'change 9999를 원격에서 찾을 수 없다' },
+          { status: 400 },
+        ),
+      ),
+    )
+    renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
+    await userEvent.type(screen.getByLabelText('Gerrit change 주소'), '9999')
+    await userEvent.click(screen.getByRole('button', { name: '가져오기' }))
+
+    const consoleEl = screen.getByTestId('form-console')
+    await waitFor(() =>
+      expect(consoleEl.textContent).toContain('change 9999를 원격에서 찾을 수 없다'),
+    )
+    // 실패 시 패치 행은 추가되지 않는다
+    expect(screen.queryByLabelText('패치 1 이름')).not.toBeInTheDocument()
+  })
+
+  it('disables the gerrit fetch button without input or an absolute code path', async () => {
+    renderWithProviders(
+      <ProductForm onSubmit={vi.fn()} defaultValues={{ ...VALID, code_path: 'relative/path' }} />,
+    )
+    const button = screen.getByRole('button', { name: '가져오기' })
+    expect(button).toBeDisabled() // 입력 없음 + 상대 경로
+
+    await userEvent.type(screen.getByLabelText('Gerrit change 주소'), '1234')
+    expect(button).toBeDisabled() // code_path가 절대 경로가 아니면 여전히 비활성
+  })
+
   it('adds and removes patch rows', async () => {
     renderWithProviders(<ProductForm onSubmit={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: '패치 추가' }))

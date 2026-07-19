@@ -265,6 +265,40 @@ def recent_log(repo_dir: str | Path, count: int = 5, timeout: int = 30) -> str:
     return f"(git log 조회 실패: {(result.stderr or '').strip()[:200]})"
 
 
+def ls_remote_refs(url: str, pattern: str, timeout: int = 60) -> list[str]:
+    """원격에서 pattern에 맞는 ref 이름 목록을 반환한다(실패 시 GitError)."""
+    res = _git(["ls-remote", url, pattern], timeout=timeout)
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git ls-remote failed: {detail}")
+    refs: list[str] = []
+    for line in res["stdout"].splitlines():
+        parts = line.split("\t", 1)
+        if len(parts) == 2 and parts[1].strip():
+            refs.append(parts[1].strip())
+    return refs
+
+
+def fetch_ref(repo_dir: str | Path, url: str, ref: str, timeout: int = 300) -> None:
+    """repo_dir로 url의 특정 ref를 fetch한다(이후 FETCH_HEAD로 접근, 실패 시 GitError)."""
+    _run_git(["-C", str(repo_dir), "fetch", url, ref], timeout=timeout)
+
+
+def show_commit(repo_dir: str | Path, rev: str = "FETCH_HEAD", timeout: int = 60) -> str:
+    """rev 커밋의 전체 patch 텍스트(git show 출력)를 반환한다(실패 시 GitError)."""
+    res = _git(["-C", str(repo_dir), "show", rev], timeout=timeout)
+    if not res["success"]:
+        detail = (res.get("stderr") or res.get("stdout") or "").strip()
+        raise GitError(f"git show {rev} failed: {detail}")
+    return res["stdout"]
+
+
+def commit_subject(repo_dir: str | Path, rev: str = "FETCH_HEAD", timeout: int = 30) -> str:
+    """rev 커밋의 제목 한 줄을 반환한다(표시용 — 실패해도 예외 없이 빈 문자열)."""
+    res = _git(["-C", str(repo_dir), "show", "-s", "--pretty=%s", rev], timeout=timeout)
+    return res["stdout"].strip() if res["success"] else ""
+
+
 def apply_patch(
     repo_dir: str,
     patch_text: str,

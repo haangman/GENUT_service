@@ -8,7 +8,7 @@ import {
   productFormSchema,
   type ProductFormValues,
 } from './productSchema'
-import { previewTargetFiles, pullCode, runCommand } from '../../api/products'
+import { fetchGerritPatch, previewTargetFiles, pullCode, runCommand } from '../../api/products'
 import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import { PROJECTS } from '../../lib/projects'
@@ -117,6 +117,38 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
     })
   }
   const codePathReady = ABSOLUTE_PATH_RE.test(codePath.trim())
+
+  // Gerrit change 주소로 diff를 받아 패치 행으로 자동 추가한다.
+  // 서버가 Git URL로 change ref를 fetch하므로 code_path 체크아웃(다운로드 선행)이 필요하다.
+  const [gerritChange, setGerritChange] = useState('')
+  const gerritMut = useMutation({
+    mutationFn: () =>
+      fetchGerritPatch({
+        git_url: gitUrl.trim(),
+        code_path: codePath.trim(),
+        change: gerritChange.trim(),
+      }),
+    onSuccess: (res) => {
+      append({ name: res.name, content: res.content })
+      appendConsole(
+        `${res.ref}${res.subject ? ` — ${res.subject}` : ''}\n${t('패치 행 추가')}: ${res.name}`,
+      )
+      setGerritChange('')
+    },
+    onError: (error) => {
+      const detail =
+        error instanceof ApiError
+          ? (error.body as { detail?: string } | null)?.detail
+          : undefined
+      appendConsole(`[오류] ${detail ?? t('Gerrit 패치를 가져오지 못했습니다.')}`)
+    },
+  })
+  const startGerritFetch = () => {
+    appendConsole(`$ ${t('Gerrit 가져오기')}: ${gerritChange.trim()}`)
+    gerritMut.mutate()
+  }
+  const canFetchGerrit =
+    Boolean(gerritChange.trim()) && Boolean(gitUrl.trim()) && codePathReady && !gerritMut.isPending
 
   // 코드 저장 경로 다운로드(git clone/pull). 폼 값 기반이라 저장 전에도 동작한다.
   // 폼의 패치(빈 행 제외)도 함께 보내 runner와 같은 상태(원본+패치)를 받게 한다.
@@ -434,6 +466,25 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
 
       <fieldset className="rounded-lg border border-border p-4">
         <legend className="px-1.5 text-sm font-medium text-fg">{t('패치 (순서대로 적용)')}</legend>
+        {/* Gerrit change 주소 입력 → diff를 받아 패치 행 자동 추가 */}
+        <div className="mb-3 flex gap-2">
+          <input
+            aria-label={t('Gerrit change 주소')}
+            className={inputClass}
+            placeholder={t('Gerrit change 주소 또는 번호 (예: https://…/+/1234, 1234/5)')}
+            value={gerritChange}
+            onChange={(event) => setGerritChange(event.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-sm shrink-0 self-center"
+            onClick={startGerritFetch}
+            disabled={!canFetchGerrit}
+            title={t('Git URL로 change ref를 받아 패치로 추가한다 (코드 다운로드 후 사용 가능)')}
+          >
+            {gerritMut.isPending ? t('가져오는 중…') : t('가져오기')}
+          </button>
+        </div>
         {fields.map((field, index) => (
           <div key={field.id} className="mb-3 space-y-1.5 border-b border-dashed border-border pb-3">
             <input
