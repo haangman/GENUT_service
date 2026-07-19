@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from genut_service.enums import Project, TestGenerationMode
+from genut_service.enums import GitUpdateMode, Project, TestGenerationMode
 from genut_service.paths import normalize_code_path, normalize_rel_path
 
 
@@ -39,6 +39,8 @@ class ProductBase(BaseModel):
     product_code: str
     git_url: str
     git_ref: str = "main"
+    # 영속 체크아웃 갱신 방식: reset(원격 강제 일치) | rebase(로컬 커밋 유지)
+    git_update_mode: GitUpdateMode = GitUpdateMode.RESET
     compile_db_rel: str
     out_tests_rel: str
     cmake_configure_cmd: str
@@ -83,6 +85,7 @@ class ProductUpdate(BaseModel):
     product_code: str | None = None
     git_url: str | None = None
     git_ref: str | None = None
+    git_update_mode: GitUpdateMode | None = None
     compile_db_rel: str | None = None
     out_tests_rel: str | None = None
     cmake_configure_cmd: str | None = None
@@ -130,6 +133,8 @@ class PullCodeRequest(BaseModel):
     git_url: str
     git_ref: str = "main"
     code_path: str
+    # 제자리 갱신 방식(폼 값 — runner와 동일하게 rebase면 로컬 커밋 유지)
+    git_update_mode: GitUpdateMode = GitUpdateMode.RESET
     # 지정 시 제자리 업데이트(reset)에서 생성 테스트 폴더를 보존한다(runner와 동일 보호)
     out_tests_rel: str | None = None
     # 지정 시 체크아웃 직후 order_index 순서대로 적용한다(runner와 동일한 멱등 적용)

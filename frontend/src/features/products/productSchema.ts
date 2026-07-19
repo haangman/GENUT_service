@@ -39,6 +39,8 @@ export const productFormSchema = z
     product_code: z.string().min(1, '프로덕트 ID를 입력하세요'),
     git_url: z.string().min(1, 'git URL을 입력하세요'),
     git_ref: z.string().min(1, 'git ref를 입력하세요'),
+    // 코드 업데이트 방식: reset(원격 강제 일치) | rebase(로컬 커밋 유지)
+    git_update_mode: z.enum(['reset', 'rebase']),
     compile_db_rel: z.string().min(1, 'compile_commands.json 폴더 경로를 입력하세요'),
     out_tests_rel: z.string().min(1, '테스트 출력 폴더 경로를 입력하세요'),
     cmake_configure_cmd: z.string().min(1, 'configure 명령을 입력하세요'),
@@ -72,6 +74,7 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   product_code: '',
   git_url: '',
   git_ref: 'main',
+  git_update_mode: 'reset',
   compile_db_rel: '',
   out_tests_rel: '',
   cmake_configure_cmd: '',

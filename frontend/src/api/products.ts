@@ -50,6 +50,8 @@ export interface PullCodeResult {
 export function pullCode(body: {
   git_url: string
   git_ref: string
+  // reset(원격 강제 일치) | rebase(로컬 커밋 유지) — 미지정 시 서버 기본 reset
+  git_update_mode?: 'reset' | 'rebase'
   code_path: string
   out_tests_rel?: string
   patches?: { name: string; content: string; order_index: number }[]

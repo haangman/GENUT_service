@@ -14,6 +14,7 @@ function product(id: number, name: string, mode = 'cpp', extra: Record<string, u
     product_code: `P-${id}`,
     git_url: `https://example.com/${name}.git`,
     git_ref: 'main',
+    git_update_mode: 'reset',
     compile_db_rel: 'build',
     out_tests_rel: 'tests',
     cmake_configure_cmd: 'c',

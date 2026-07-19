@@ -225,6 +225,11 @@ const EN: Record<string, string> = {
   '패치 {n} 이름': 'Patch {n} name',
   '패치 {n} 내용': 'Patch {n} content',
   '패치 추가': 'Add patch',
+  '코드 업데이트 방식': 'Code update mode',
+  'reset — 원격 최신 강제 일치 (로컬 커밋 삭제)':
+    'reset — force-match remote latest (drops local commits)',
+  'rebase — 로컬 커밋 유지 (충돌 시 작업 실패)':
+    'rebase — keep local commits (job fails on conflict)',
   'Gerrit change 주소': 'Gerrit change URL',
   'Gerrit change 주소 또는 번호 (예: https://…/+/1234, 1234/5)':
     'Gerrit change URL or number (e.g. https://…/+/1234, 1234/5)',

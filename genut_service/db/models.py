@@ -26,6 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from genut_service.db.base import Base
 from genut_service.enums import (
+    GitUpdateMode,
     JobKind,
     JobOrigin,
     JobStatus,
@@ -64,6 +65,10 @@ class Product(TimestampMixin, Base):
     product_code: Mapped[str] = mapped_column(String(255))
     git_url: Mapped[str] = mapped_column(String(1024))
     git_ref: Mapped[str] = mapped_column(String(255), default="main")
+    # 영속 체크아웃 갱신 방식: reset(원격 강제 일치) | rebase(로컬 커밋 유지)
+    git_update_mode: Mapped[str] = mapped_column(
+        String(16), default=GitUpdateMode.RESET.value, server_default="reset"
+    )
 
     compile_db_rel: Mapped[str] = mapped_column(String(1024))
     out_tests_rel: Mapped[str] = mapped_column(String(1024))

@@ -23,6 +23,18 @@ class TestGenerationMode(StrEnum):
     KUNIT = "kunit"
 
 
+class GitUpdateMode(StrEnum):
+    """영속 체크아웃(code_path)의 제자리 갱신 방식 (프로덕트 속성).
+
+    - RESET: fetch + reset --hard origin/<ref> — 원격 최신 강제 일치(로컬 커밋 삭제).
+    - REBASE: fetch + rebase --autostash origin/<ref> — 로컬 커밋(cherry-pick 등)을
+      원격 최신 위로 유지. 충돌 시 원상 복구 후 작업 실패로 표면화.
+    """
+
+    RESET = "reset"
+    REBASE = "rebase"
+
+
 class JobStatus(StrEnum):
     """Job 상태 머신."""
 

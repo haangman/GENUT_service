@@ -157,6 +157,7 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
       pullCode({
         git_url: gitUrl.trim(),
         git_ref: gitRef.trim() || 'main',
+        git_update_mode: getValues('git_update_mode'),
         code_path: codePath.trim(),
         out_tests_rel: outTestsRel.trim() || undefined,
         patches: getValues('patches')
@@ -339,6 +340,16 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
               ? consoleLog.join('\n')
               : t('다운로드/실행 버튼의 로그가 여기에 표시됩니다.')}
           </pre>
+        </div>
+
+        <div>
+          <label htmlFor="git_update_mode" className="label">
+            {t('코드 업데이트 방식')}
+          </label>
+          <select id="git_update_mode" className={inputClass} {...register('git_update_mode')}>
+            <option value="reset">{t('reset — 원격 최신 강제 일치 (로컬 커밋 삭제)')}</option>
+            <option value="rebase">{t('rebase — 로컬 커밋 유지 (충돌 시 작업 실패)')}</option>
+          </select>
         </div>
 
         <div>

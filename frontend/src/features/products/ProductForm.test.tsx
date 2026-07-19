@@ -13,6 +13,7 @@ const VALID: ProductFormValues = {
   product_code: 'P-1',
   git_url: 'https://example.com/repo.git',
   git_ref: 'main',
+  git_update_mode: 'reset',
   compile_db_rel: 'build',
   out_tests_rel: 'tests',
   cmake_configure_cmd: 'cmake -S . -B build',
@@ -159,6 +160,28 @@ describe('ProductForm', () => {
       { name: 'p0', content: 'diff0', order_index: 0 },
       { name: 'p1', content: 'diff1', order_index: 1 },
     ])
+  })
+
+  it('submits the selected git update mode and sends it with the download', async () => {
+    let captured: { git_update_mode?: string } | null = null
+    server.use(
+      http.post('/api/products/pull-code', async ({ request }) => {
+        captured = (await request.json()) as { git_update_mode?: string }
+        return HttpResponse.json({ path: 'C:/checkout', detail: '클론 완료', log: '' })
+      }),
+    )
+    const onSubmit = vi.fn()
+    renderWithProviders(<ProductForm onSubmit={onSubmit} defaultValues={VALID} />)
+
+    // rebase 선택 → 다운로드 요청에 실려 가고, 저장 값에도 포함된다
+    await userEvent.selectOptions(screen.getByLabelText('코드 업데이트 방식'), 'rebase')
+    await userEvent.click(screen.getByRole('button', { name: '다운로드' }))
+    expect(await screen.findByText(/다운로드 성공/)).toBeInTheDocument()
+    expect(captured!.git_update_mode).toBe('rebase')
+
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].git_update_mode).toBe('rebase')
   })
 
   it('shows the server detail when the download fails', async () => {

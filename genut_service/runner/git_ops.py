@@ -110,22 +110,28 @@ def ensure_checkout(
     preserve: Iterable[str] = (),
     on_start: Callable[[object], None] | None = None,
     strict: bool = False,
+    update_mode: str = "reset",
 ) -> None:
     """dest에 repo를 제자리 업데이트하거나(없으면) clone한다.
 
-    - `dest/.git`이 있으면 `fetch origin` 후, **HEAD가 이미 원격과 같으면 reset을
+    - `dest/.git`이 있으면 `fetch origin` 후, **HEAD가 이미 원격과 같으면 갱신을
       생략**한다 — reset 전후의 preserve 백업/복원이 트리 전체 복사 2회라, 생성 테스트가
       누적된 out 폴더에서는 이 생략이 실행/사이클당 I/O를 크게 줄인다(이미 적용된 patch
       등 작업 트리 상태도 그대로 유지된다).
-    - 변경이 있으면 `reset --hard origin/<ref>`로 추적 파일을 최신화한다.
-      `git clean`을 하지 않으므로 **순수 untracked 파일은 보존**되지만, `reset --hard`는
-      **staged(인덱스에 add된) 신규 파일을 삭제**한다. 따라서 생성 산출물(예: 테스트 출력
-      폴더)이 GENUT 통합 과정에서 staged 되면 다음 실행의 reset에서 사라질 수 있다.
-      이를 막기 위해 `preserve`로 받은 dest 기준 경로들은 reset 전에 보관했다가 후에
-      덮어써(overlay) 복원한다 → staged/untracked 무관하게 보존된다.
-      fetch/reset 실패는 관용적으로 무시하고 기존 체크아웃을 사용한다 —
-      단 `strict=True`면(사용자에게 성공/실패를 정확히 보고해야 하는 다운로드 API 등)
-      fetch/rev-parse/reset 실패를 GitError로 올린다.
+    - 변경이 있으면 update_mode에 따라 갱신한다:
+      * `reset`(기본): `reset --hard origin/<ref>`로 추적 파일을 최신화한다 — 로컬 전용
+        커밋은 삭제된다. `git clean`을 하지 않으므로 **순수 untracked 파일은 보존**되지만,
+        `reset --hard`는 **staged(인덱스에 add된) 신규 파일을 삭제**한다. 따라서 생성
+        산출물(예: 테스트 출력 폴더)이 GENUT 통합 과정에서 staged 되면 다음 실행의
+        reset에서 사라질 수 있다. 이를 막기 위해 `preserve`로 받은 dest 기준 경로들은
+        갱신 전에 보관했다가 후에 덮어써(overlay) 복원한다 → staged/untracked 무관 보존.
+        fetch/reset 실패는 관용적으로 무시하고 기존 체크아웃을 사용한다 —
+        단 `strict=True`면(사용자에게 성공/실패를 정확히 보고해야 하는 다운로드 API 등)
+        fetch/rev-parse/reset 실패를 GitError로 올린다.
+      * `rebase`: `rebase --autostash origin/<ref>`로 **로컬 전용 커밋(cherry-pick 등)을
+        원격 최신 위로 옮겨 유지**한다(로컬 커밋이 없으면 fast-forward = reset과 동일
+        결과). 충돌/실패 시 `rebase --abort`로 원상 복구하고 strict 여부와 무관하게
+        GitError를 올린다 — 조용히 옛 코드로 실행하면 사용자가 눈치채지 못하기 때문.
     - `.git`이 없으면(있던 비-repo 디렉터리는 정리 후) clone한다(실패 시 GitError).
     """
     dest = Path(dest)
@@ -140,11 +146,28 @@ def ensure_checkout(
                 and remote["success"]
                 and local["stdout"].strip() == remote["stdout"].strip()
             ):
-                return  # 이미 최신 — reset·preserve 백업/복원 생략
+                return  # 이미 최신 — 갱신·preserve 백업/복원 생략
             if strict and not remote["success"]:
                 detail = (remote.get("stderr") or remote.get("stdout") or "").strip()
                 raise GitError(f"git rev-parse {target} failed: {detail}")
             saved = _backup_preserved(dest, preserve)
+            if update_mode == "rebase":
+                rebase = _git(
+                    ["-C", str(dest), "rebase", "--autostash", target],
+                    timeout=timeout,
+                    on_start=on_start,
+                )
+                if not rebase["success"]:
+                    # 진행 중 rebase를 원상 복구(미시작이면 abort 실패 — 무시)
+                    _git(["-C", str(dest), "rebase", "--abort"], timeout=timeout)
+                    _restore_preserved(dest, saved)
+                    detail = (rebase.get("stderr") or rebase.get("stdout") or "").strip()
+                    raise GitError(
+                        f"git rebase {target} failed — 로컬 커밋과 원격 변경이 "
+                        f"충돌했을 수 있다(수동 해결 필요): {detail}"
+                    )
+                _restore_preserved(dest, saved)
+                return
             reset = _git(
                 ["-C", str(dest), "reset", "--hard", target],
                 timeout=timeout,

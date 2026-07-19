@@ -172,10 +172,12 @@ def run(
         product_dir = workspace.resolve_code_path(product.code_path)
         _ev("clone", "info", f"프로덕트 업데이트(영속): {product_dir} ← {_masked_url(product.git_url)} ({product.git_ref})")
         # out_tests_rel(생성 테스트 출력 폴더)은 reset --hard로부터 보존한다(staged 포함).
+        # 갱신 방식은 프로덕트 설정(reset=원격 강제 일치 / rebase=로컬 커밋 유지)을 따른다.
         git_ops.ensure_checkout(
             product.git_url, product.git_ref, product_dir, timeout=git_timeout,
             preserve=[normalize_rel_path(product.out_tests_rel)],
             on_start=on_process,
+            update_mode=product.git_update_mode,
         )
     else:
         product_dir = job_root / "product"

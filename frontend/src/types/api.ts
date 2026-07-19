@@ -25,6 +25,9 @@ export interface PatchIn {
   order_index: number
 }
 
+// 영속 체크아웃 갱신 방식: reset(원격 강제 일치) | rebase(로컬 커밋 유지)
+export type GitUpdateMode = 'reset' | 'rebase'
+
 export interface Product {
   id: number
   project: Project
@@ -32,6 +35,7 @@ export interface Product {
   product_code: string
   git_url: string
   git_ref: string
+  git_update_mode: GitUpdateMode
   compile_db_rel: string
   out_tests_rel: string
   cmake_configure_cmd: string

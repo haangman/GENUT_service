@@ -320,6 +320,7 @@ def run_diff_job(
         timeout=git_timeout,
         preserve=preserve,
         on_start=on_process,
+        update_mode=product.git_update_mode,
     )
     new = git_ops.head_commit(root, timeout=git_timeout)  # 실패(GitError)면 job 실패·기준 유지
 

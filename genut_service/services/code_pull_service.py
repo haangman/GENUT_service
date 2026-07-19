@@ -84,6 +84,7 @@ def pull_code(session: Session, req: PullCodeRequest) -> PullCodeResponse:
         timeout=settings.git_timeout,
         preserve=preserve,
         strict=True,
+        update_mode=req.git_update_mode.value,
     )
     # 폼 로그창용: runner가 job 로그에 남기는 것과 같은 최근 커밋 정보 + 패치 적용 내역
     log_lines = [f"최근 커밋:\n{git_ops.recent_log(dest)}"]

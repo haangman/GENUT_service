@@ -37,6 +37,7 @@ function toFormValues(product: Product): Partial<ProductFormValues> {
     product_code: product.product_code,
     git_url: product.git_url,
     git_ref: product.git_ref,
+    git_update_mode: product.git_update_mode,
     compile_db_rel: product.compile_db_rel,
     out_tests_rel: product.out_tests_rel,
     cmake_configure_cmd: product.cmake_configure_cmd,
