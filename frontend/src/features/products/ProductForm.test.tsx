@@ -318,6 +318,47 @@ describe('ProductForm', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it('re-scans the target file preview and resets manual overrides on refresh', async () => {
+    let files = [
+      { path: 'src/aaa.c', excluded_by_pattern: false },
+      { path: 'src/bbb.c', excluded_by_pattern: false },
+    ]
+    let calls = 0
+    server.use(
+      http.post('/api/products/target-files', () => {
+        calls += 1
+        return HttpResponse.json({ files })
+      }),
+    )
+    renderWithProviders(
+      <ProductForm
+        onSubmit={vi.fn()}
+        defaultValues={{ ...VALID, code_path: '/x', compile_db_rel: 'build' }}
+      />,
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(await screen.findByText('src/aaa.c', {}, { timeout: 3000 })).toBeInTheDocument()
+
+    // 수동 제외 후 —
+    await userEvent.click(screen.getAllByRole('button', { name: '제외' })[0])
+    expect(screen.getByText('제외됨')).toBeInTheDocument()
+
+    // 디스크 상태 변화(새 파일 추가)를 흉내 내고 업데이트 클릭 → 재스캔 + 수동 선택 초기화
+    files = [...files, { path: 'src/new.c', excluded_by_pattern: false }]
+    await userEvent.click(screen.getByRole('button', { name: '업데이트' }))
+    expect(await screen.findByText('src/new.c', {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.queryByText('제외됨')).not.toBeInTheDocument()
+    expect(calls).toBeGreaterThanOrEqual(2)
+  })
+
+  it('disables the preview refresh button until path and compile db are filled', async () => {
+    renderWithProviders(
+      <ProductForm onSubmit={vi.fn()} defaultValues={{ ...VALID, compile_db_rel: '' }} />,
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(screen.getByRole('button', { name: '업데이트' })).toBeDisabled()
+  })
+
   it('hides the CMakeLists template editor in auto mode when the test mode is kunit', async () => {
     renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
 

@@ -195,6 +195,8 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
 
   // 대상 파일 미리보기: code_path/compile_db_rel/제외패턴 변경을 디바운스해 조회한다.
   const [params, setParams] = useState({ code_path: '', compile_db_rel: '', exclude_globs: [] as string[] })
+  // 업데이트 버튼용 강제 재스캔 카운터 — 입력이 그대로여도 키를 바꿔 캐시를 무시한다
+  const [scanVersion, setScanVersion] = useState(0)
   useEffect(() => {
     const globs = excludePatterns.split('\n').map((s) => s.trim()).filter(Boolean)
     const timer = setTimeout(
@@ -205,11 +207,20 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
   }, [codePath, compileDbRel, excludePatterns])
 
   const { data: preview, isFetching } = useQuery({
-    queryKey: ['target-files', params],
+    queryKey: ['target-files', params, scanVersion],
     queryFn: () => previewTargetFiles(params),
     enabled: autoRun && Boolean(params.code_path) && Boolean(params.compile_db_rel),
   })
   const candidates: TargetFileItem[] = preview?.files ?? []
+
+  // 업데이트 버튼: 디바운스를 기다리지 않고 현재 입력값으로 즉시 재스캔한다.
+  // 수동 제외/복원은 초기화 — compile_commands.json + 제외 패턴만으로 다시 계산된 상태.
+  const refreshPreview = () => {
+    const globs = excludePatterns.split('\n').map((s) => s.trim()).filter(Boolean)
+    setParams({ code_path: codePath, compile_db_rel: compileDbRel, exclude_globs: globs })
+    setOverrides({})
+    setScanVersion((version) => version + 1)
+  }
 
   // 행별 수동 override(true=제외, false=복원). 없으면 패턴 매칭 결과를 따른다.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({})
@@ -416,6 +427,15 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
                 })}
               </h4>
               {isFetching ? <span className="text-xs text-muted">{t('스캔 중…')}</span> : null}
+              <button
+                type="button"
+                className="btn btn-sm ml-auto"
+                onClick={refreshPreview}
+                disabled={!codePath.trim() || !compileDbRel.trim() || isFetching}
+                title={t('compile_commands.json과 제외 패턴 기준으로 다시 스캔한다 (수동 제외/복원 초기화)')}
+              >
+                {t('업데이트')}
+              </button>
             </div>
             {candidates.length === 0 ? (
               <p className="text-sm text-subtle">
