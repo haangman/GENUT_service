@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -184,5 +184,117 @@ describe('TestStatusPage', () => {
     expect(await screen.findByText('CC')).toBeInTheDocument()
     expect(screen.queryByText(/마지막 갱신/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '새로고침' })).toBeInTheDocument()
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  const DETAIL = [
+    {
+      name: 'calc.c',
+      path: 'src/calc.c',
+      product_codes: ['AA-1', 'AA-2'],
+      test_count: 2,
+      test_files: [
+        {
+          name: 'calc_Test_0.cpp',
+          path: 'out/calc/calc_Test_0.cpp',
+          product_codes: ['AA-1', 'AA-2'],
+          log_path: null,
+          case_count: 3,
+        },
+      ],
+      case_count: 3,
+      fail_count: 1,
+      failed_test_files: [
+        {
+          name: 'calc_Test_2.cpp',
+          path: 'out_Fail/calc/calc_Test_2.cpp',
+          product_codes: ['AA-1'],
+          log_path: null,
+          case_count: null,
+        },
+      ],
+    },
+  ]
+  const SUMMARY = [
+    {
+      name: 'AA',
+      product_codes: ['AA-1', 'AA-2'],
+      test_generation_mode: 'cpp',
+      target_file_count: 1,
+      total_test_count: 2,
+      total_case_count: 3,
+      total_fail_count: 1,
+    },
+  ]
+
+  it('deletes a single test file from every source product via the L3 delete button', async () => {
+    const deleted: { code: string | null; path: string | null }[] = []
+    server.use(
+      http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
+      http.get('/api/test-status/detail', () => HttpResponse.json(DETAIL)),
+      http.delete('/api/test-status/file', ({ request }) => {
+        const url = new URL(request.url)
+        deleted.push({ code: url.searchParams.get('code'), path: url.searchParams.get('path') })
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderWithProviders(<TestStatusPage />)
+
+    await userEvent.click(await screen.findByText('AA'))
+    await userEvent.click(await screen.findByText('calc.c'))
+    // L3 성공 테이블의 행 삭제 → 출처 프로덕트(AA-1, AA-2) 모두에서 삭제 요청
+    const rows = screen.getAllByRole('row').filter((r) => r.textContent?.includes('calc_Test_0'))
+    await userEvent.click(rows[0].querySelector('button:not([disabled])') as HTMLElement)
+    await waitFor(() =>
+      expect(deleted).toEqual([
+        { code: 'AA-1', path: 'out/calc/calc_Test_0.cpp' },
+        { code: 'AA-2', path: 'out/calc/calc_Test_0.cpp' },
+      ]),
+    )
+  })
+
+  it('deletes all tests of a target file via the L2 delete button', async () => {
+    let captured: URLSearchParams | null = null
+    server.use(
+      http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
+      http.get('/api/test-status/detail', () => HttpResponse.json(DETAIL)),
+      http.delete('/api/test-status/target', ({ request }) => {
+        captured = new URL(request.url).searchParams
+        return HttpResponse.json({ deleted_files: 3 })
+      }),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderWithProviders(<TestStatusPage />)
+
+    await userEvent.click(await screen.findByText('AA'))
+    await screen.findByText('calc.c')
+    await userEvent.click(screen.getByRole('button', { name: '테스트 삭제' }))
+    // 확인 문구에 총 개수(성공 2 + 실패 1)가 들어간다
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('3'))
+    await waitFor(() => expect(captured).not.toBeNull())
+    expect(captured!.get('name')).toBe('AA')
+    expect(captured!.get('path')).toBe('src/calc.c')
+    expect(captured!.get('project')).toBe('Ulysses')
+  })
+
+  it('does not call the delete API when the confirm dialog is dismissed', async () => {
+    let called = false
+    server.use(
+      http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
+      http.get('/api/test-status/detail', () => HttpResponse.json(DETAIL)),
+      http.delete('/api/test-status/target', () => {
+        called = true
+        return HttpResponse.json({ deleted_files: 0 })
+      }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderWithProviders(<TestStatusPage />)
+
+    await userEvent.click(await screen.findByText('AA'))
+    await screen.findByText('calc.c')
+    await userEvent.click(screen.getByRole('button', { name: '테스트 삭제' }))
+    expect(called).toBe(false)
   })
 })

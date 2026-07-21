@@ -268,6 +268,10 @@ const EN: Record<string, string> = {
   '테스트 파일 수': 'Test files',
   '테스트 케이스 수': 'Test cases',
   '테스트 파일명': 'Test file name',
+  '테스트 삭제': 'Delete tests',
+  '{name} 테스트 파일을 삭제할까요?': 'Delete the test file {name}?',
+  '{name}의 테스트 {count}개(실패 포함)를 모두 삭제할까요?':
+    'Delete all {count} tests of {name} (including failed ones)?',
   '생성 성공': 'Succeeded',
   '생성 실패': 'Failed',
   '생성에 성공한 테스트 파일이 없습니다.': 'No successfully generated test files.',

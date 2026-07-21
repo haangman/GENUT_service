@@ -14,13 +14,14 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import get_session
 from genut_service.config import get_settings
-from genut_service.db.models import Product
+from genut_service.db.models import Product, TestStatusSnapshot
 from genut_service.enums import Project
 from genut_service.paths import PathValidationError, normalize_rel_path
 from genut_service.schemas.test_status import (
@@ -29,6 +30,10 @@ from genut_service.schemas.test_status import (
     TargetFileStatus,
 )
 from genut_service.services import test_status_service, test_status_snapshot_service
+from genut_service.services.code_pull_service import (
+    CodePathBusyError,
+    raise_if_code_path_busy,
+)
 
 router = APIRouter(prefix="/api/test-status", tags=["test-status"])
 
@@ -164,3 +169,100 @@ def get_test_file(
     if not any(_within(target, base) for base in allowed) or not target.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "파일을 찾을 수 없다")
     return FileContent(path=rel, content=target.read_text(encoding="utf-8", errors="replace"))
+
+
+# ---- 삭제(mutation) API — 메인 앱 전용 라우터 -------------------------------------
+# 읽기 전용 독립 현황 서버(serve-status)는 위 `router`만 마운트하므로, 삭제는 이
+# 별도 라우터에 두어 메인 앱(main.py)에서만 노출한다.
+mutation_router = APIRouter(prefix="/api/test-status", tags=["test-status"])
+
+
+def _invalidate_after_delete(session: Session, project: str, name: str) -> None:
+    """삭제 직후 요약 캐시와 (project, name) 스냅샷을 무효화한다.
+
+    스냅샷 행을 지우면 요약/상세가 실시간 스캔 폴백으로 최신 상태를 즉시 보여주고,
+    백그라운드 리프레셔가 다음 주기에 스냅샷을 다시 만든다.
+    """
+    session.execute(
+        sa_delete(TestStatusSnapshot).where(
+            TestStatusSnapshot.project == project, TestStatusSnapshot.name == name
+        )
+    )
+    session.commit()
+    clear_summary_cache()
+
+
+@mutation_router.delete("/file", status_code=status.HTTP_204_NO_CONTENT)
+def delete_test_file(
+    code: str = Query(...),
+    path: str = Query(...),
+    session: Session = Depends(get_session),
+) -> None:
+    """테스트/실패 테스트/로그 파일 1개를 영구 삭제한다(뷰어 GET /file과 동일한 경로 경계).
+
+    대응 debug 로그도 함께 정리한다. 같은 체크아웃에서 job 실행 중이면 409.
+    """
+    product = session.scalars(
+        select(Product).where(Product.product_code == code)
+    ).first()
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    root = workspace.existing_product_checkout(product)
+    if root is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "파일을 찾을 수 없다")
+    try:
+        raise_if_code_path_busy(session, root)
+    except CodePathBusyError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    result = test_status_service.delete_test_file(root, product, path)
+    if result == "invalid":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "허용되지 않는 경로다")
+    if result == "not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "파일을 찾을 수 없다")
+    _invalidate_after_delete(session, product.project, product.name)
+
+
+@mutation_router.delete("/target")
+def delete_target_tests(
+    name: str = Query(...),
+    path: str = Query(...),
+    project: Project = Query(Project.ULYSSES),
+    session: Session = Depends(get_session),
+) -> dict[str, int]:
+    """대상 파일(path)의 테스트를 한꺼번에 삭제한다 — 성공·실패(_Fail)·debug 로그 폴더 전체.
+
+    현황은 (project, name) 그룹 합산이므로 그룹의 모든 프로덕트 체크아웃에서 지운다.
+    하나라도 job 실행 중이면 409(아무것도 지우지 않음). 반환: {deleted_files: n}.
+    """
+    group = list(
+        session.scalars(
+            select(Product).where(
+                Product.project == project.value, Product.name == name
+            )
+        )
+    )
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    try:
+        stem = Path(normalize_rel_path(path)).stem
+    except PathValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "허용되지 않는 경로다") from exc
+
+    # 삭제 전에 그룹 전체의 busy를 먼저 검사한다 — 일부만 지워지는 부분 삭제 방지
+    pairs = []
+    for product in group:
+        root = workspace.existing_product_checkout(product)
+        if root is None:
+            continue
+        try:
+            raise_if_code_path_busy(session, root)
+        except CodePathBusyError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        pairs.append((product, root))
+
+    deleted = sum(
+        test_status_service.delete_target_tests(root, product, stem)
+        for product, root in pairs
+    )
+    _invalidate_after_delete(session, project.value, name)
+    return {"deleted_files": deleted}

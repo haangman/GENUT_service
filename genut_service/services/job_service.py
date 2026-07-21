@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-import stat
-from pathlib import Path
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.db.models import Job, JobEvent, Product
 from genut_service.enums import TERMINAL_STATUSES, JobOrigin, JobStatus
+from genut_service.fs import rmtree_force
 from genut_service.services import compile_db_service
 
 
@@ -88,24 +84,8 @@ def delete_job(session: Session, job_id: int) -> str:
     session.delete(job)  # job_events는 cascade로 함께 삭제된다
     session.commit()
     # 워크스페이스 잔여 폴더(job.log, 임시 clone 잔재 등) 정리 — 실패해도 삭제 자체는 유효
-    _rmtree_force(workspace.job_log_path(job_id).parent)
+    rmtree_force(workspace.job_log_path(job_id).parent)
     return "deleted"
-
-
-def _rmtree_force(root: Path) -> None:
-    """읽기 전용 파일(Windows의 git 객체 등)도 지우는 관용 rmtree (worker 정리와 동일 패턴)."""
-
-    def _grant_write(func, path, _exc):  # noqa: ANN001
-        try:
-            os.chmod(path, stat.S_IWRITE)
-            func(path)
-        except OSError:
-            pass
-
-    try:
-        shutil.rmtree(root, onexc=_grant_write)
-    except OSError:
-        pass
 
 
 def get_job(session: Session, job_id: int) -> Job | None:

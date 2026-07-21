@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     from genut_service.api.jobs import router as jobs_router
     from genut_service.api.products import router as products_router
     from genut_service.api.terminal import router as terminal_router
+    from genut_service.api.test_status import mutation_router as test_status_mutation_router
     from genut_service.api.test_status import router as test_status_router
     from genut_service.api.workers import router as workers_router
 
@@ -55,6 +56,8 @@ def create_app() -> FastAPI:
     app.include_router(genuts_router)
     app.include_router(workers_router)
     app.include_router(test_status_router)
+    # 삭제 API는 메인 앱 전용 — 읽기 전용 status 서버(status_main)에는 노출하지 않는다
+    app.include_router(test_status_mutation_router)
     app.include_router(terminal_router)
 
     # 빌드된 프론트엔드가 있으면 정적 서빙(SPA fallback). API 라우터 등록 이후에 한다.

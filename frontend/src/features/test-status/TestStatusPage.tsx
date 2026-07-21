@@ -1,12 +1,19 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { ProjectSelect } from '../../components/ProjectSelect'
-import { getTestStatusByName, getTestStatusSummary } from '../../api/testStatus'
+import {
+  deleteTargetTests,
+  deleteTestFile,
+  getTestStatusByName,
+  getTestStatusSummary,
+} from '../../api/testStatus'
+import { ApiError } from '../../lib/apiClient'
 import { formatDateTime } from '../jobs/jobFormat'
 import { useLang } from '../../lib/i18n'
 import { DEFAULT_PROJECT, PROJECTS } from '../../lib/projects'
-import type { Project, TestFileInfo } from '../../types/api'
+import type { Project, TargetFileStatus, TestFileInfo } from '../../types/api'
 
 // 스냅샷 폴링 주기 — 서버는 미리 계산된 스냅샷을 반환하므로 요청이 가볍다
 const REFETCH_MS = 30_000
@@ -29,11 +36,16 @@ function TestFileTable({
   files,
   variant,
   emptyText,
+  onDelete,
+  deletingPath,
 }: {
   title: string
   files: TestFileInfo[]
   variant: 'success' | 'failed'
   emptyText: string
+  // 개별 테스트 파일 삭제(확인 창은 호출부에서). deletingPath는 진행 중 표시용.
+  onDelete: (tf: TestFileInfo) => void
+  deletingPath: string | null
 }) {
   const { t } = useLang()
   const failed = variant === 'failed'
@@ -80,6 +92,14 @@ function TestFileTable({
                       {t('로그')}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={deletingPath === tf.path}
+                    onClick={() => onDelete(tf)}
+                  >
+                    {deletingPath === tf.path ? t('삭제 중…') : t('삭제')}
+                  </button>
                 </div>
               </td>
             </tr>
@@ -154,6 +174,53 @@ export function TestStatusPage() {
   const refresh = () => {
     refetchSummary()
     if (selectedName != null) refetchDetail()
+  }
+
+  // 테스트 삭제(개별 파일 / 대상 파일 단위). 성공 시 상세·요약을 즉시 재조회한다.
+  const [deletingPath, setDeletingPath] = useState<string | null>(null)
+  const alertDeleteError = (error: unknown) => {
+    const detail =
+      error instanceof ApiError ? (error.body as { detail?: string } | null)?.detail : undefined
+    window.alert(detail ? t(detail) : t('삭제에 실패했습니다.'))
+  }
+  const afterDelete = () => {
+    refetchDetail()
+    refetchSummary()
+  }
+  const fileDeleteMut = useMutation({
+    // 합산 화면이라 한 파일이 여러 프로덕트에 있을 수 있다 — 출처 전체에서 지운다
+    mutationFn: async (tf: TestFileInfo) => {
+      for (const code of tf.product_codes) await deleteTestFile(code, tf.path)
+    },
+    onSuccess: afterDelete,
+    onError: alertDeleteError,
+    onSettled: () => setDeletingPath(null),
+  })
+  const requestFileDelete = (tf: TestFileInfo) => {
+    if (!window.confirm(t('{name} 테스트 파일을 삭제할까요?', { name: tf.name }))) return
+    setDeletingPath(tf.path)
+    fileDeleteMut.mutate(tf)
+  }
+  const targetDeleteMut = useMutation({
+    mutationFn: (target: TargetFileStatus) =>
+      deleteTargetTests(project, selectedName as string, target.path),
+    onSuccess: afterDelete,
+    onError: alertDeleteError,
+    onSettled: () => setDeletingPath(null),
+  })
+  const requestTargetDelete = (target: TargetFileStatus) => {
+    const count = target.test_count + target.fail_count
+    if (
+      !window.confirm(
+        t('{name}의 테스트 {count}개(실패 포함)를 모두 삭제할까요?', {
+          name: target.name,
+          count,
+        }),
+      )
+    )
+      return
+    setDeletingPath(target.path)
+    targetDeleteMut.mutate(target)
   }
 
   return (
@@ -287,6 +354,7 @@ export function TestStatusPage() {
                       <th className="px-4 py-3 text-right">{t('테스트 파일 수')}</th>
                       <th className="px-4 py-3 text-right">{t('테스트 케이스 수')}</th>
                       <th className="px-4 py-3 text-right">{t('실패 수')}</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -313,6 +381,22 @@ export function TestStatusPage() {
                             {f.fail_count}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          {/* 대상 파일의 테스트 전체(성공·실패·로그) 일괄 삭제 — 행 클릭(드릴다운)과 분리 */}
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={
+                              deletingPath === f.path || f.test_count + f.fail_count === 0
+                            }
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              requestTargetDelete(f)
+                            }}
+                          >
+                            {deletingPath === f.path ? t('삭제 중…') : t('테스트 삭제')}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -334,12 +418,16 @@ export function TestStatusPage() {
             files={file.test_files}
             variant="success"
             emptyText="생성에 성공한 테스트 파일이 없습니다."
+            onDelete={requestFileDelete}
+            deletingPath={deletingPath}
           />
           <TestFileTable
             title="생성 실패"
             files={file.failed_test_files}
             variant="failed"
             emptyText="실패한 테스트 파일이 없습니다."
+            onDelete={requestFileDelete}
+            deletingPath={deletingPath}
           />
         </div>
       ) : null}

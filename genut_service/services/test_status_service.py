@@ -22,6 +22,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from genut_service.db.models import Product
+from genut_service.fs import rmtree_force
+from genut_service.paths import PathValidationError, normalize_rel_path
 from genut_service.services import compile_db_service
 
 
@@ -143,6 +145,82 @@ def allowed_roots(root: Path, product: Product) -> list[Path]:
     out_root = (root / out_rel).resolve()
     fail_root, log_root = _sibling_roots(out_root)
     return [r for r in (out_root, fail_root, log_root) if r is not None]
+
+
+def _out_and_siblings(root: Path, product: Product) -> tuple[Path, Path | None, Path | None]:
+    """(out_root, fail_root, log_root)를 resolve해 반환한다(형제는 없으면 None)."""
+    out_rel = (product.out_tests_rel or "").replace("\\", "/").strip("/")
+    out_root = (root / out_rel).resolve() if out_rel else root.resolve()
+    fail_root, log_root = _sibling_roots(out_root)
+    return out_root, fail_root, log_root
+
+
+def _match_stem_dirs(scan_root: Path | None, stem: str) -> list[Path]:
+    """scan_root 직속에서 이름이 stem과 (대소문자 무시) 일치하는 폴더들을 찾는다."""
+    if scan_root is None or not scan_root.is_dir():
+        return []
+    return [d for d in scan_root.iterdir() if d.is_dir() and d.name.lower() == stem.lower()]
+
+
+def _rmdir_if_empty(path: Path) -> None:
+    try:
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    except OSError:
+        pass
+
+
+def delete_test_file(root: Path, product: Product, rel: str) -> str:
+    """허용 루트(out·_Fail·_debug_log) 안의 테스트/로그 파일 1개를 영구 삭제한다.
+
+    대응 debug 로그(같은 stem 폴더의 `<파일명 확장자→.log>`)도 best-effort로 함께
+    지우고, 비게 된 stem 폴더는 정리한다.
+    반환: "deleted" | "invalid"(`..` 등 경로 위반 — 400용) | "not_found"(허용 루트 밖
+    또는 파일 없음 — 404용). 뷰어(GET /file)와 동일한 경로 경계를 쓴다.
+    """
+    try:
+        rel_norm = normalize_rel_path(rel)
+    except PathValidationError:
+        return "invalid"
+    target = (root / rel_norm).resolve()
+    roots = allowed_roots(root, product)
+    if not any(target == base or target.is_relative_to(base) for base in roots):
+        return "not_found"
+    if not target.is_file():
+        return "not_found"
+    stem_dir = target.parent
+    log_name = f"{target.stem}.log".lower()
+    target.unlink()
+    _rmdir_if_empty(stem_dir)
+    # 대응 debug 로그 best-effort 정리(스캔과 동일하게 폴더/파일명 대소문자 무시)
+    _, _, log_root = _out_and_siblings(root, product)
+    for log_dir in _match_stem_dirs(log_root, stem_dir.name):
+        for entry in list(log_dir.iterdir()):
+            if entry.is_file() and entry.name.lower() == log_name:
+                entry.unlink(missing_ok=True)
+        _rmdir_if_empty(log_dir)
+    return "deleted"
+
+
+def delete_target_tests(root: Path, product: Product, stem: str) -> int:
+    """대상 파일 stem의 테스트를 한꺼번에 삭제한다 — 성공(`<out>/<stem>/`)·실패
+    (`<out>_Fail/<stem>/`)·debug 로그(`<out>_debug_log/<stem>/`) 폴더 전체.
+
+    반환: 삭제된 테스트 파일 수(성공+실패 폴더의 `_test` 파일 합 — 스캔 규칙과 동일).
+    """
+    removed = 0
+    out_root, fail_root, log_root = _out_and_siblings(root, product)
+    for scan_root in (out_root, fail_root):
+        for stem_dir in _match_stem_dirs(scan_root, stem):
+            removed += sum(
+                1
+                for f in stem_dir.iterdir()
+                if f.is_file() and "_test" in f.name.lower()
+            )
+            rmtree_force(stem_dir)
+    for stem_dir in _match_stem_dirs(log_root, stem):
+        rmtree_force(stem_dir)
+    return removed
 
 
 def _scan_stem_dir(scan_root: Path | None, product_root: Path) -> dict[str, list[str]]:
