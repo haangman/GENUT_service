@@ -1,6 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { cancelJob } from '../../api/jobs'
+import { cancelJob, deleteJob } from '../../api/jobs'
+import { ApiError } from '../../lib/apiClient'
 import { useLang } from '../../lib/i18n'
 import type { Job } from '../../types/api'
 import { JobLogs } from './JobLogs'
@@ -19,6 +20,9 @@ const RENDER_CHUNK = 200
 
 const cell = 'whitespace-nowrap px-3 py-2.5 text-muted'
 
+// 삭제 가능한 종결 상태 — 실행/대기 중 job은 워커·스케줄러 소유라 삭제 불가(서버도 409)
+const TERMINAL_STATUSES = new Set(['done', 'failed', 'canceled', 'interrupted'])
+
 // 행 1개 — memo로 감싸 로그 토글(selected)·1초 틱이 관련 행만 다시 그리게 한다.
 // (React Query의 structural sharing이 변하지 않은 job 객체 참조를 유지해 준다)
 const JobRow = memo(function JobRow({
@@ -27,18 +31,22 @@ const JobRow = memo(function JobRow({
   showProduct,
   selected,
   canceling,
+  deleting,
   runningTick,
   onToggle,
   onCancel,
+  onDelete,
 }: {
   job: Job
   showKind: boolean
   showProduct: boolean
   selected: boolean
   canceling: boolean
+  deleting: boolean
   runningTick: number // 실행 중 행만 1초마다 변해 경과 시간을 갱신한다(그 외 행은 0 고정)
   onToggle: (jobId: number) => void
   onCancel: (jobId: number) => void
+  onDelete: (jobId: number) => void
 }) {
   void runningTick // 값은 리렌더 트리거로만 쓰인다
   const { t } = useLang()
@@ -90,6 +98,19 @@ const JobRow = memo(function JobRow({
             }}
           >
             {canceling ? t('종료 중…') : t('강제 종료')}
+          </button>
+        ) : TERMINAL_STATUSES.has(job.status) ? (
+          // 종결 job은 이력에서 영구 삭제할 수 있다(이벤트·로그 포함)
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={deleting}
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(job.id)
+            }}
+          >
+            {deleting ? t('삭제 중…') : t('삭제')}
           </button>
         ) : null}
       </td>
@@ -143,6 +164,39 @@ export function JobTable({
     },
     [cancelMutate],
   )
+
+  // 종결 job 삭제 — 이벤트·로그 파일까지 영구 삭제(서버 DELETE /jobs/{id})
+  const [deleting, setDeleting] = useState<Set<number>>(new Set())
+  const deleteMut = useMutation({
+    mutationFn: (jobId: number) => deleteJob(jobId),
+    onSuccess: (_data, jobId) => {
+      // 삭제한 job의 로그 패널이 열려 있었다면 닫는다
+      setSelectedJobId((current) => (current === jobId ? null : current))
+    },
+    onError: (error) => {
+      const detail =
+        error instanceof ApiError ? (error.body as { detail?: string } | null)?.detail : undefined
+      window.alert(detail ? t(detail) : t('삭제에 실패했습니다.'))
+    },
+    onSettled: (_data, _error, jobId) => {
+      setDeleting((prev) => {
+        const next = new Set(prev)
+        next.delete(jobId)
+        return next
+      })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+  const { mutate: deleteMutate } = deleteMut
+  const requestDelete = useCallback(
+    (jobId: number) => {
+      if (!window.confirm(t('job #{id}을 삭제할까요? 로그도 함께 삭제됩니다.', { id: jobId })))
+        return
+      setDeleting((prev) => new Set(prev).add(jobId))
+      deleteMutate(jobId)
+    },
+    [deleteMutate, t],
+  )
   const toggleSelected = useCallback((jobId: number) => {
     setSelectedJobId((current) => (current === jobId ? null : jobId))
   }, [])
@@ -195,9 +249,11 @@ export function JobTable({
                 showProduct={showProduct}
                 selected={selectedJobId === job.id}
                 canceling={canceling.has(job.id)}
+                deleting={deleting.has(job.id)}
                 runningTick={job.started_at && !job.finished_at ? tick : 0}
                 onToggle={toggleSelected}
                 onCancel={requestCancel}
+                onDelete={requestDelete}
               />
               {selectedJobId === job.id ? (
                 <tr className="bg-surface-2">

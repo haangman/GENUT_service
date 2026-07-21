@@ -101,6 +101,11 @@ const EN: Record<string, string> = {
   '총 수행 시간': 'Duration',
   '강제 종료': 'Force kill',
   '종료 중…': 'Killing…',
+  '삭제 중…': 'Deleting…',
+  'job #{id}을 삭제할까요? 로그도 함께 삭제됩니다.':
+    'Delete job #{id}? Its logs will be deleted as well.',
+  '완료된 job만 삭제할 수 있다 — 실행 중이면 먼저 강제 종료하세요':
+    'Only finished jobs can be deleted — force-kill a running job first',
   '진행 중': 'running',
   'job 이력이 없습니다.': 'No job history.',
   '더 보기 ({visible}/{total})': 'Show more ({visible}/{total})',

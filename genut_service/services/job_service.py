@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
+from pathlib import Path
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.db.models import Job, JobEvent, Product
-from genut_service.enums import JobOrigin, JobStatus
+from genut_service.enums import TERMINAL_STATUSES, JobOrigin, JobStatus
 from genut_service.services import compile_db_service
 
 
@@ -67,6 +72,40 @@ def rerun_job(session: Session, job_id: int) -> Job | None:
     session.commit()
     session.refresh(job)
     return job
+
+
+def delete_job(session: Session, job_id: int) -> str:
+    """종결(terminal) job을 이벤트·워크스페이스 로그와 함께 영구 삭제한다.
+
+    반환: "deleted" | "not_found" | "in_flight". 실행 중/대기 중 job은 워커·스케줄러가
+    소유하므로 삭제하지 않는다(호출부가 409로 매핑 — 강제 종료 후 삭제하는 흐름).
+    """
+    job = session.get(Job, job_id)
+    if job is None:
+        return "not_found"
+    if job.status not in TERMINAL_STATUSES:
+        return "in_flight"
+    session.delete(job)  # job_events는 cascade로 함께 삭제된다
+    session.commit()
+    # 워크스페이스 잔여 폴더(job.log, 임시 clone 잔재 등) 정리 — 실패해도 삭제 자체는 유효
+    _rmtree_force(workspace.job_log_path(job_id).parent)
+    return "deleted"
+
+
+def _rmtree_force(root: Path) -> None:
+    """읽기 전용 파일(Windows의 git 객체 등)도 지우는 관용 rmtree (worker 정리와 동일 패턴)."""
+
+    def _grant_write(func, path, _exc):  # noqa: ANN001
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass
+
+    try:
+        shutil.rmtree(root, onexc=_grant_write)
+    except OSError:
+        pass
 
 
 def get_job(session: Session, job_id: int) -> Job | None:

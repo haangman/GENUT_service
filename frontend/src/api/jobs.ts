@@ -71,3 +71,8 @@ export function cancelJob(id: number): Promise<Job> {
 export function rerunJob(id: number): Promise<Job> {
   return apiFetch<Job>(`/jobs/${id}/rerun`, { method: 'POST' })
 }
+
+// 종결된 job을 이벤트·로그 파일과 함께 영구 삭제한다(실행/대기 중이면 409).
+export function deleteJob(id: number): Promise<void> {
+  return apiFetch<void>(`/jobs/${id}`, { method: 'DELETE' })
+}

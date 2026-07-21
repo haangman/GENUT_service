@@ -85,6 +85,22 @@ def get_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
     return JobRead.model_validate(job)
 
 
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(job_id: int, session: Session = Depends(get_session)) -> None:
+    """종결된 job을 이벤트·로그 파일과 함께 영구 삭제한다.
+
+    실행 중/대기 중 job은 409 — 실행 중이면 먼저 강제 종료 후 삭제한다.
+    """
+    result = job_service.delete_job(session, job_id)
+    if result == "not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job을 찾을 수 없다")
+    if result == "in_flight":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "완료된 job만 삭제할 수 있다 — 실행 중이면 먼저 강제 종료하세요",
+        )
+
+
 @router.post("/{job_id}/cancel", response_model=JobRead)
 def cancel_job(job_id: int, session: Session = Depends(get_session)) -> JobRead:
     """실행 중인 job을 강제 종료한다. 워커가 곧 상태를 canceled로 마무리한다."""
