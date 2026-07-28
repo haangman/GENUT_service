@@ -188,9 +188,10 @@ export function TestStatusPage() {
     refetchSummary()
   }
   const fileDeleteMut = useMutation({
-    // 합산 화면이라 한 파일이 여러 프로덕트에 있을 수 있다 — 출처 전체에서 지운다
+    // 합산 화면이라 한 파일이 여러 프로덕트에 있을 수 있다 — 출처 전체에서 지운다.
+    // 화면이 아는 로그 경로(log_path)도 함께 보내 대응 로그를 확정 삭제한다.
     mutationFn: async (tf: TestFileInfo) => {
-      for (const code of tf.product_codes) await deleteTestFile(code, tf.path)
+      for (const code of tf.product_codes) await deleteTestFile(code, tf.path, tf.log_path)
     },
     onSuccess: afterDelete,
     onError: alertDeleteError,

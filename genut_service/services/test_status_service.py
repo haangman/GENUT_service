@@ -170,29 +170,46 @@ def _rmdir_if_empty(path: Path) -> None:
         pass
 
 
-def delete_test_file(root: Path, product: Product, rel: str) -> str:
+def delete_test_file(
+    root: Path, product: Product, rel: str, log_rel: str | None = None
+) -> str:
     """허용 루트(out·_Fail·_debug_log) 안의 테스트/로그 파일 1개를 영구 삭제한다.
 
-    대응 debug 로그(같은 stem 폴더의 `<파일명 확장자→.log>`)도 best-effort로 함께
-    지우고, 비게 된 stem 폴더는 정리한다.
-    반환: "deleted" | "invalid"(`..` 등 경로 위반 — 400용) | "not_found"(허용 루트 밖
-    또는 파일 없음 — 404용). 뷰어(GET /file)와 동일한 경로 경계를 쓴다.
+    로그 삭제는 2중이다: ① log_rel이 주어지면(현황 화면이 아는 정확한 log_path)
+    그 파일을 확정 삭제하고, ② 이름 규칙(<파일명 확장자→.log>, 대소문자 무시)으로도
+    best-effort 정리한다 — 규칙과 다른 이름의 로그도 화면 기준으로 함께 지워진다.
+    비게 된 stem 폴더는 정리한다.
+    반환: "deleted" | "invalid"(`..` 등 경로 위반 — 400용, log_rel 위반 포함) |
+    "not_found"(허용 루트 밖 또는 파일 없음 — 404용). 뷰어(GET /file)와 동일한 경계.
     """
+    roots = allowed_roots(root, product)
+
+    def _resolve_in_roots(value: str) -> Path | None:
+        """허용 루트 안의 resolve된 경로. 경로 위반/루트 밖이면 None."""
+        candidate = (root / normalize_rel_path(value)).resolve()
+        if any(candidate == base or candidate.is_relative_to(base) for base in roots):
+            return candidate
+        return None
+
     try:
-        rel_norm = normalize_rel_path(rel)
+        target = _resolve_in_roots(rel)
+        log_target = _resolve_in_roots(log_rel) if log_rel else None
+        if log_rel and log_target is None:
+            return "invalid"  # 명시된 로그 경로가 경계 밖 — 아무것도 지우지 않는다
     except PathValidationError:
         return "invalid"
-    target = (root / rel_norm).resolve()
-    roots = allowed_roots(root, product)
-    if not any(target == base or target.is_relative_to(base) for base in roots):
+    if target is None or not target.is_file():
         return "not_found"
-    if not target.is_file():
-        return "not_found"
+
     stem_dir = target.parent
     log_name = f"{target.stem}.log".lower()
     target.unlink()
     _rmdir_if_empty(stem_dir)
-    # 대응 debug 로그 best-effort 정리(스캔과 동일하게 폴더/파일명 대소문자 무시)
+    # ① 화면이 아는 정확한 로그 경로 확정 삭제
+    if log_target is not None and log_target.is_file():
+        log_target.unlink()
+        _rmdir_if_empty(log_target.parent)
+    # ② 이름 규칙 기반 best-effort 정리(스캔과 동일 규칙 — log_rel 미지정 호출 대비)
     _, _, log_root = _out_and_siblings(root, product)
     for log_dir in _match_stem_dirs(log_root, stem_dir.name):
         for entry in list(log_dir.iterdir()):

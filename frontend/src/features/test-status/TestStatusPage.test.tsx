@@ -199,7 +199,7 @@ describe('TestStatusPage', () => {
           name: 'calc_Test_0.cpp',
           path: 'out/calc/calc_Test_0.cpp',
           product_codes: ['AA-1', 'AA-2'],
-          log_path: null,
+          log_path: 'out_debug_log/calc/calc_Test_0.log',
           case_count: 3,
         },
       ],
@@ -229,13 +229,17 @@ describe('TestStatusPage', () => {
   ]
 
   it('deletes a single test file from every source product via the L3 delete button', async () => {
-    const deleted: { code: string | null; path: string | null }[] = []
+    const deleted: { code: string | null; path: string | null; log: string | null }[] = []
     server.use(
       http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
       http.get('/api/test-status/detail', () => HttpResponse.json(DETAIL)),
       http.delete('/api/test-status/file', ({ request }) => {
         const url = new URL(request.url)
-        deleted.push({ code: url.searchParams.get('code'), path: url.searchParams.get('path') })
+        deleted.push({
+          code: url.searchParams.get('code'),
+          path: url.searchParams.get('path'),
+          log: url.searchParams.get('log_path'),
+        })
         return new HttpResponse(null, { status: 204 })
       }),
     )
@@ -249,8 +253,8 @@ describe('TestStatusPage', () => {
     await userEvent.click(rows[0].querySelector('button:not([disabled])') as HTMLElement)
     await waitFor(() =>
       expect(deleted).toEqual([
-        { code: 'AA-1', path: 'out/calc/calc_Test_0.cpp' },
-        { code: 'AA-2', path: 'out/calc/calc_Test_0.cpp' },
+        { code: 'AA-1', path: 'out/calc/calc_Test_0.cpp', log: 'out_debug_log/calc/calc_Test_0.log' },
+        { code: 'AA-2', path: 'out/calc/calc_Test_0.cpp', log: 'out_debug_log/calc/calc_Test_0.log' },
       ]),
     )
   })

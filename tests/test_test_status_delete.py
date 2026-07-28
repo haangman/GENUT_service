@@ -63,6 +63,49 @@ def test_delete_single_test_file_with_its_log(
     assert (root / "tests/generated_Fail/aaa/aaa_bad_Test.cpp").is_file()
 
 
+def test_delete_file_removes_exact_log_path_param(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    """UI가 아는 log_path를 함께 보내면 이름 규칙과 무관하게 그 로그를 확정 삭제한다."""
+    _, root = _make_product(db_session, tmp_path, code="S-LOG")
+    # 휴리스틱(<테스트 파일명>.log)으로는 못 찾는 비표준 이름의 로그
+    odd_log = root / "tests" / "generated_debug_log" / "aaa" / "aaa_Test.cpp.build.log"
+    odd_log.write_text("log", encoding="utf-8")
+
+    resp = client.delete(
+        "/api/test-status/file",
+        params={
+            "code": "S-LOG",
+            "path": "tests/generated/aaa/aaa_Test.cpp",
+            "log_path": "tests/generated_debug_log/aaa/aaa_Test.cpp.build.log",
+        },
+    )
+    assert resp.status_code == 204, resp.text
+    assert not (root / "tests/generated/aaa/aaa_Test.cpp").exists()
+    assert not odd_log.exists()
+
+
+def test_delete_file_rejects_log_path_outside_roots(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    """log_path도 허용 루트 검증을 통과해야 한다 — 위반 시 아무것도 지우지 않는다."""
+    _, root = _make_product(db_session, tmp_path, code="S-LOG2")
+    (root / "src").mkdir()
+    (root / "src" / "mod.cpp").write_text("// src", encoding="utf-8")
+
+    resp = client.delete(
+        "/api/test-status/file",
+        params={
+            "code": "S-LOG2",
+            "path": "tests/generated/aaa/aaa_Test.cpp",
+            "log_path": "src/mod.cpp",
+        },
+    )
+    assert resp.status_code == 400
+    assert (root / "tests/generated/aaa/aaa_Test.cpp").is_file()  # 본 파일도 안 지워짐
+    assert (root / "src" / "mod.cpp").is_file()
+
+
 def test_delete_failed_test_file(client: TestClient, db_session: Session, tmp_path: Path) -> None:
     _, root = _make_product(db_session, tmp_path, code="S-2")
     resp = client.delete(

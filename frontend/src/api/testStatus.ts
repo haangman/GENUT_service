@@ -20,8 +20,12 @@ export function getTestFileContent(code: string, path: string): Promise<FileCont
 }
 
 // 테스트/실패 테스트 파일 1개를 영구 삭제한다(대응 debug 로그 포함). 실행 중 job 충돌은 409.
-export function deleteTestFile(code: string, path: string): Promise<void> {
-  return apiFetch<void>('/test-status/file', { method: 'DELETE', query: { code, path } })
+// logPath(화면이 아는 대응 로그 경로)를 주면 이름 규칙과 무관하게 그 로그를 확정 삭제한다.
+export function deleteTestFile(code: string, path: string, logPath?: string | null): Promise<void> {
+  return apiFetch<void>('/test-status/file', {
+    method: 'DELETE',
+    query: { code, path, log_path: logPath ?? undefined },
+  })
 }
 
 // 대상 파일의 테스트 전체(성공·실패·로그 폴더)를 (project, name) 그룹의 모든 프로덕트에서 삭제.

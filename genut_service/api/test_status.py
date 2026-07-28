@@ -196,11 +196,13 @@ def _invalidate_after_delete(session: Session, project: str, name: str) -> None:
 def delete_test_file(
     code: str = Query(...),
     path: str = Query(...),
+    log_path: str | None = Query(None),
     session: Session = Depends(get_session),
 ) -> None:
     """테스트/실패 테스트/로그 파일 1개를 영구 삭제한다(뷰어 GET /file과 동일한 경로 경계).
 
-    대응 debug 로그도 함께 정리한다. 같은 체크아웃에서 job 실행 중이면 409.
+    log_path(현황 화면이 아는 대응 로그)를 주면 그 파일을 확정 삭제하고, 이름 규칙
+    기반 로그 정리도 병행한다. 같은 체크아웃에서 job 실행 중이면 409.
     """
     product = session.scalars(
         select(Product).where(Product.product_code == code)
@@ -214,7 +216,7 @@ def delete_test_file(
         raise_if_code_path_busy(session, root)
     except CodePathBusyError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    result = test_status_service.delete_test_file(root, product, path)
+    result = test_status_service.delete_test_file(root, product, path, log_rel=log_path)
     if result == "invalid":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "허용되지 않는 경로다")
     if result == "not_found":
