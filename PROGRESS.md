@@ -561,3 +561,15 @@ repo ref 오입력(오타·`origin/` 접두)이 조용히 기본 브랜치 최�
 적용: GENUT `repo_ref`(생성/수정) · 프로덕트 `git_ref`(생성/수정) · `PullCodeRequest`.
 빈 입력("")의 기존 의미(기본값/업스트림 추적)는 유지. 테스트: 백엔드 376 passed
 (+9 — 정규화 6형태·접두만 422·GENUT/프로덕트 API 왕복).
+
+---
+
+## 29. API 등록 가이드 문서 (2026-07-28)
+
+프로덕트/GENUT 등록은 처음부터 API-first(웹 UI가 같은 API 사용)였으나 사용법 문서가
+없었다. `doc/api-registration.md` 추가 — GENUT 생성/부분 수정(credential write-only
+의미) · 프로덕트 생성/수정(필드 표: git_update_mode, exclude_globs, patches 등) ·
+자동 실행 전용 엔드포인트(`/products/auto`, `/{id}/auto`, `/{id}/auto/run` 즉시 실행,
+auto 접두·code_path 필수·kunit 스캐폴딩 제외) · job 제출 · 대량 등록 Python 예시 ·
+오류 코드 표 · PowerShell/한글 인코딩 주의(확인 결과 JSON 본문 BOM은 서버가 허용 —
+문서에 정확히 반영). Swagger(`/docs`)와 병행 안내.
