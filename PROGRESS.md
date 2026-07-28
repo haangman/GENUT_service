@@ -550,3 +550,14 @@ repo ref 오입력(오타·`origin/` 접두)이 조용히 기본 브랜치 최�
   영속 갱신에서만 미해석이므로 그 시점에 실패로 드러난다.
 - 테스트: 백엔드 367 passed(+6 — clone 거부/정상, ensure 미해석 2형태(체크아웃 불변),
   fetch 관용 유지, tree 400; workspace 격리 픽스처).
+
+---
+
+## 28. git ref 입력 정규화 (2026-07-28)
+
+§27(조용한 폴백 제거)의 짝: 등록 시점에 흔한 실수를 흡수한다. `schemas/common.py`의
+`normalize_git_ref` — 공백 제거 + `refs/remotes/origin/`·`refs/heads/`·`origin/` 접두
+1회 제거(슬래시 브랜치명 `release/1.0` 보존), 접두만 있고 이름이 비면 422.
+적용: GENUT `repo_ref`(생성/수정) · 프로덕트 `git_ref`(생성/수정) · `PullCodeRequest`.
+빈 입력("")의 기존 의미(기본값/업스트림 추적)는 유지. 테스트: 백엔드 376 passed
+(+9 — 정규화 6형태·접두만 422·GENUT/프로덕트 API 왕복).
