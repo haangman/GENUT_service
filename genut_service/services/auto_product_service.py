@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.db.models import Product
+from genut_service.enums import TestGenerationMode
 from genut_service.paths import normalize_rel_path
 from genut_service.schemas.product import ProductCreate, ProductUpdate
 from genut_service.services import product_service
@@ -118,7 +119,13 @@ def update_auto_product(
 
 
 def _scaffold(product: Product) -> None:
-    """프로덕트의 체크아웃에 out_tests 폴더/CMakeLists를 생성·갱신한다."""
+    """프로덕트의 체크아웃에 out_tests 폴더/CMakeLists를 생성·갱신한다.
+
+    kunit은 gtest용 CMakeLists 스캐폴딩을 쓰지 않으므로(커널 빌드는 CMake 무관,
+    폼도 양식 편집기를 숨김) 아무것도 만들지 않는다.
+    """
+    if product.test_generation_mode == TestGenerationMode.KUNIT.value:
+        return
     root = workspace.ensure_product_checkout(product)
     write_scaffolding(
         root, product.out_tests_rel, list(product.auto_file_list or []), product.cmake_template or ""

@@ -103,6 +103,46 @@ def test_create_auto_product_api_creates_product_and_scaffolding(
     )
 
 
+def test_create_auto_kunit_product_skips_cmake_scaffolding(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """kunit은 gtest용 CMakeLists 스캐폴딩을 쓰지 않는다 — 저장 시 아무 파일도 만들지 않는다."""
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+
+    resp = client.post(
+        "/api/products/auto", json=_auto_payload(root, test_generation_mode="kunit")
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["test_generation_mode"] == "kunit"
+    # 커널 체크아웃에 gtest용 CMakeLists/stem 폴더가 생기지 않는다
+    assert not (root / "UnitTest").exists()
+
+
+def test_update_auto_product_to_kunit_skips_rescaffolding(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cpp로 만들었다가 kunit으로 수정하면 이후 저장은 스캐폴딩을 다시 만들지 않는다."""
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "ensure_product_checkout", lambda product: root)
+
+    created = client.post("/api/products/auto", json=_auto_payload(root))
+    assert created.status_code == 201, created.text
+    product_id = created.json()["id"]
+    # cpp 저장으로 생긴 기존 스캐폴딩을 치우고 kunit으로 수정
+    import shutil
+
+    shutil.rmtree(root / "UnitTest")
+    resp = client.put(
+        f"/api/products/{product_id}/auto",
+        json=_auto_payload(root, test_generation_mode="kunit"),
+    )
+    assert resp.status_code == 200, resp.text
+    assert not (root / "UnitTest").exists()
+
+
 def test_create_auto_product_requires_auto_prefix(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
