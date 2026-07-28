@@ -97,6 +97,71 @@ def test_ensure_checkout_tolerates_fetch_failure(origin: Path, tmp_path: Path) -
     assert (dest / "marker.txt").read_text(encoding="utf-8").strip() == "MAIN"
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("origin/feature", "feature"),
+        ("refs/heads/feature", "feature"),
+        ("refs/remotes/origin/feature", "feature"),
+        ("  main  ", "main"),
+        ("feature", "feature"),
+        ("origin/release/1.0", "release/1.0"),  # 접두 1회만 제거 — 슬래시 브랜치명 보존
+    ],
+)
+def test_normalize_git_ref(raw: str, expected: str) -> None:
+    from genut_service.schemas.common import normalize_git_ref
+
+    assert normalize_git_ref(raw) == expected
+
+
+def test_normalize_git_ref_rejects_prefix_only() -> None:
+    from genut_service.schemas.common import normalize_git_ref
+
+    with pytest.raises(ValueError):
+        normalize_git_ref("origin/")
+
+
+def test_genut_api_normalizes_repo_ref(client: TestClient) -> None:
+    """GENUT 등록/수정 시 `origin/`·`refs/heads/` 접두가 자동 제거되어 저장된다."""
+    resp = client.post(
+        "/api/genuts",
+        json={
+            "name": "norm-genut",
+            "repo_url": "u",
+            "repo_ref": "origin/feature",
+            "ds_assist_credential_key": "k",
+            "ds_assist_send_system_name": "s",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["repo_ref"] == "feature"
+
+    genut_id = resp.json()["id"]
+    upd = client.put(f"/api/genuts/{genut_id}", json={"repo_ref": "refs/heads/dev"})
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["repo_ref"] == "dev"
+
+
+def test_product_api_normalizes_git_ref(client: TestClient) -> None:
+    resp = client.post(
+        "/api/products",
+        json={
+            "name": "norm-prod",
+            "product_code": "NP-1",
+            "git_url": "u",
+            "git_ref": " origin/main ",
+            "compile_db_rel": "build",
+            "out_tests_rel": "tests",
+            "cmake_configure_cmd": "c",
+            "cmake_build_cmd": "b",
+            "test_run_cmd": "r",
+            "test_generation_mode": "cpp",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["git_ref"] == "main"
+
+
 def test_tree_api_returns_400_for_bad_ref(
     client: TestClient, db_session: Session, origin: Path
 ) -> None:

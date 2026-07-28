@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from genut_service.enums import GitUpdateMode, Project, TestGenerationMode
 from genut_service.paths import normalize_code_path, normalize_rel_path
+from genut_service.schemas.common import normalize_git_ref
 
 
 def _norm_code_path(value: str | None) -> str | None:
@@ -72,6 +73,11 @@ class ProductBase(BaseModel):
     def _clean_globs(cls, value: list[str]) -> list[str]:
         return [g.strip() for g in value if g and g.strip()]
 
+    @field_validator("git_ref")
+    @classmethod
+    def _normalize_git_ref(cls, value: str) -> str:
+        return normalize_git_ref(value)
+
 
 class ProductCreate(ProductBase):
     patches: list[PatchIn] = []
@@ -115,6 +121,11 @@ class ProductUpdate(BaseModel):
     @classmethod
     def _clean_globs(cls, value: list[str] | None) -> list[str] | None:
         return None if value is None else [g.strip() for g in value if g and g.strip()]
+
+    @field_validator("git_ref")
+    @classmethod
+    def _normalize_git_ref(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_git_ref(value)
 
 
 class ProductRead(ProductBase):
@@ -161,6 +172,11 @@ class PullCodeRequest(BaseModel):
         if value is None or not value.strip():
             return None
         return normalize_rel_path(value)
+
+    @field_validator("git_ref")
+    @classmethod
+    def _normalize_git_ref(cls, value: str) -> str:
+        return normalize_git_ref(value)
 
 
 class PullCodeResponse(BaseModel):

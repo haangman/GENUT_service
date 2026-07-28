@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from genut_service.paths import normalize_code_path
+from genut_service.schemas.common import normalize_git_ref
 
 # GENUT가 사용할 LLM 모델 선택지 (.env의 LLM_MODEL 값)
 LlmModelName = Literal["gptOss", "SSCR_SE"]
@@ -49,6 +50,11 @@ class GenutBase(BaseModel):
     def _normalize_optional_text(cls, value: str | None) -> str | None:
         return _empty_to_none(value)
 
+    @field_validator("repo_ref")
+    @classmethod
+    def _normalize_repo_ref(cls, value: str) -> str:
+        return normalize_git_ref(value)
+
 
 class GenutCreate(GenutBase):
     ds_assist_credential_key: str
@@ -78,6 +84,11 @@ class GenutUpdate(BaseModel):
     @classmethod
     def _normalize_optional_text(cls, value: str | None) -> str | None:
         return _empty_to_none(value)
+
+    @field_validator("repo_ref")
+    @classmethod
+    def _normalize_repo_ref(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_git_ref(value)
 
 
 class GenutRead(GenutBase):
