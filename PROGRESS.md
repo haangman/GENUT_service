@@ -519,3 +519,15 @@ compile_commands.json+패턴만으로 계산된 순수 상태로 되돌린다(�
 - 테스트: 백엔드 359 passed(+10 — 개별/실패 파일/로그 동반 삭제·경로 검증·busy 409·
   그룹 합산·스냅샷 무효화·status 서버 405) · 프론트 115 passed(+3 — L3/L2 삭제·confirm
   거절).
+
+---
+
+## 26. kunit 자동 프로덕트의 CMakeLists 스캐폴딩 생략 (2026-07-28)
+
+자동 프로덕트 저장 시 테스트 모드와 무관하게 gtest용 CMakeLists(양식1/양식2)를
+생성하던 것을 수정 — **kunit이면 `_scaffold`가 아무것도 만들지 않는다**(커널 빌드는
+CMake 무관, 폼의 양식 편집기 숨김과 일치). kunit 자동 실행의 나머지 파이프라인
+(주기 감지·누락 스캔·함수 추출·GENUT job의 TEST_GENERATION_MODE=kunit 전달,
+현황의 KUNIT_CASE* 케이스 집계)은 기존대로 동일하게 동작한다. cpp→kunit 수정 시
+기존 스캐폴딩은 자동 제거하지 않는다(사용자 파일 삭제 회피 — 필요 시 수동 정리).
+테스트: 백엔드 361 passed(+2 — kunit 생성/수정 시 미생성).
