@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.api.deps import get_session
+from genut_service.runner.git_ops import GitError
 from genut_service.schemas.filetree import (
     CompileCheckRequest,
     CompileCheckResponse,
@@ -27,7 +28,10 @@ def get_tree(
     product = product_service.get_product(session, product_id)
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
-    root = workspace.ensure_product_checkout(product)
+    try:
+        root = workspace.ensure_product_checkout(product)
+    except GitError as exc:  # 최초 clone 실패(잘못된 URL/ref 등) — 원인을 그대로 노출
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     try:
         entries = filetree_service.list_dir(root, path)
     except (FileNotFoundError, ValueError):
@@ -44,7 +48,10 @@ def compile_check(
     product = product_service.get_product(session, product_id)
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
-    root = workspace.ensure_product_checkout(product)
+    try:
+        root = workspace.ensure_product_checkout(product)
+    except GitError as exc:  # 최초 clone 실패(잘못된 URL/ref 등) — 원인을 그대로 노출
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     included, excluded = compile_db_service.split_inclusion(
         root, product.compile_db_rel, body.files
     )

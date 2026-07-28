@@ -57,14 +57,22 @@ def clone(
     timeout: int = 300,
     on_start: Callable[[object], None] | None = None,
 ) -> None:
-    """src를 dest로 clone하고 가능하면 ref를 checkout한다(실패 시 기본 브랜치 유지)."""
+    """src를 dest로 clone하고 ref를 checkout한다.
+
+    ref가 지정됐는데 checkout이 실패하면 GitError를 올린다 — 과거에는 조용히 기본
+    브랜치를 유지해, 잘못된 ref(오타·`origin/` 접두 등)가 소리 없이 main 최신으로
+    대체되는 문제가 있었다(명확한 실패가 낫다).
+    """
     Path(dest).parent.mkdir(parents=True, exist_ok=True)
     _run_git(["clone", src, str(dest)], timeout=timeout, on_start=on_start)
     if ref:
         try:
             _run_git(["checkout", ref], cwd=str(dest), timeout=timeout, on_start=on_start)
-        except GitError:
-            pass
+        except GitError as exc:
+            raise GitError(
+                f"ref '{ref}'를 checkout할 수 없다 — 원격에 존재하는 브랜치/태그명인지 "
+                f"확인하세요(예: 'origin/' 접두 없이 브랜치명만): {exc}"
+            ) from exc
 
 
 def _backup_preserved(dest: Path, preserve: Iterable[str]) -> list[tuple[str, Path, bool]]:
@@ -147,9 +155,18 @@ def ensure_checkout(
                 and local["stdout"].strip() == remote["stdout"].strip()
             ):
                 return  # 이미 최신 — 갱신·preserve 백업/복원 생략
-            if strict and not remote["success"]:
+            if not remote["success"]:
                 detail = (remote.get("stderr") or remote.get("stdout") or "").strip()
-                raise GitError(f"git rev-parse {target} failed: {detail}")
+                # fetch는 성공했는데 origin/<ref>가 없음 = 네트워크가 아니라 설정 오류.
+                # 조용히 기존 체크아웃(기본 브랜치)으로 진행하면 잘못된 코드로 실행되므로
+                # ref가 지정된 경우 strict 여부와 무관하게 실패시킨다.
+                if ref:
+                    raise GitError(
+                        f"ref '{ref}'를 원격에서 찾을 수 없다 — 브랜치/태그명을 "
+                        f"확인하세요(예: 'origin/' 접두 없이) (rev-parse {target}: {detail})"
+                    )
+                if strict:
+                    raise GitError(f"git rev-parse {target} failed: {detail}")
             saved = _backup_preserved(dest, preserve)
             if update_mode == "rebase":
                 rebase = _git(
