@@ -531,3 +531,22 @@ CMake 무관, 폼의 양식 편집기 숨김과 일치). kunit 자동 실행의 
 현황의 KUNIT_CASE* 케이스 집계)은 기존대로 동일하게 동작한다. cpp→kunit 수정 시
 기존 스캐폴딩은 자동 제거하지 않는다(사용자 파일 삭제 회피 — 필요 시 수동 정리).
 테스트: 백엔드 361 passed(+2 — kunit 생성/수정 시 미생성).
+
+---
+
+## 27. 잘못된 git ref의 조용한 main 폴백 제거 (2026-07-28)
+
+repo ref 오입력(오타·`origin/` 접두)이 조용히 기본 브랜치 최신으로 대체되던 문제
+(§GENUT ref 진단)를 명확한 실패로 전환:
+
+- **clone**: ref 지정 시 checkout 실패 → GitError("ref '<값>'를 checkout할 수 없다…").
+  과거 "실패 시 기본 브랜치 유지" 관용 제거.
+- **ensure_checkout**: fetch 성공 + `origin/<ref>` 미해석 = 설정 오류 → strict 여부와
+  무관하게 GitError("ref '<값>'를 원격에서 찾을 수 없다…"). **fetch 실패(네트워크)는
+  기존 관용 유지**(기존 체크아웃으로 진행). job은 FAILED + 원인, 자동 주기 준비 job도
+  동일하게 표면화.
+- 요청 페이지 최초 clone(tree/compile-check)의 GitError는 500 대신 **400 + 원인**.
+- 참고: 임시 clone에서 `origin/feature` 형태는 detached checkout으로 성공(내용 동일) —
+  영속 갱신에서만 미해석이므로 그 시점에 실패로 드러난다.
+- 테스트: 백엔드 367 passed(+6 — clone 거부/정상, ensure 미해석 2형태(체크아웃 불변),
+  fetch 관용 유지, tree 400; workspace 격리 픽스처).
