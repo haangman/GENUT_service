@@ -586,3 +586,21 @@ log_path도 동일한 허용 루트 검증을 통과해야 하며 위반 시 아
 규칙 기반 정리는 log_path 미지정 API 호출 대비 폴백으로 유지. 테스트: 백엔드 378
 passed(+2 — 비표준 이름 로그 확정 삭제·경계 밖 log_path 400) · 프론트 115 passed
 (L3 삭제 요청에 log_path 포함 검증).
+
+---
+
+## 31. 프로덕트 단위 job 일괄 중지·종결 일괄 삭제 (2026-07-30)
+
+- **`POST /api/products/{id}/jobs/cancel-all`**: 미종결 job 전부 중지 — 대기(queued)는
+  조건부 일괄 UPDATE로 즉시 canceled 확정(오류란 "일괄 취소", claim과 경합해도 이중
+  처리 없음·**대기 job 취소가 처음 열림**), 실행 중은 기존 process_registry 취소
+  (확정은 워커 — 단일 소유자·락 무접촉). GENUT+준비 job 모두 대상.
+  응답 `{canceled_queued, canceling_running}`.
+- **`DELETE /api/products/{id}/jobs/finished`**: 종결 job 전부를 이벤트(cascade)·로그
+  폴더(rmtree_force)와 함께 삭제, `{deleted: n}` 반환.
+- 프론트: 자동 실행 이력 그룹 헤더에 `전체 중지`·`종료 job 삭제` 버튼(confirm + 결과
+  요약 알림, 2초 폴링으로 상태 반영). 수동 이력 페이지는 미적용(사용자 확정 범위).
+- 부수: ProductPicker findByRole 타임아웃 5s로 견고화(전체 스위트 병렬 부하 플레이크).
+- 테스트: 백엔드 384 passed(+6 — queued 확정/running 플래그·타 프로덕트 무영향·취소분
+  claim 미대상·종결만 삭제·404 2종) · 프론트 118 passed(+3 — 두 버튼 confirm/호출/알림·
+  거절 시 미호출).
