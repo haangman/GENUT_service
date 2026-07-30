@@ -30,7 +30,10 @@ describe('ProductPicker', () => {
 
     renderWithProviders(<ProductPicker />)
     // 같은 이름(AA)이지만 "이름(프로덕트 코드)"로 구분되어 두 옵션이 모두 표시된다
-    expect(await screen.findByRole('option', { name: 'AA(aa_0)' })).toBeInTheDocument()
+    // (전체 스위트 병렬 실행 시 워커 부하로 기본 1초를 넘길 수 있어 타임아웃을 늘린다)
+    expect(
+      await screen.findByRole('option', { name: 'AA(aa_0)' }, { timeout: 5000 }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'AA(aa_1)' })).toBeInTheDocument()
   })
 
@@ -51,7 +54,9 @@ describe('ProductPicker', () => {
 
     renderWithProviders(<ProductPicker />)
     // 기본 프로젝트(Ulysses)의 프로덕트만 노출된다
-    expect(await screen.findByRole('option', { name: 'AA(aa_u)' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('option', { name: 'AA(aa_u)' }, { timeout: 5000 }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'AA(aa_t)' })).not.toBeInTheDocument()
 
     // 프로덕트를 고른 뒤 프로젝트를 바꾸면 목록이 전환되고 선택이 리셋된다

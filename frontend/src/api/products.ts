@@ -29,6 +29,19 @@ export function runAutoNow(id: number): Promise<Job[]> {
   return apiFetch<Job[]>(`/products/${id}/auto/run`, { method: 'POST' })
 }
 
+// 프로덕트의 대기·실행 중 job(준비 job 포함) 일괄 중지 — 대기는 즉시 canceled,
+// 실행 중은 강제 종료 요청(워커가 곧 canceled로 확정).
+export function cancelAllProductJobs(
+  id: number,
+): Promise<{ canceled_queued: number; canceling_running: number }> {
+  return apiFetch(`/products/${id}/jobs/cancel-all`, { method: 'POST' })
+}
+
+// 프로덕트의 종결(done/failed/canceled/interrupted) job 전부 삭제(이벤트·로그 포함).
+export function deleteFinishedProductJobs(id: number): Promise<{ deleted: number }> {
+  return apiFetch(`/products/${id}/jobs/finished`, { method: 'DELETE' })
+}
+
 // 폼 단계 대상 파일 미리보기(로컬 code_path의 compile_commands.json + 기본 필터).
 export function previewTargetFiles(body: {
   code_path: string

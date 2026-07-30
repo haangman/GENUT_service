@@ -33,6 +33,7 @@ from genut_service.services import (
     command_run_service,
     compile_db_service,
     gerrit_patch_service,
+    job_service,
     product_service,
     test_status_service,
 )
@@ -216,6 +217,31 @@ def update_product(
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
     return ProductRead.model_validate(product)
+
+
+@router.post("/{product_id}/jobs/cancel-all")
+def cancel_all_product_jobs(
+    product_id: int, session: Session = Depends(get_session)
+) -> dict[str, int]:
+    """프로덕트의 대기·실행 중 job(준비 job 포함)을 일괄 중지한다.
+
+    대기 job은 즉시 canceled로 확정되고, 실행 중 job은 강제 종료가 요청되어
+    워커가 곧 canceled로 마무리한다.
+    """
+    if product_service.get_product(session, product_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    canceled_queued, canceling_running = job_service.cancel_all_jobs(session, product_id)
+    return {"canceled_queued": canceled_queued, "canceling_running": canceling_running}
+
+
+@router.delete("/{product_id}/jobs/finished")
+def delete_finished_product_jobs(
+    product_id: int, session: Session = Depends(get_session)
+) -> dict[str, int]:
+    """프로덕트의 종결(done/failed/canceled/interrupted) job을 이벤트·로그와 함께 전부 삭제한다."""
+    if product_service.get_product(session, product_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+    return {"deleted": job_service.delete_finished_jobs(session, product_id)}
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

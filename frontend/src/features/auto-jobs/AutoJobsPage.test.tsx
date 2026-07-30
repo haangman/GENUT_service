@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/msw/server'
@@ -251,5 +251,69 @@ describe('AutoJobsPage', () => {
     await waitFor(() => expect(runPosted).toBe(true))
     // 실행 버튼 클릭이 그룹 토글을 건드리지 않는다(접힘 유지 → "외 N건 보기" 그대로)
     expect(screen.getByText(/외 3건 보기/)).toBeInTheDocument()
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('전체 중지 버튼: confirm 수락 시 cancel-all을 호출하고 결과를 알린다', async () => {
+    let called = false
+    server.use(
+      http.get('/api/jobs/auto-history', () =>
+        HttpResponse.json([group({ total: 3, jobs: [makeJob({ status: 'running', finished_at: null })] })]),
+      ),
+      http.post('/api/products/1/jobs/cancel-all', () => {
+        called = true
+        return HttpResponse.json({ canceled_queued: 2, canceling_running: 1 })
+      }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderWithProviders(<AutoJobsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '전체 중지' }))
+    await waitFor(() => expect(called).toBe(true))
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('대기 2건'))
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('실행 중 1건'))
+  })
+
+  it('종료 job 삭제 버튼: confirm 수락 시 finished 삭제를 호출하고 개수를 알린다', async () => {
+    let called = false
+    server.use(
+      http.get('/api/jobs/auto-history', () =>
+        HttpResponse.json([group({ total: 5, jobs: [makeJob()] })]),
+      ),
+      http.delete('/api/products/1/jobs/finished', () => {
+        called = true
+        return HttpResponse.json({ deleted: 5 })
+      }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderWithProviders(<AutoJobsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '종료 job 삭제' }))
+    await waitFor(() => expect(called).toBe(true))
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('5건'))
+  })
+
+  it('confirm 거절 시 어떤 일괄 API도 호출하지 않는다', async () => {
+    let called = false
+    server.use(
+      http.get('/api/jobs/auto-history', () => HttpResponse.json([group({ jobs: [makeJob()] })])),
+      http.post('/api/products/1/jobs/cancel-all', () => {
+        called = true
+        return HttpResponse.json({ canceled_queued: 0, canceling_running: 0 })
+      }),
+      http.delete('/api/products/1/jobs/finished', () => {
+        called = true
+        return HttpResponse.json({ deleted: 0 })
+      }),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderWithProviders(<AutoJobsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '전체 중지' }))
+    fireEvent.click(screen.getByRole('button', { name: '종료 job 삭제' }))
+    expect(called).toBe(false)
   })
 })

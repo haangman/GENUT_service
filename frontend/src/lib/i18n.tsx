@@ -134,6 +134,21 @@ const EN: Record<string, string> = {
   ' · 외 {count}건 보기': ' · view {count} more',
   '주기 {seconds}s': 'every {seconds}s',
   '▶ 지금 실행': '▶ Run now',
+  '전체 중지': 'Stop all',
+  '중지 중…': 'Stopping…',
+  '종료 job 삭제': 'Delete finished',
+  '이 프로덕트의 실행 중·대기 job(준비 job 포함)을 모두 중지한다':
+    'Stops every running and queued job of this product (including prep jobs)',
+  '이 프로덕트의 종료된 job을 이벤트·로그와 함께 전부 삭제한다':
+    'Deletes all finished jobs of this product together with their events and logs',
+  '{name}의 실행 중·대기 job을 모두 중지할까요?':
+    'Stop all running and queued jobs of {name}?',
+  '{name}의 종료된 job을 모두 삭제할까요? 로그도 함께 삭제됩니다.':
+    'Delete all finished jobs of {name}? Their logs will be deleted as well.',
+  '대기 {queued}건 취소, 실행 중 {running}건 중지 요청됨':
+    'Canceled {queued} queued, requested stop for {running} running',
+  '종료된 job {count}건을 삭제했습니다.': 'Deleted {count} finished jobs.',
+  '일괄 중지 요청에 실패했습니다.': 'Bulk stop request failed.',
   '요청 중…': 'Requesting…',
   '주기와 무관하게 지금 실행 (변경 감지 → 누락 테스트 스캔)':
     'Run now regardless of the interval (diff detection → missing-test scan)',

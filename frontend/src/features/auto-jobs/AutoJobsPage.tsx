@@ -4,7 +4,11 @@ import { PageHeader } from '../../components/PageHeader'
 import { Pagination } from '../../components/Pagination'
 import { ProjectSelect } from '../../components/ProjectSelect'
 import { listAutoHistory, listJobs } from '../../api/jobs'
-import { runAutoNow } from '../../api/products'
+import {
+  cancelAllProductJobs,
+  deleteFinishedProductJobs,
+  runAutoNow,
+} from '../../api/products'
 import { useLang } from '../../lib/i18n'
 import { DEFAULT_PROJECT } from '../../lib/projects'
 import type { AutoHistoryGroup, Project } from '../../types/api'
@@ -55,6 +59,51 @@ function AutoProductGroup({
     onError: () =>
       window.alert(t('실행 요청에 실패했습니다. 이미 진행 중인 자동 실행이 있는지 확인하세요.')),
   })
+
+  // 일괄 중지: 대기 job은 즉시 취소, 실행 중 job은 강제 종료 요청(워커가 확정)
+  const cancelAllMut = useMutation({
+    mutationFn: () => cancelAllProductJobs(group.product_id),
+    onSuccess: (res) => {
+      window.alert(
+        t('대기 {queued}건 취소, 실행 중 {running}건 중지 요청됨', {
+          queued: res.canceled_queued,
+          running: res.canceling_running,
+        }),
+      )
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+    onError: () => window.alert(t('일괄 중지 요청에 실패했습니다.')),
+  })
+  const requestCancelAll = () => {
+    if (
+      !window.confirm(
+        t('{name}의 실행 중·대기 job을 모두 중지할까요?', { name: group.product_name }),
+      )
+    )
+      return
+    cancelAllMut.mutate()
+  }
+
+  // 종결 job 일괄 삭제(이벤트·로그 포함 영구 삭제)
+  const deleteFinishedMut = useMutation({
+    mutationFn: () => deleteFinishedProductJobs(group.product_id),
+    onSuccess: (res) => {
+      window.alert(t('종료된 job {count}건을 삭제했습니다.', { count: res.deleted }))
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+    onError: () => window.alert(t('삭제에 실패했습니다.')),
+  })
+  const requestDeleteFinished = () => {
+    if (
+      !window.confirm(
+        t('{name}의 종료된 job을 모두 삭제할까요? 로그도 함께 삭제됩니다.', {
+          name: group.product_name,
+        }),
+      )
+    )
+      return
+    deleteFinishedMut.mutate()
+  }
   return (
     <section className="space-y-3">
       {/* 헤더: 토글(접기/펼치기) 버튼과 즉시 실행 버튼을 나란히 둔다(중첩 버튼 방지) */}
@@ -84,6 +133,24 @@ function AutoProductGroup({
           className="btn btn-primary btn-sm shrink-0"
         >
           {runMut.isPending ? t('요청 중…') : t('▶ 지금 실행')}
+        </button>
+        <button
+          type="button"
+          onClick={requestCancelAll}
+          disabled={cancelAllMut.isPending}
+          title={t('이 프로덕트의 실행 중·대기 job(준비 job 포함)을 모두 중지한다')}
+          className="btn btn-danger btn-sm shrink-0"
+        >
+          {cancelAllMut.isPending ? t('중지 중…') : t('전체 중지')}
+        </button>
+        <button
+          type="button"
+          onClick={requestDeleteFinished}
+          disabled={deleteFinishedMut.isPending}
+          title={t('이 프로덕트의 종료된 job을 이벤트·로그와 함께 전부 삭제한다')}
+          className="btn btn-sm shrink-0"
+        >
+          {deleteFinishedMut.isPending ? t('삭제 중…') : t('종료 job 삭제')}
         </button>
       </div>
       {/* 프로덕트별로 이미 그룹돼 있으므로 product 컬럼은 숨긴다 */}

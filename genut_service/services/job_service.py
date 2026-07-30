@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from datetime import datetime, timezone
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
@@ -68,6 +70,57 @@ def rerun_job(session: Session, job_id: int) -> Job | None:
     session.commit()
     session.refresh(job)
     return job
+
+
+def cancel_all_jobs(session: Session, product_id: int) -> tuple[int, int]:
+    """프로덕트의 미종결 job을 일괄 중지한다. 반환: (즉시 취소된 대기 수, 중지 요청된 실행 수).
+
+    대기(queued) job은 워커/락 소유자가 없으므로 **조건부 일괄 UPDATE**로 즉시
+    canceled 확정한다 — `status='queued'` 조건이라 스케줄러 claim과 경합해도 이중
+    처리가 없다(그 사이 running으로 넘어간 job은 아래 실행 중 처리로 잡힌다).
+    실행 중 job은 단건 강제 종료와 동일하게 process_registry에 취소를 걸기만 하고,
+    종료 확정(상태 전이·락 해제)은 그 job을 돌리는 워커가 수행한다(단일 소유자).
+    GENUT job과 준비 job(auto_diff/auto_scan) 모두 대상이다.
+    """
+    from genut_service.runner import process_registry
+
+    result = session.execute(
+        update(Job)
+        .where(Job.product_id == product_id, Job.status == JobStatus.QUEUED.value)
+        .values(
+            status=JobStatus.CANCELED.value,
+            finished_at=datetime.now(timezone.utc),
+            error="사용자에 의해 일괄 취소됨",
+        )
+    )
+    session.commit()
+    running_ids = list(
+        session.scalars(
+            select(Job.id).where(
+                Job.product_id == product_id, Job.status == JobStatus.RUNNING.value
+            )
+        )
+    )
+    for job_id in running_ids:
+        process_registry.cancel(job_id)
+    return result.rowcount or 0, len(running_ids)
+
+
+def delete_finished_jobs(session: Session, product_id: int) -> int:
+    """프로덕트의 종결(terminal) job을 이벤트·로그 폴더와 함께 전부 삭제한다. 삭제 수 반환."""
+    terminal = [status.value for status in TERMINAL_STATUSES]
+    jobs = list(
+        session.scalars(
+            select(Job).where(Job.product_id == product_id, Job.status.in_(terminal))
+        )
+    )
+    job_ids = [job.id for job in jobs]
+    for job in jobs:
+        session.delete(job)  # job_events는 cascade
+    session.commit()
+    for job_id in job_ids:
+        rmtree_force(workspace.job_log_path(job_id).parent)
+    return len(job_ids)
 
 
 def delete_job(session: Session, job_id: int) -> str:
