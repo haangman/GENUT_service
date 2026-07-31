@@ -31,5 +31,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // 전체 스위트 병렬 실행 시 워커 부하로 기본 5초를 넘겨 간헐 실패하는 테스트가
+    // 있어(단독 실행은 통과) 여유를 둔다 — 느린 개발 머신에서의 플레이크 방지.
+    testTimeout: 20000,
   },
 })
