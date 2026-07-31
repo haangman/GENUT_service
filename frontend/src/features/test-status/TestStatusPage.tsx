@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { ProjectSelect } from '../../components/ProjectSelect'
 import {
+  deleteFailedTests,
   deleteTargetTests,
   deleteTestFile,
   getTestStatusByName,
@@ -224,6 +225,28 @@ export function TestStatusPage() {
     targetDeleteMut.mutate(target)
   }
 
+  // 프로덕트(이름) 단위 실패 테스트 전체 삭제 — 성공 테스트는 보존
+  const failedDeleteMut = useMutation({
+    mutationFn: () => deleteFailedTests(project, selectedName as string),
+    onSuccess: (res) => {
+      window.alert(t('실패 테스트 {count}건을 삭제했습니다.', { count: res.deleted_files }))
+      afterDelete()
+    },
+    onError: alertDeleteError,
+  })
+  const requestFailedDelete = () => {
+    if (
+      !window.confirm(
+        t('{name}의 실패 테스트 {count}개를 모두 삭제할까요? 대응 로그도 함께 삭제됩니다.', {
+          name: selectedName ?? '',
+          count: totalFails,
+        }),
+      )
+    )
+      return
+    failedDeleteMut.mutate()
+  }
+
   return (
     <div>
       <PageHeader
@@ -376,6 +399,15 @@ export function TestStatusPage() {
                 <span className={`badge ${totalFails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
                   {t('총 실패 {count}', { count: totalFails })}
                 </span>
+                <button
+                  type="button"
+                  className="btn btn-sm ml-auto"
+                  onClick={requestFailedDelete}
+                  disabled={totalFails === 0 || failedDeleteMut.isPending}
+                  title={t('이 프로덕트의 실패 테스트(_Fail) 전체를 대응 로그와 함께 삭제한다 (성공 테스트 보존)')}
+                >
+                  {failedDeleteMut.isPending ? t('삭제 중…') : t('실패 테스트 모두 삭제')}
+                </button>
               </div>
               <div className="card overflow-x-auto">
                 <table className="w-full text-sm">

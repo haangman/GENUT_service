@@ -163,6 +163,67 @@ def test_delete_target_removes_group_folders_across_products(
         assert not (root / "tests/generated_debug_log/aaa").exists()
 
 
+def test_delete_failed_removes_all_fail_tests_across_products(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    """실패 테스트 전체 삭제 — 동명 그룹 전체에서 _Fail의 모든 stem 폴더 + 대응 로그 제거,
+    성공 테스트·성공 로그는 보존."""
+    _, root_a = _make_product(db_session, tmp_path, code="F-1", name="fail-group")
+    _, root_b = _make_product(db_session, tmp_path, code="F-2", name="fail-group")
+    # root_a에 두 번째 stem의 실패 테스트 + 실패 테스트 대응 로그 추가
+    extra_fail = root_a / "tests" / "generated_Fail" / "bbb"
+    extra_fail.mkdir(parents=True)
+    (extra_fail / "bbb_x_Test.cpp").write_text("// f", encoding="utf-8")
+    fail_log_dir = root_a / "tests" / "generated_debug_log" / "aaa"
+    (fail_log_dir / "aaa_bad_test.log").write_text("fail log", encoding="utf-8")
+
+    resp = client.delete(
+        "/api/test-status/failed", params={"project": "Ulysses", "name": "fail-group"}
+    )
+    assert resp.status_code == 200, resp.text
+    # 프로덕트당 실패 1(aaa_bad) + root_a의 bbb_x 1 = 총 3
+    assert resp.json() == {"deleted_files": 3}
+    for root in (root_a, root_b):
+        assert not (root / "tests/generated_Fail/aaa").exists()
+        # 성공 테스트·성공 테스트 로그는 보존
+        assert (root / "tests/generated/aaa/aaa_Test.cpp").is_file()
+        assert (root / "tests/generated_debug_log/aaa/aaa_test.log").is_file()
+    assert not (root_a / "tests/generated_Fail/bbb").exists()
+    # 실패 테스트의 대응 로그는 함께 삭제
+    assert not (root_a / "tests/generated_debug_log/aaa/aaa_bad_test.log").exists()
+
+
+def test_delete_failed_unknown_name_404(client: TestClient) -> None:
+    resp = client.delete(
+        "/api/test-status/failed", params={"project": "Ulysses", "name": "nope"}
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_failed_conflicts_while_job_running(
+    client: TestClient, db_session: Session, tmp_path: Path
+) -> None:
+    from genut_service.db.models import GenutInstance, Job, ProductLock
+
+    product, root = _make_product(db_session, tmp_path, code="FB-1", name="fail-busy")
+    worker = GenutInstance(
+        name="fw", repo_url="u", ds_assist_credential_key="k", ds_assist_send_system_name="s"
+    )
+    db_session.add(worker)
+    db_session.flush()
+    job = Job(product_id=product.id, status="running")
+    db_session.add(job)
+    db_session.flush()
+    db_session.add(ProductLock(product_id=product.id, job_id=job.id, genut_instance_id=worker.id))
+    db_session.commit()
+
+    resp = client.delete(
+        "/api/test-status/failed", params={"project": "Ulysses", "name": "fail-busy"}
+    )
+    assert resp.status_code == 409
+    assert (root / "tests/generated_Fail/aaa/aaa_bad_Test.cpp").is_file()  # 무삭제
+
+
 def test_delete_target_conflicts_while_job_running(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:

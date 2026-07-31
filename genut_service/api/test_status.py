@@ -224,6 +224,45 @@ def delete_test_file(
     _invalidate_after_delete(session, product.project, product.name)
 
 
+@mutation_router.delete("/failed")
+def delete_failed_tests(
+    name: str = Query(...),
+    project: Project = Query(Project.ULYSSES),
+    session: Session = Depends(get_session),
+) -> dict[str, int]:
+    """(project, name) 그룹의 실패 테스트(`_Fail`) 전체를 대응 로그와 함께 삭제한다.
+
+    성공 테스트는 보존. 하나라도 job 실행 중이면 409(부분 삭제 없음).
+    반환: {deleted_files: n}.
+    """
+    group = list(
+        session.scalars(
+            select(Product).where(
+                Product.project == project.value, Product.name == name
+            )
+        )
+    )
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "프로덕트를 찾을 수 없다")
+
+    pairs = []
+    for product in group:
+        root = workspace.existing_product_checkout(product)
+        if root is None:
+            continue
+        try:
+            raise_if_code_path_busy(session, root)
+        except CodePathBusyError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        pairs.append((product, root))
+
+    deleted = sum(
+        test_status_service.delete_failed_tests(root, product) for product, root in pairs
+    )
+    _invalidate_after_delete(session, project.value, name)
+    return {"deleted_files": deleted}
+
+
 @mutation_router.delete("/target")
 def delete_target_tests(
     name: str = Query(...),

@@ -240,6 +240,34 @@ def delete_target_tests(root: Path, product: Product, stem: str) -> int:
     return removed
 
 
+def delete_failed_tests(root: Path, product: Product) -> int:
+    """실패 테스트(`<out>_Fail/`)를 전부 삭제한다 — 모든 stem 폴더와 각 실패 파일의
+    대응 debug 로그(이름 규칙 `<파일명 확장자→.log>`, 대소문자 무시).
+
+    성공 테스트(`<out>/`)와 그 로그는 건드리지 않는다.
+    반환: 삭제된 실패 테스트 파일 수(이름에 `_test` 포함 — 스캔 규칙과 동일).
+    """
+    removed = 0
+    _, fail_root, log_root = _out_and_siblings(root, product)
+    if fail_root is None or not fail_root.is_dir():
+        return 0
+    for stem_dir in list(fail_root.iterdir()):
+        if not stem_dir.is_dir():
+            continue
+        log_names: set[str] = set()
+        for entry in stem_dir.iterdir():
+            if entry.is_file() and "_test" in entry.name.lower():
+                removed += 1
+                log_names.add(f"{entry.stem}.log".lower())
+        for log_dir in _match_stem_dirs(log_root, stem_dir.name):
+            for log_entry in list(log_dir.iterdir()):
+                if log_entry.is_file() and log_entry.name.lower() in log_names:
+                    log_entry.unlink(missing_ok=True)
+            _rmdir_if_empty(log_dir)
+        rmtree_force(stem_dir)
+    return removed
+
+
 def _scan_stem_dir(scan_root: Path | None, product_root: Path) -> dict[str, list[str]]:
     """scan_root 직속 stem 폴더의 `_test` 파일을 {stem: [product_root 기준 POSIX 경로]}로 모은다.
 

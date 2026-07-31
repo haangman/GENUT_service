@@ -325,4 +325,44 @@ describe('TestStatusPage', () => {
     expect(screen.getByText('총 테스트 케이스 17')).toBeInTheDocument()
     expect(screen.getByText('총 실패 3')).toBeInTheDocument()
   })
+
+  it('deletes all failed tests of the product via the L2 header button', async () => {
+    let captured: URLSearchParams | null = null
+    server.use(
+      http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
+      http.get('/api/test-status/detail', () => HttpResponse.json(DETAIL)),
+      http.delete('/api/test-status/failed', ({ request }) => {
+        captured = new URL(request.url).searchParams
+        return HttpResponse.json({ deleted_files: 1 })
+      }),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderWithProviders(<TestStatusPage />)
+
+    await userEvent.click(await screen.findByText('AA'))
+    await screen.findByText('calc.c')
+    const button = screen.getByRole('button', { name: '실패 테스트 모두 삭제' })
+    expect(button).toBeEnabled() // 총 실패 1 > 0
+    await userEvent.click(button)
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('실패 테스트 1개'))
+    await waitFor(() => expect(captured).not.toBeNull())
+    expect(captured!.get('name')).toBe('AA')
+    expect(captured!.get('project')).toBe('Ulysses')
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('1건')))
+  })
+
+  it('disables the failed-tests delete button when there are no failures', async () => {
+    server.use(
+      http.get('/api/test-status', () => HttpResponse.json(SUMMARY)),
+      http.get('/api/test-status/detail', () =>
+        HttpResponse.json([{ ...DETAIL[0], fail_count: 0, failed_test_files: [] }]),
+      ),
+    )
+    renderWithProviders(<TestStatusPage />)
+
+    await userEvent.click(await screen.findByText('AA'))
+    await screen.findByText('calc.c')
+    expect(screen.getByRole('button', { name: '실패 테스트 모두 삭제' })).toBeDisabled()
+  })
 })

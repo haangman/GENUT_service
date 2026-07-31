@@ -289,6 +289,12 @@ const EN: Record<string, string> = {
   '테스트 케이스 수': 'Test cases',
   '테스트 파일명': 'Test file name',
   '테스트 삭제': 'Delete tests',
+  '실패 테스트 모두 삭제': 'Delete all failed tests',
+  '{name}의 실패 테스트 {count}개를 모두 삭제할까요? 대응 로그도 함께 삭제됩니다.':
+    'Delete all {count} failed tests of {name}? Their logs will be deleted as well.',
+  '실패 테스트 {count}건을 삭제했습니다.': 'Deleted {count} failed tests.',
+  '이 프로덕트의 실패 테스트(_Fail) 전체를 대응 로그와 함께 삭제한다 (성공 테스트 보존)':
+    'Deletes every failed test (_Fail) of this product with its logs (successful tests kept)',
   '{name} 테스트 파일을 삭제할까요?': 'Delete the test file {name}?',
   '{name}의 테스트 {count}개(실패 포함)를 모두 삭제할까요?':
     'Delete all {count} tests of {name} (including failed ones)?',
