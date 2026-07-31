@@ -1,6 +1,9 @@
 # GENUT_service 진행 상세 기록
 
-작성 2026-06-15 · 최종 갱신 2026-07-14. 본 문서는 현재까지 구현·검증한 내용을 상세히 정리한다.
+작성 2026-06-15 · 최종 갱신 2026-07-31. 본 문서는 현재까지 구현·검증한 내용을 상세히 정리한다.
+§1~§16은 기반 구조(2026-07 초 기준), 이후 진행은 §17부터 날짜순 섹션으로 이어진다
+(§21 다운로드 패치/Gerrit · §22 git_update_mode · §24 job 삭제 · §25/§30 현황 테스트 삭제 ·
+§27/§28 ref 엄격화·정규화 · §29 API 가이드 · §31 일괄 중지/삭제 · §32 GENUT 삭제 픽스).
 원격: https://github.com/haangman/GENUT_service (branch `main`, public).
 
 ---
@@ -86,7 +89,9 @@ migrations/              # Alembic (env.py + versions/)
 - **job_events**: job_id, ts, level, phase, message, payload(JSON) — append-only 로그.
 - **product_locks**: `product_id`(PK), job_id, genut_instance_id, acquired_at — **PK가 프로덕트당 락 1개 보장**.
 
-마이그레이션(7개, head=`e6c17f5ef2fa`): `f944f16d574a`(core tables) → `38fc35ad54d5`(products·genut에 `code_path`) → `fe55b4bebf19`(`ds_assist_user_id`) → `406e1798f687`(`assure_repo_url`) → `20e9e4efaf2c`(products.name unique 제약 제거) → `a04dc0b5b0af`(`product_test_files` 추가) → `e6c17f5ef2fa`(`product_test_files` drop + `products.exclude_globs` 추가). `alembic check` drift 없음.
+마이그레이션(2026-07-31 기준 **15개, head=`6923b5a90d26`** — products.git_update_mode):
+초기 7개는 `f944f16d574a`(core tables) → `38fc35ad54d5`(products·genut에 `code_path`) → `fe55b4bebf19`(`ds_assist_user_id`) → `406e1798f687`(`assure_repo_url`) → `20e9e4efaf2c`(products.name unique 제약 제거) → `a04dc0b5b0af`(`product_test_files` 추가) → `e6c17f5ef2fa`(`product_test_files` drop + `products.exclude_globs` 추가).
+이후 auto 모드(§17)·프로젝트 차원(§18: `a7d3c91e5b02`→`e2b8f04c7a19`)·업데이트 방식(§22: `6923b5a90d26`) 마이그레이션이 추가됐다. `alembic check` drift 없음.
 
 `JobStatus`에 `canceled`(강제 종료)·`interrupted`(서버 재시작 중단) 추가 — `TERMINAL_STATUSES = {done, failed, canceled, interrupted}`. `WorkerStatus`는 idle|busy|error|disabled.
 
@@ -150,7 +155,7 @@ migrations/              # Alembic (env.py + versions/)
 
 ---
 
-## 9. 프론트엔드 (5 페이지)
+## 9. 프론트엔드 (작성 시점 5 페이지 — 이후 자동 실행 이력(§17)·터미널(§20)이 추가되어 현재 7 페이지)
 
 1. **테스트 요청**: 프로덕트 선택(옵션 라벨 `name(id)`로 동명 구분) → 지연 파일트리(폴더 일괄 가져오기, 확장자 allowlist by mode) → compile_commands 검사로 included/excluded 분리(미포함 별도 표시·제출 제외) → 함수명(선택) → 제출. 선택 변경 시 stale → 재검사 전 제출 차단. **제출 성공·탭 이탈 시 빌더 리셋**(접수 배너의 job #N만 보존).
 2. **프로덕트**: 목록 + 등록 폼(patch field-array) + **수정**(PUT, 기존값 프리필) + 삭제.
@@ -173,7 +178,7 @@ migrations/              # Alembic (env.py + versions/)
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
 - **테스트 현황 검증(신규)**: 백엔드 — `target_files` 제외(build/test 세그먼트·`*glob*`) · `scan_out_tests`(부모 `_Fail` 스킵·`_test`만·여러 폴더 합산) · `build_status`+API(대상/개수/테스트파일, 404) · `exclude_globs` 적용. 프론트 — 현황 3단계 드릴다운(프로덕트→대상 파일→테스트 파일).
 - **datetime 직렬화(신규)**: API의 datetime 필드는 `schemas/common.py`의 `UtcDatetime`로 **tz 인식 ISO(`+00:00`)** 로 내보낸다(naive면 UTC로 간주). 표식이 없으면 클라가 로컬로 오해해 실행 중 job의 "총 수행 시간"이 타임존 오프셋만큼 부풀려지던 버그를 차단. JobRead/JobEventRead/QueueItem에 적용.
-- 현재 **백엔드 121 passed, 1 deselected(docker)** **· 프론트 43 passed**(테스트 현황: 동명 합산(경로 합집합)·파일별 출처 프로덕트 id 표시). (재실측 2026-06-28)
+- 현재 **백엔드 385 passed · 2 skipped(터미널 POSIX 전용) · 1 deselected(docker)** **· 프론트 118 passed**. (재실측 2026-07-31 — 구간별 수치는 각 섹션 참조)
 
 ---
 
@@ -217,6 +222,9 @@ migrations/              # Alembic (env.py + versions/)
 | 추가 | 강제 종료 job을 phase raise 시에도 CANCELED | `8f3e71f` |
 | 추가 | 요청 피커 프로덕트 `name(id)` 표기 | `464dc72` |
 | 추가 | 강제 종료 시 즉시 피드백(낙관적 UI) | `e9be73a` |
+
+> 이 표는 2026-07 초까지의 커밋만 담는다. 이후 커밋은 각 날짜 섹션(§17~)에
+> 기능 단위로 기록한다(관례: 기능 커밋 + Document 커밋 쌍).
 
 ---
 
