@@ -57,3 +57,6 @@ _workspaces/
 
 # === 빌드 캐시 ===
 *.tsbuildinfo
+
+# Vite 캐시
+.vite/
