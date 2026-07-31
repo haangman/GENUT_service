@@ -25,6 +25,8 @@ def _make_product(
         d.mkdir(parents=True)
     (out / "aaa_Test.cpp").write_text("// ok", encoding="utf-8")
     (out / "aaa_extra_test.cpp").write_text("// ok2", encoding="utf-8")
+    # 스캐폴딩 파일 — 어떤 삭제에서도 절대 지워지면 안 된다(폴더 구조 보존 검증용)
+    (out / "CMakeLists.txt").write_text("set(MODULE_TEST_NAME aaa_UnitTest)", encoding="utf-8")
     (fail / "aaa_bad_Test.cpp").write_text("// fail", encoding="utf-8")
     (log / "aaa_test.log").write_text("log", encoding="utf-8")
     product = Product(
@@ -113,7 +115,9 @@ def test_delete_failed_test_file(client: TestClient, db_session: Session, tmp_pa
         params={"code": "S-2", "path": "tests/generated_Fail/aaa/aaa_bad_Test.cpp"},
     )
     assert resp.status_code == 204, resp.text
-    assert not (root / "tests/generated_Fail/aaa").exists()  # 비면 stem 폴더 정리
+    assert not (root / "tests/generated_Fail/aaa/aaa_bad_Test.cpp").exists()
+    # 폴더는 비어도 절대 지우지 않는다 — 빌드 구조/스캐폴딩 보존
+    assert (root / "tests/generated_Fail/aaa").is_dir()
 
 
 @pytest.mark.parametrize(
@@ -143,10 +147,10 @@ def test_delete_file_unknown_product_404(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_delete_target_removes_group_folders_across_products(
+def test_delete_target_removes_only_related_files_across_products(
     client: TestClient, db_session: Session, tmp_path: Path
 ) -> None:
-    """대상 파일 단위 일괄 삭제 — 동명 프로덕트 전체에서 성공·실패·로그 폴더 제거."""
+    """대상 파일 단위 일괄 삭제 — 관련 테스트/로그 **파일만** 제거, 폴더·스캐폴딩 보존."""
     _, root_a = _make_product(db_session, tmp_path, code="G-1", name="grouped")
     _, root_b = _make_product(db_session, tmp_path, code="G-2", name="grouped")
 
@@ -158,9 +162,16 @@ def test_delete_target_removes_group_folders_across_products(
     # 프로덕트당 성공 2 + 실패 1 = 3, 두 프로덕트 합산 6
     assert resp.json() == {"deleted_files": 6}
     for root in (root_a, root_b):
-        assert not (root / "tests/generated/aaa").exists()
-        assert not (root / "tests/generated_Fail/aaa").exists()
-        assert not (root / "tests/generated_debug_log/aaa").exists()
+        # 테스트 파일·로그 파일은 전부 삭제
+        assert not (root / "tests/generated/aaa/aaa_Test.cpp").exists()
+        assert not (root / "tests/generated/aaa/aaa_extra_test.cpp").exists()
+        assert not (root / "tests/generated_Fail/aaa/aaa_bad_Test.cpp").exists()
+        assert not (root / "tests/generated_debug_log/aaa/aaa_test.log").exists()
+        # 폴더는 절대 지우지 않는다 — 스캐폴딩 CMakeLists.txt 등 비테스트 파일 보존
+        assert (root / "tests/generated/aaa").is_dir()
+        assert (root / "tests/generated_Fail/aaa").is_dir()
+        assert (root / "tests/generated_debug_log/aaa").is_dir()
+        assert (root / "tests/generated/aaa/CMakeLists.txt").is_file()
 
 
 def test_delete_failed_removes_all_fail_tests_across_products(
@@ -184,13 +195,18 @@ def test_delete_failed_removes_all_fail_tests_across_products(
     # 프로덕트당 실패 1(aaa_bad) + root_a의 bbb_x 1 = 총 3
     assert resp.json() == {"deleted_files": 3}
     for root in (root_a, root_b):
-        assert not (root / "tests/generated_Fail/aaa").exists()
-        # 성공 테스트·성공 테스트 로그는 보존
+        # 파일만 삭제 — stem 폴더는 절대 지우지 않는다
+        assert not (root / "tests/generated_Fail/aaa/aaa_bad_Test.cpp").exists()
+        assert (root / "tests/generated_Fail/aaa").is_dir()
+        # 성공 테스트·성공 테스트 로그·스캐폴딩은 보존
         assert (root / "tests/generated/aaa/aaa_Test.cpp").is_file()
         assert (root / "tests/generated_debug_log/aaa/aaa_test.log").is_file()
-    assert not (root_a / "tests/generated_Fail/bbb").exists()
-    # 실패 테스트의 대응 로그는 함께 삭제
+        assert (root / "tests/generated/aaa/CMakeLists.txt").is_file()
+    assert not (root_a / "tests/generated_Fail/bbb/bbb_x_Test.cpp").exists()
+    assert (root_a / "tests/generated_Fail/bbb").is_dir()
+    # 실패 테스트의 대응 로그는 함께 삭제(로그 폴더는 보존)
     assert not (root_a / "tests/generated_debug_log/aaa/aaa_bad_test.log").exists()
+    assert (root_a / "tests/generated_debug_log/aaa").is_dir()
 
 
 def test_delete_failed_unknown_name_404(client: TestClient) -> None:

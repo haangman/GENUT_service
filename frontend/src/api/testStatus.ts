@@ -39,7 +39,8 @@ export function deleteFailedTests(
   })
 }
 
-// 대상 파일의 테스트 전체(성공·실패·로그 폴더)를 (project, name) 그룹의 모든 프로덕트에서 삭제.
+// 대상 파일의 테스트 파일 전체(성공·실패)와 대응 로그 파일을 (project, name) 그룹의
+// 모든 프로덕트에서 삭제한다. 폴더·스캐폴딩(CMakeLists 등)은 절대 지우지 않는다.
 export function deleteTargetTests(
   project: Project,
   name: string,

@@ -230,10 +230,10 @@ def delete_failed_tests(
     project: Project = Query(Project.ULYSSES),
     session: Session = Depends(get_session),
 ) -> dict[str, int]:
-    """(project, name) 그룹의 실패 테스트(`_Fail`) 전체를 대응 로그와 함께 삭제한다.
+    """(project, name) 그룹의 실패 테스트(`_Fail`) **파일** 전체를 대응 로그 파일과 함께 삭제한다.
 
-    성공 테스트는 보존. 하나라도 job 실행 중이면 409(부분 삭제 없음).
-    반환: {deleted_files: n}.
+    성공 테스트는 보존하고 폴더는 절대 지우지 않는다(파일만 제거).
+    하나라도 job 실행 중이면 409(부분 삭제 없음). 반환: {deleted_files: n}.
     """
     group = list(
         session.scalars(
@@ -270,7 +270,8 @@ def delete_target_tests(
     project: Project = Query(Project.ULYSSES),
     session: Session = Depends(get_session),
 ) -> dict[str, int]:
-    """대상 파일(path)의 테스트를 한꺼번에 삭제한다 — 성공·실패(_Fail)·debug 로그 폴더 전체.
+    """대상 파일(path)의 테스트를 한꺼번에 삭제한다 — 성공·실패(_Fail)의 테스트 **파일**과
+    대응 debug 로그 **파일**만(폴더·스캐폴딩은 절대 지우지 않음).
 
     현황은 (project, name) 그룹 합산이므로 그룹의 모든 프로덕트 체크아웃에서 지운다.
     하나라도 job 실행 중이면 409(아무것도 지우지 않음). 반환: {deleted_files: n}.

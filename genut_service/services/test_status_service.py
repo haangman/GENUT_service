@@ -22,7 +22,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from genut_service.db.models import Product
-from genut_service.fs import rmtree_force
 from genut_service.paths import PathValidationError, normalize_rel_path
 from genut_service.services import compile_db_service
 
@@ -162,14 +161,6 @@ def _match_stem_dirs(scan_root: Path | None, stem: str) -> list[Path]:
     return [d for d in scan_root.iterdir() if d.is_dir() and d.name.lower() == stem.lower()]
 
 
-def _rmdir_if_empty(path: Path) -> None:
-    try:
-        if path.is_dir() and not any(path.iterdir()):
-            path.rmdir()
-    except OSError:
-        pass
-
-
 def delete_test_file(
     root: Path, product: Product, rel: str, log_rel: str | None = None
 ) -> str:
@@ -178,7 +169,8 @@ def delete_test_file(
     로그 삭제는 2중이다: ① log_rel이 주어지면(현황 화면이 아는 정확한 log_path)
     그 파일을 확정 삭제하고, ② 이름 규칙(<파일명 확장자→.log>, 대소문자 무시)으로도
     best-effort 정리한다 — 규칙과 다른 이름의 로그도 화면 기준으로 함께 지워진다.
-    비게 된 stem 폴더는 정리한다.
+    **폴더는 비어도 절대 지우지 않는다** — stem 폴더에는 스캐폴딩 CMakeLists 등
+    빌드 구조 파일이 있을 수 있다(파일만 제거가 사용자 확정 원칙).
     반환: "deleted" | "invalid"(`..` 등 경로 위반 — 400용, log_rel 위반 포함) |
     "not_found"(허용 루트 밖 또는 파일 없음 — 404용). 뷰어(GET /file)와 동일한 경계.
     """
@@ -204,47 +196,49 @@ def delete_test_file(
     stem_dir = target.parent
     log_name = f"{target.stem}.log".lower()
     target.unlink()
-    _rmdir_if_empty(stem_dir)
     # ① 화면이 아는 정확한 로그 경로 확정 삭제
     if log_target is not None and log_target.is_file():
         log_target.unlink()
-        _rmdir_if_empty(log_target.parent)
     # ② 이름 규칙 기반 best-effort 정리(스캔과 동일 규칙 — log_rel 미지정 호출 대비)
     _, _, log_root = _out_and_siblings(root, product)
     for log_dir in _match_stem_dirs(log_root, stem_dir.name):
         for entry in list(log_dir.iterdir()):
             if entry.is_file() and entry.name.lower() == log_name:
                 entry.unlink(missing_ok=True)
-        _rmdir_if_empty(log_dir)
     return "deleted"
 
 
 def delete_target_tests(root: Path, product: Product, stem: str) -> int:
     """대상 파일 stem의 테스트를 한꺼번에 삭제한다 — 성공(`<out>/<stem>/`)·실패
-    (`<out>_Fail/<stem>/`)·debug 로그(`<out>_debug_log/<stem>/`) 폴더 전체.
+    (`<out>_Fail/<stem>/`)의 테스트 **파일**과 각 파일의 대응 debug 로그 **파일**만.
 
-    반환: 삭제된 테스트 파일 수(성공+실패 폴더의 `_test` 파일 합 — 스캔 규칙과 동일).
+    **폴더는 절대 지우지 않는다** — stem 폴더의 스캐폴딩 CMakeLists 등 비테스트
+    파일과 빌드 폴더 구조를 보존한다(파일만 제거가 사용자 확정 원칙).
+    반환: 삭제된 테스트 파일 수(성공+실패의 `_test` 파일 합 — 스캔 규칙과 동일).
     """
     removed = 0
+    log_names: set[str] = set()
     out_root, fail_root, log_root = _out_and_siblings(root, product)
     for scan_root in (out_root, fail_root):
         for stem_dir in _match_stem_dirs(scan_root, stem):
-            removed += sum(
-                1
-                for f in stem_dir.iterdir()
-                if f.is_file() and "_test" in f.name.lower()
-            )
-            rmtree_force(stem_dir)
-    for stem_dir in _match_stem_dirs(log_root, stem):
-        rmtree_force(stem_dir)
+            for entry in list(stem_dir.iterdir()):
+                if entry.is_file() and "_test" in entry.name.lower():
+                    log_names.add(f"{entry.stem}.log".lower())
+                    entry.unlink(missing_ok=True)
+                    removed += 1
+    for log_dir in _match_stem_dirs(log_root, stem):
+        for entry in list(log_dir.iterdir()):
+            if entry.is_file() and entry.name.lower() in log_names:
+                entry.unlink(missing_ok=True)
     return removed
 
 
 def delete_failed_tests(root: Path, product: Product) -> int:
-    """실패 테스트(`<out>_Fail/`)를 전부 삭제한다 — 모든 stem 폴더와 각 실패 파일의
-    대응 debug 로그(이름 규칙 `<파일명 확장자→.log>`, 대소문자 무시).
+    """실패 테스트(`<out>_Fail/`)의 테스트 **파일**을 전부 삭제한다 — 모든 stem 폴더의
+    `_test` 파일과 각 파일의 대응 debug 로그 파일(이름 규칙, 대소문자 무시).
 
-    성공 테스트(`<out>/`)와 그 로그는 건드리지 않는다.
+    성공 테스트(`<out>/`)와 그 로그는 건드리지 않으며, **폴더는 절대 지우지 않는다**
+    (stem 폴더의 비테스트 파일·빌드 구조 보존 — 파일만 제거가 사용자 확정 원칙).
     반환: 삭제된 실패 테스트 파일 수(이름에 `_test` 포함 — 스캔 규칙과 동일).
     """
     removed = 0
@@ -255,16 +249,15 @@ def delete_failed_tests(root: Path, product: Product) -> int:
         if not stem_dir.is_dir():
             continue
         log_names: set[str] = set()
-        for entry in stem_dir.iterdir():
+        for entry in list(stem_dir.iterdir()):
             if entry.is_file() and "_test" in entry.name.lower():
-                removed += 1
                 log_names.add(f"{entry.stem}.log".lower())
+                entry.unlink(missing_ok=True)
+                removed += 1
         for log_dir in _match_stem_dirs(log_root, stem_dir.name):
             for log_entry in list(log_dir.iterdir()):
                 if log_entry.is_file() and log_entry.name.lower() in log_names:
                     log_entry.unlink(missing_ok=True)
-            _rmdir_if_empty(log_dir)
-        rmtree_force(stem_dir)
     return removed
 
 
