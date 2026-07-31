@@ -3,7 +3,8 @@
 작성 2026-06-15 · 최종 갱신 2026-07-31. 본 문서는 현재까지 구현·검증한 내용을 상세히 정리한다.
 §1~§16은 기반 구조(2026-07 초 기준), 이후 진행은 §17부터 날짜순 섹션으로 이어진다
 (§21 다운로드 패치/Gerrit · §22 git_update_mode · §24 job 삭제 · §25/§30 현황 테스트 삭제 ·
-§27/§28 ref 엄격화·정규화 · §29 API 가이드 · §31 일괄 중지/삭제 · §32 GENUT 삭제 픽스).
+§27/§28 ref 엄격화·정규화 · §29 API 가이드 · §31 일괄 중지/삭제 · §32 GENUT 삭제 픽스 ·
+§33 미리보기 리셋 · §34 현황 총합 배지 · §35 저장소 정리).
 원격: https://github.com/haangman/GENUT_service (branch `main`, public).
 
 ---
@@ -178,7 +179,7 @@ migrations/              # Alembic (env.py + versions/)
 - 프론트(Vitest+RTL+MSW): 폼 검증/제출/수정, 파일트리·폴더가져오기, compile-check·submit, 로그 뷰어 **증분 폴링·다운로드 링크** 등.
 - **테스트 현황 검증(신규)**: 백엔드 — `target_files` 제외(build/test 세그먼트·`*glob*`) · `scan_out_tests`(부모 `_Fail` 스킵·`_test`만·여러 폴더 합산) · `build_status`+API(대상/개수/테스트파일, 404) · `exclude_globs` 적용. 프론트 — 현황 3단계 드릴다운(프로덕트→대상 파일→테스트 파일).
 - **datetime 직렬화(신규)**: API의 datetime 필드는 `schemas/common.py`의 `UtcDatetime`로 **tz 인식 ISO(`+00:00`)** 로 내보낸다(naive면 UTC로 간주). 표식이 없으면 클라가 로컬로 오해해 실행 중 job의 "총 수행 시간"이 타임존 오프셋만큼 부풀려지던 버그를 차단. JobRead/JobEventRead/QueueItem에 적용.
-- 현재 **백엔드 385 passed · 2 skipped(터미널 POSIX 전용) · 1 deselected(docker)** **· 프론트 118 passed**. (재실측 2026-07-31 — 구간별 수치는 각 섹션 참조)
+- 현재 **백엔드 385 passed · 2 skipped(터미널 POSIX 전용) · 1 deselected(docker)** **· 프론트 115 passed**. (재실측 2026-07-31 §34 기준 — 구간별 수치는 각 섹션 참조. §35의 진단용 테스트 5개 삭제 반영)
 
 ---
 
@@ -641,3 +642,15 @@ L1(프로덕트 목록) 표 위에 선택된 프로젝트의 전 행 합산 배�
 `프로덕트 N · 총 대상 파일 N · 총 테스트파일 N · 총 테스트 케이스 N · 총 실패 N`.
 서버 요약 응답의 클라이언트 합산이라 백엔드/스냅샷/폴링 무변경, 프로젝트 전환 시
 자동 재계산(L2 상세의 합계 배지와 동일 스타일). 프론트 115 passed(+1 — 2행 합산 검증).
+
+---
+
+## 35. 저장소 정리 + 테스트 안정화 (2026-07-31)
+
+- `.vite/`(Vite 캐시)를 `.gitignore`에 추가, 7/16 Docker 버튼 진단용 임시 테스트
+  (`ProductForm.dockerpath.test.tsx`, 5개)와 구현 완료된 요구사항 메모 txt 2개 삭제 —
+  작업 트리 완전 클린.
+- **vitest `testTimeout` 5s→20s**: 느린/부하 상태 머신에서 전체 스위트 병렬 실행 시
+  단독으론 통과하는 테스트가 간헐적으로 타임아웃(같은 날 두 파일에서 재현 —
+  ProductPicker·ProductsPage). findBy 타임아웃 개별 완화(§31)에 이어 전역 기본값으로
+  해소. 진짜 행(hang)은 20초로 여전히 잡힌다.
