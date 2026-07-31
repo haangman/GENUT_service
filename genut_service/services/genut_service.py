@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from genut_service.db.models import GenutInstance, Job
+from genut_service.db.models import GenutInstance, Job, ProductLock
 from genut_service.enums import INFLIGHT_STATUSES
 from genut_service.schemas.genut import GenutCreate, GenutUpdate
 
@@ -79,6 +79,10 @@ def delete_genut(session: Session, genut_id: int) -> bool:
         .where(Job.genut_instance_id == genut_id)
         .values(genut_instance_id=None)
     )
+    # 이 GENUT를 참조하는 락 회수 — 실행 중 job은 위에서 걸렀으므로 남은 락은 전부
+    # stale(leak)이다. product_locks.genut_instance_id FK 때문에 안 지우면 삭제가
+    # IntegrityError(500)로 터진다(janitor 회수 전 창에서 재현되던 버그).
+    session.execute(delete(ProductLock).where(ProductLock.genut_instance_id == genut_id))
     session.delete(genut)
     session.commit()
     return True

@@ -162,6 +162,32 @@ def test_delete_genut_keeps_finished_history_unassigned(
     assert job.genut_instance_id is None  # 배정 표시만 해제
 
 
+def test_delete_genut_with_stale_lock_succeeds_and_releases_lock(
+    client: TestClient, db_session: Session
+) -> None:
+    """job은 종료됐는데 락이 leak된 상태(janitor 회수 전)에서도 삭제가 동작한다.
+
+    product_locks.genut_instance_id FK 때문에 낡은 락이 남아 있으면 삭제가
+    IntegrityError(500)로 터지던 회귀 방지 — 삭제 시 stale 락을 함께 회수한다.
+    """
+    from genut_service.db.models import Job, ProductLock
+
+    genut_id = client.post("/api/genuts", json=_payload("del-stale-lock")).json()["id"]
+    job_id = _add_job(db_session, genut_id, status="done")
+    job = db_session.get(Job, job_id)
+    db_session.add(
+        ProductLock(product_id=job.product_id, job_id=job_id, genut_instance_id=genut_id)
+    )
+    db_session.commit()
+    product_id = job.product_id
+
+    resp = client.delete(f"/api/genuts/{genut_id}")
+    assert resp.status_code == 204, resp.text
+    db_session.expire_all()
+    assert db_session.get(ProductLock, product_id) is None  # stale 락 함께 회수
+    assert db_session.get(Job, job_id).genut_instance_id is None  # 이력 배정 해제
+
+
 def test_delete_genut_with_running_job_conflicts(
     client: TestClient, db_session: Session
 ) -> None:
