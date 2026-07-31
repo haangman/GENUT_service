@@ -248,6 +248,9 @@ const EN: Record<string, string> = {
   업데이트: 'Refresh',
   'compile_commands.json과 제외 패턴 기준으로 다시 스캔한다 (수동 제외/복원 초기화)':
     'Re-scan from compile_commands.json and the exclude patterns (clears manual include/exclude)',
+  리셋: 'Reset',
+  '수동 제외/복원을 지우고 제외 패턴만 적용된 상태로 되돌린다 (재스캔 없음)':
+    'Clear manual include/exclude and restore the pattern-only state (no re-scan)',
   '코드 업데이트 방식': 'Code update mode',
   'reset — 원격 최신 강제 일치 (로컬 커밋 삭제)':
     'reset — force-match remote latest (drops local commits)',

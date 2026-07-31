@@ -359,6 +359,43 @@ describe('ProductForm', () => {
     expect(screen.getByRole('button', { name: '업데이트' })).toBeDisabled()
   })
 
+  it('resets manual include/exclude to the pattern-only state via the reset button', async () => {
+    let scanCalls = 0
+    server.use(
+      http.post('/api/products/target-files', () => {
+        scanCalls += 1
+        return HttpResponse.json({
+          files: [
+            { path: 'src/aaa.c', excluded_by_pattern: false },
+            { path: 'src/bbb.c', excluded_by_pattern: true },
+          ],
+        })
+      }),
+    )
+    renderWithProviders(
+      <ProductForm
+        onSubmit={vi.fn()}
+        defaultValues={{ ...VALID, code_path: '/x', compile_db_rel: 'build' }}
+      />,
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(await screen.findByText('src/aaa.c', {}, { timeout: 5000 })).toBeInTheDocument()
+    const callsAfterScan = scanCalls
+
+    // 수동으로 패턴 제외(bbb) 복원 + aaa 제외 → 상태가 패턴과 반대
+    // (복원 버튼이 유일한 시점에 먼저 누른다 — aaa를 먼저 제외하면 복원이 2개가 됨)
+    await userEvent.click(screen.getByRole('button', { name: '복원' })) // bbb 복원
+    await userEvent.click(screen.getAllByRole('button', { name: '제외' })[0]) // aaa 제외
+    expect(screen.queryByText(/제외됨 \(패턴\)/)).not.toBeInTheDocument()
+
+    // 리셋 → 패턴만 적용된 상태로 복원: bbb만 '제외됨 (패턴)', aaa는 포함
+    await userEvent.click(screen.getByRole('button', { name: '리셋' }))
+    expect(await screen.findByText(/제외됨 \(패턴\)/)).toBeInTheDocument()
+    expect(screen.getAllByText(/제외됨/)).toHaveLength(1) // bbb 하나만 제외 표시
+    // 서버 재스캔 없이 화면 내 상태만 원복된다
+    expect(scanCalls).toBe(callsAfterScan)
+  })
+
   it('hides the CMakeLists template editor in auto mode when the test mode is kunit', async () => {
     renderWithProviders(<ProductForm onSubmit={vi.fn()} defaultValues={VALID} />)
 

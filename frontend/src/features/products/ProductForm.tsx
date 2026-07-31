@@ -436,6 +436,15 @@ export function ProductForm({ onSubmit, submitting, defaultValues, initialAutoFi
               >
                 {t('업데이트')}
               </button>
+              {/* 리셋: 재스캔 없이 수동 제외/복원만 지워 "패턴에 걸린 것만 제외" 상태로 즉시 원복 */}
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setOverrides({})}
+                title={t('수동 제외/복원을 지우고 제외 패턴만 적용된 상태로 되돌린다 (재스캔 없음)')}
+              >
+                {t('리셋')}
+              </button>
             </div>
             {candidates.length === 0 ? (
               <p className="text-sm text-subtle">
