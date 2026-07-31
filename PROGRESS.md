@@ -604,3 +604,14 @@ passed(+2 — 비표준 이름 로그 확정 삭제·경계 밖 log_path 400) ·
 - 테스트: 백엔드 384 passed(+6 — queued 확정/running 플래그·타 프로덕트 무영향·취소분
   claim 미대상·종결만 삭제·404 2종) · 프론트 118 passed(+3 — 두 버튼 confirm/호출/알림·
   거절 시 미호출).
+
+---
+
+## 32. GENUT 삭제가 낡은 락에 막히던 버그 수정 (2026-07-31)
+
+GENUT 삭제 시 `product_locks.genut_instance_id` FK를 정리하지 않아, 락이 leak된
+상태(워커 사망 등, janitor 회수 전 창)에서는 삭제가 IntegrityError(500)로 터지고
+UI에는 "삭제에 실패했습니다."만 표시됐다. 수정: 실행 중 job 검사(409)를 통과한
+시점에 남아 있는 이 GENUT 참조 락은 전부 stale이므로 **삭제 시 함께 회수**한 뒤
+인스턴스를 지운다. 종료 이력의 배정 해제(genut_instance_id=NULL)는 기존 그대로.
+테스트: 백엔드 385 passed(+1 — stale 락 상태에서 204 + 락 회수 + 이력 해제).
