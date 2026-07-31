@@ -266,6 +266,37 @@ export function TestStatusPage() {
       {selectedName == null ? (
         <>
           {summaryLoading ? <p className="mb-3 text-sm text-muted">{t('스캔 중…')}</p> : null}
+          {/* 전체 총합 배지 — 선택된 프로젝트의 모든 이름(행) 합산(클라이언트 계산) */}
+          {names.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2 text-sm">
+              <span className="badge badge-neutral">
+                {t('프로덕트 {count}', { count: names.length })}
+              </span>
+              <span className="badge badge-neutral">
+                {t('총 대상 파일 {count}', {
+                  count: names.reduce((sum, g) => sum + g.target_file_count, 0),
+                })}
+              </span>
+              {(() => {
+                const tests = names.reduce((sum, g) => sum + g.total_test_count, 0)
+                const cases = names.reduce((sum, g) => sum + g.total_case_count, 0)
+                const fails = names.reduce((sum, g) => sum + g.total_fail_count, 0)
+                return (
+                  <>
+                    <span className={`badge ${tests > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                      {t('총 테스트파일 {count}', { count: tests })}
+                    </span>
+                    <span className={`badge ${cases > 0 ? 'badge-primary' : 'badge-neutral'}`}>
+                      {t('총 테스트 케이스 {count}', { count: cases })}
+                    </span>
+                    <span className={`badge ${fails > 0 ? 'badge-danger' : 'badge-neutral'}`}>
+                      {t('총 실패 {count}', { count: fails })}
+                    </span>
+                  </>
+                )
+              })()}
+            </div>
+          ) : null}
           <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

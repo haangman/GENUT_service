@@ -279,6 +279,8 @@ const EN: Record<string, string> = {
   '등록된 프로덕트가 없습니다.': 'No registered products.',
   '현황을 불러오지 못했습니다.': 'Failed to load the status.',
   '대상 파일 {count}': 'Target files {count}',
+  '프로덕트 {count}': 'Products {count}',
+  '총 대상 파일 {count}': 'Target files {count}',
   '총 테스트파일 {count}': 'Test files {count}',
   '총 테스트 케이스 {count}': 'Test cases {count}',
   '총 실패 {count}': 'Failures {count}',

@@ -301,4 +301,28 @@ describe('TestStatusPage', () => {
     await userEvent.click(screen.getByRole('button', { name: '테스트 삭제' }))
     expect(called).toBe(false)
   })
+
+  it('shows grand totals across all products above the L1 table', async () => {
+    server.use(
+      http.get('/api/test-status', () =>
+        HttpResponse.json([
+          {
+            name: 'AA', product_codes: ['AA-1'], test_generation_mode: 'cpp',
+            target_file_count: 3, total_test_count: 5, total_case_count: 11, total_fail_count: 1,
+          },
+          {
+            name: 'BB', product_codes: ['BB-1'], test_generation_mode: 'c',
+            target_file_count: 2, total_test_count: 4, total_case_count: 6, total_fail_count: 2,
+          },
+        ]),
+      ),
+    )
+    renderWithProviders(<TestStatusPage />)
+
+    expect(await screen.findByText('프로덕트 2')).toBeInTheDocument()
+    expect(screen.getByText('총 대상 파일 5')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트파일 9')).toBeInTheDocument()
+    expect(screen.getByText('총 테스트 케이스 17')).toBeInTheDocument()
+    expect(screen.getByText('총 실패 3')).toBeInTheDocument()
+  })
 })
