@@ -137,6 +137,9 @@ export interface AutoHistoryGroup {
   product_code: string
   auto_interval_seconds: number | null
   total: number
+  // 그룹 헤더 상태 배지의 근거(auto job 기준). 둘 다 0이면 idle.
+  running_jobs: number
+  queued_jobs: number
   jobs: Job[]
 }
 

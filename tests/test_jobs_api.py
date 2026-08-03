@@ -226,6 +226,82 @@ def test_auto_history_groups_recent_jobs_per_product(
     assert len(off_group["jobs"]) == 1
 
 
+def test_auto_history_reports_running_and_queued_counts(
+    client: TestClient, db_session: Session
+) -> None:
+    """그룹 헤더의 상태 배지(running·대기·idle) 근거가 되는 건수를 함께 내려준다."""
+    from genut_service.db.models import Job
+    from genut_service.enums import JobKind, JobOrigin, JobStatus
+
+    running = _make_auto_product(db_session, "auto-running")
+    waiting = _make_auto_product(db_session, "auto-waiting")
+    resting = _make_auto_product(db_session, "auto-resting")
+
+    db_session.add_all(
+        [
+            # 실행 중 2건(GENUT + 준비 job — 준비 job도 프로덕트를 점유한다) + 대기 2건.
+            # 종료된 job은 어느 쪽에도 세지 않는다.
+            Job(product_id=running.id, origin=JobOrigin.AUTO.value, status=JobStatus.RUNNING.value),
+            Job(
+                product_id=running.id,
+                origin=JobOrigin.AUTO.value,
+                kind=JobKind.AUTO_SCAN.value,
+                status=JobStatus.RUNNING.value,
+            ),
+            Job(product_id=running.id, origin=JobOrigin.AUTO.value, status=JobStatus.QUEUED.value),
+            Job(product_id=running.id, origin=JobOrigin.AUTO.value, status=JobStatus.QUEUED.value),
+            Job(product_id=running.id, origin=JobOrigin.AUTO.value, status=JobStatus.DONE.value),
+            # 대기만 쌓인 프로덕트(워커를 기다리는 중)
+            Job(product_id=waiting.id, origin=JobOrigin.AUTO.value, status=JobStatus.QUEUED.value),
+            Job(product_id=waiting.id, origin=JobOrigin.AUTO.value, status=JobStatus.QUEUED.value),
+            Job(product_id=waiting.id, origin=JobOrigin.AUTO.value, status=JobStatus.QUEUED.value),
+            # 종료된 이력만 있는 프로덕트 → idle
+            Job(product_id=resting.id, origin=JobOrigin.AUTO.value, status=JobStatus.DONE.value),
+            Job(
+                product_id=resting.id,
+                origin=JobOrigin.AUTO.value,
+                status=JobStatus.CANCELED.value,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    groups = {g["product_name"]: g for g in client.get("/api/jobs/auto-history").json()}
+    assert (groups["auto-running"]["running_jobs"], groups["auto-running"]["queued_jobs"]) == (2, 2)
+    assert (groups["auto-waiting"]["running_jobs"], groups["auto-waiting"]["queued_jobs"]) == (0, 3)
+    assert (groups["auto-resting"]["running_jobs"], groups["auto-resting"]["queued_jobs"]) == (0, 0)
+
+
+def test_auto_history_counts_only_auto_jobs(
+    client: TestClient, db_session: Session
+) -> None:
+    """수동 job이 프로덕트를 점유 중이어도 자동 이력의 상태 집계에는 넣지 않는다."""
+    from genut_service.db.models import Job
+    from genut_service.enums import JobOrigin, JobStatus
+
+    product = _make_auto_product(db_session, "auto-manual-busy")
+    db_session.add_all(
+        [
+            Job(
+                product_id=product.id,
+                origin=JobOrigin.MANUAL.value,
+                status=JobStatus.RUNNING.value,
+            ),
+            Job(
+                product_id=product.id,
+                origin=JobOrigin.MANUAL.value,
+                status=JobStatus.QUEUED.value,
+            ),
+            Job(product_id=product.id, origin=JobOrigin.AUTO.value, status=JobStatus.DONE.value),
+        ]
+    )
+    db_session.commit()
+
+    group = client.get("/api/jobs/auto-history").json()[0]
+    assert group["running_jobs"] == 0
+    assert group["queued_jobs"] == 0
+
+
 def test_auto_history_empty_without_auto_products(client: TestClient) -> None:
     resp = client.get("/api/jobs/auto-history")
     assert resp.status_code == 200

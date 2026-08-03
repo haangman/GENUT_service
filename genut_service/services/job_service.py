@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import NamedTuple
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from genut_service import workspace
 from genut_service.db.models import Job, JobEvent, Product
-from genut_service.enums import TERMINAL_STATUSES, JobOrigin, JobStatus
+from genut_service.enums import (
+    INFLIGHT_STATUSES,
+    TERMINAL_STATUSES,
+    JobOrigin,
+    JobStatus,
+)
 from genut_service.fs import rmtree_force
 from genut_service.services import compile_db_service
 
@@ -178,10 +184,25 @@ def list_jobs(
     return items, total
 
 
+class AutoHistoryRow(NamedTuple):
+    """auto 이력 그룹 1건.
+
+    running/queued는 그룹 헤더의 상태 배지(running·대기·idle) 근거다. 최근 N개
+    (jobs)만으로는 판정할 수 없다 — 대기 job이 많으면 실행 중 job이 최근 N개
+    밖으로 밀리기 때문에 전체를 대상으로 따로 센다.
+    """
+
+    product: Product
+    total: int
+    jobs: list[Job]
+    running: int
+    queued: int
+
+
 def list_auto_history(
     session: Session, per_product: int = 3, project: str | None = None
-) -> list[tuple[Product, int, list[Job]]]:
-    """auto 프로덕트별 origin='auto' job 이력을 (프로덕트, 전체 수, 최근 N개)로 반환한다.
+) -> list[AutoHistoryRow]:
+    """auto 프로덕트별 origin='auto' job 이력을 그룹(AutoHistoryRow)으로 반환한다.
 
     window function(row_number/count OVER PARTITION BY) 1쿼리로 프로덕트별 최근
     per_product개를 뽑는다(SQLite 3.25+/Postgres 공통). auto job이 없는 auto
@@ -227,10 +248,40 @@ def list_auto_history(
         jobs_by_product.setdefault(job.product_id, []).append(job)
         totals[job.product_id] = total
 
+    running, queued = _count_active_auto_jobs(session)
+
     return [
-        (product, totals.get(product.id, 0), jobs_by_product.get(product.id, []))
+        AutoHistoryRow(
+            product=product,
+            total=totals.get(product.id, 0),
+            jobs=jobs_by_product.get(product.id, []),
+            running=running.get(product.id, 0),
+            queued=queued.get(product.id, 0),
+        )
         for product in products
     ]
+
+
+def _count_active_auto_jobs(session: Session) -> tuple[dict[int, int], dict[int, int]]:
+    """프로덕트별 (실행 중, 대기 중) auto job 수를 센다.
+
+    실행 중은 in-flight 상태 전체(현재 실제 전이는 running뿐이지만 assigned 등이
+    쓰이게 돼도 idle로 오표시되지 않게 한다), 대기 중은 queued다. 준비 job
+    (auto_scan/auto_diff)도 프로덕트를 점유하므로 kind 구분 없이 함께 센다.
+    """
+    active = (*(status.value for status in INFLIGHT_STATUSES), JobStatus.QUEUED.value)
+    rows = session.execute(
+        select(Job.product_id, Job.status, func.count())
+        .where(Job.origin == JobOrigin.AUTO.value, Job.status.in_(active))
+        .group_by(Job.product_id, Job.status)
+    ).all()
+
+    running: dict[int, int] = {}
+    queued: dict[int, int] = {}
+    for product_id, status, count in rows:
+        target = queued if status == JobStatus.QUEUED.value else running
+        target[product_id] = target.get(product_id, 0) + count
+    return running, queued
 
 
 def list_events(session: Session, job_id: int, since: int = 0) -> list[JobEvent]:

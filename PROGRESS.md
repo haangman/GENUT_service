@@ -4,7 +4,8 @@
 §1~§16은 기반 구조(2026-07 초 기준), 이후 진행은 §17부터 날짜순 섹션으로 이어진다
 (§21 다운로드 패치/Gerrit · §22 git_update_mode · §24 job 삭제 · §25/§30 현황 테스트 삭제 ·
 §27/§28 ref 엄격화·정규화 · §29 API 가이드 · §31 일괄 중지/삭제 · §32 GENUT 삭제 픽스 ·
-§33 미리보기 리셋 · §34 현황 총합 배지 · §35 저장소 정리 · §38 이력 대상 컬럼).
+§33 미리보기 리셋 · §34 현황 총합 배지 · §35 저장소 정리 · §38 이력 대상 컬럼 ·
+§39 프로덕트 상태 배지).
 원격: https://github.com/haangman/GENUT_service (branch `main`, public).
 
 ---
@@ -704,3 +705,29 @@ L1(프로덕트 목록) 표 위에 선택된 프로젝트의 전 행 합산 배�
 - i18n: `대상: 'Target'`, `'{name} 외 {count}개{func}'` 추가.
 - 테스트: 프론트 124 passed(+7 — `jobTargetLabel` 5규칙, 표 렌더/툴팁 2종;
   ManualJobsPage의 `min-w` 단언 갱신) · 백엔드 388 passed(무변경) · 빌드 성공.
+
+---
+
+## 39. 자동 실행 이력의 프로덕트 상태 배지 (2026-08-03)
+
+자동 실행 이력에서 프로덕트가 **지금 돌고 있는지**를 그룹 헤더에서 바로 알 수 있게
+`running`/`대기`/`idle` 배지를 추가했다. 집계 대상은 **auto job만**(사용자 확정) —
+수동 job이 그 프로덕트를 점유 중이어도 이 페이지의 상태는 idle이다.
+
+- **집계는 서버에서**: 최근 N개(`jobs`)만으로는 판정할 수 없다 — 대기 job이 많으면
+  실행 중 job이 최근 N개 밖으로 밀린다. `job_service._count_active_auto_jobs`가
+  `origin=auto` job을 (product_id, status)로 group by 해 실행/대기 건수를 센다.
+  실행 중은 `INFLIGHT_STATUSES` 전체(현재 실제 전이는 running뿐이지만 assigned 등이
+  쓰이게 돼도 idle로 오표시되지 않게), 대기는 queued. 준비 job(auto_scan/auto_diff)도
+  프로덕트를 점유하므로 kind 구분 없이 함께 센다. UI 폴링 경로라 쿼리 1개 추가는
+  무해하다(스케줄러 핫패스 아님, `ix_jobs_product_status` 존재).
+- **`AutoHistoryRow`(NamedTuple)**: `list_auto_history` 반환이 4·5원소 튜플로 길어지는
+  것을 막고 이름으로 접근한다(`product/total/jobs/running/queued`). 호출부는
+  `api/jobs.py` 한 곳.
+- **스키마**: `AutoHistoryGroup`에 `running_jobs`/`queued_jobs`(기본 0). 상태 문자열이
+  아니라 **건수**만 내려 표시 문구·색·i18n은 프론트가 정한다.
+- **프론트**: `AutoJobsPage`의 `ProductStatusBadges` — 실행 중이면 `running N`(파랑),
+  대기가 남아 있으면 `대기 M`(노랑)을 함께, 둘 다 0이면 `idle`(회색). 그룹 목록이
+  2초 폴링이라 상태가 자동 갱신된다. i18n `'running {count}'`·`'대기 {count}'` 추가.
+- 테스트: 백엔드 390 passed(+2 — 실행/대기/종료만 3케이스 건수, 수동 job 미집계) ·
+  프론트 125 passed(+1 — 배지 3케이스, idle이 실행 중 그룹에 붙지 않음) · 빌드 성공.

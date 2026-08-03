@@ -67,6 +67,9 @@ const EN: Record<string, string> = {
   결과: 'Result',
   종류: 'Kind',
   대상: 'Target',
+  // 자동 실행 이력의 프로덕트 상태 배지(둘 다 0이면 idle — 번역 불필요)
+  'running {count}': 'running {count}',
+  '대기 {count}': 'queued {count}',
   // 이력 표의 대상 컬럼 — 파일이 여러 개인 job 요약({func}는 ' :: 함수명' 또는 빈 값)
   '{name} 외 {count}개{func}': '{name} and {count} more{func}',
   제품: 'Product',

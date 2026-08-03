@@ -46,6 +46,10 @@ class AutoHistoryGroup(BaseModel):
     product_code: str
     auto_interval_seconds: int | None
     total: int
+    # 그룹 헤더 상태 배지의 근거(auto job 기준). 표시 문구·색은 프론트가 정하도록
+    # 상태 문자열이 아니라 건수로 내려준다. 둘 다 0이면 idle.
+    running_jobs: int = 0
+    queued_jobs: int = 0
     jobs: list[JobRead]
 
 

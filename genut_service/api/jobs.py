@@ -66,14 +66,16 @@ def auto_history(
     )
     return [
         AutoHistoryGroup(
-            product_id=product.id,
-            product_name=product.name,
-            product_code=product.product_code,
-            auto_interval_seconds=product.auto_interval_seconds,
-            total=total,
-            jobs=[JobRead.model_validate(job) for job in jobs],
+            product_id=row.product.id,
+            product_name=row.product.name,
+            product_code=row.product.product_code,
+            auto_interval_seconds=row.product.auto_interval_seconds,
+            total=row.total,
+            running_jobs=row.running,
+            queued_jobs=row.queued,
+            jobs=[JobRead.model_validate(job) for job in row.jobs],
         )
-        for product, total, jobs in groups
+        for row in groups
     ]
 
 

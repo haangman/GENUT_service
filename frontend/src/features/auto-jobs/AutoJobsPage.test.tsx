@@ -39,12 +39,41 @@ function group(overrides: Record<string, unknown> = {}) {
     product_code: 'auto-p1',
     auto_interval_seconds: 600,
     total: 0,
+    running_jobs: 0,
+    queued_jobs: 0,
     jobs: [],
     ...overrides,
   }
 }
 
 describe('AutoJobsPage', () => {
+  it('프로덕트별 실행 중·대기 상태를 헤더 배지로 보여준다', async () => {
+    server.use(
+      http.get('/api/jobs/auto-history', () =>
+        HttpResponse.json([
+          group({ product_name: 'auto-running', running_jobs: 1, queued_jobs: 5 }),
+          group({
+            product_id: 2,
+            product_name: 'auto-waiting',
+            product_code: 'auto-p2',
+            queued_jobs: 3,
+          }),
+          group({ product_id: 3, product_name: 'auto-resting', product_code: 'auto-p3' }),
+        ]),
+      ),
+    )
+
+    renderWithProviders(<AutoJobsPage />)
+
+    // 실행 중이면 running(+건수), 대기가 남아 있으면 대기 배지도 함께
+    expect(await screen.findByText('running 1')).toBeInTheDocument()
+    expect(screen.getByText('대기 5')).toBeInTheDocument()
+    // 실행 중이 없고 대기만 쌓인 프로덕트
+    expect(screen.getByText('대기 3')).toBeInTheDocument()
+    // 실행·대기 모두 없는 프로덕트만 idle (실행 중 프로덕트에는 붙지 않는다)
+    expect(screen.getAllByText('idle')).toHaveLength(1)
+  })
+
   it('auto 프로덕트별 그룹과 최근 job·종류 badge를 보여준다', async () => {
     const jobs = [
       makeJob({

@@ -19,6 +19,27 @@ const RECENT_COUNT = 3
 // 확장(전체 보기) 시 한 페이지에 보여줄 job 수 — 하단 게시판식 페이지네이션으로 이동한다
 const PAGE_SIZE = 20
 
+// 프로덕트 상태 배지: 실행 중이면 running(+건수), 대기만 쌓였으면 대기(+건수),
+// 둘 다 없으면 idle. 서버가 auto job 기준 건수를 내려주고 표시는 여기서 정한다.
+function ProductStatusBadges({ group }: { group: AutoHistoryGroup }) {
+  const { t } = useLang()
+  const running = group.running_jobs ?? 0
+  const queued = group.queued_jobs ?? 0
+  if (running === 0 && queued === 0) {
+    return <span className="badge badge-neutral">idle</span>
+  }
+  return (
+    <>
+      {running > 0 ? (
+        <span className="badge badge-primary">{t('running {count}', { count: running })}</span>
+      ) : null}
+      {queued > 0 ? (
+        <span className="badge badge-warn">{t('대기 {count}', { count: queued })}</span>
+      ) : null}
+    </>
+  )
+}
+
 function AutoProductGroup({
   group,
   expanded,
@@ -116,6 +137,7 @@ function AutoProductGroup({
           <span className="text-xs text-muted">{expanded ? '▾' : '▸'}</span>
           <span className="font-semibold text-fg">{group.product_name}</span>
           <span className="badge badge-primary">auto</span>
+          <ProductStatusBadges group={group} />
           <span className="font-mono text-xs text-muted">{group.product_code}</span>
           {group.auto_interval_seconds ? (
             <span className="text-xs text-subtle">{t('주기 {seconds}s', { seconds: group.auto_interval_seconds })}</span>
