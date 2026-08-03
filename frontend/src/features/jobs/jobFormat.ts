@@ -1,3 +1,4 @@
+import type { TranslateParams } from '../../lib/i18n'
 import type { Job } from '../../types/api'
 
 // 종료(terminal) 상태 집합 — 로그 폴링 중단/재수행 가능 판정에 사용
@@ -59,6 +60,42 @@ export function jobResultLabel(job: Job): string {
       return '강제 종료됨'
     default:
       return ''
+  }
+}
+
+// 대상 컬럼 표시값. text는 i18n 키(다중 파일이면 플레이스홀더 포함)라 호출부가
+// `t(text, params)`로 번역한다. title은 잘린 이름의 전체 경로를 담는 툴팁이다.
+export interface JobTarget {
+  text: string
+  params?: TranslateParams
+  title: string
+}
+
+// 경로 구분자는 서버에서 '/'로 정규화되지만, 구 데이터의 '\'도 방어적으로 처리한다.
+function baseName(rel: string): string {
+  const parts = rel.split(/[\\/]/)
+  return parts[parts.length - 1] || rel
+}
+
+// job이 어떤 파일의 어떤 함수를 대상으로 하는지 한 줄로 요약한다.
+// 로그를 펼치지 않아도 이력 표에서 바로 확인할 수 있게 하는 것이 목적이다.
+// - 파일 1개 + 함수 지정 → `parser.c :: parse_line`
+// - 파일 1개, 파일 전체   → `parser.c`
+// - 파일 여러 개          → `main.c 외 3개`
+// - 대상 파일 없음(스캔/변경 감지 준비 job) → `-`
+export function jobTargetLabel(job: Pick<Job, 'file_list' | 'function_name'>): JobTarget {
+  const files = job.file_list ?? []
+  if (files.length === 0) return { text: '-', title: '' }
+
+  const func = job.function_name ? ` :: ${job.function_name}` : ''
+  if (files.length === 1) {
+    return { text: `${baseName(files[0])}${func}`, title: files[0] }
+  }
+  // 첫 파일만 이름으로 보여주고 나머지는 개수로 접는다. 전체 목록은 툴팁에서 본다.
+  return {
+    text: '{name} 외 {count}개{func}',
+    params: { name: baseName(files[0]), count: files.length - 1, func },
+    title: files.join('\n'),
   }
 }
 

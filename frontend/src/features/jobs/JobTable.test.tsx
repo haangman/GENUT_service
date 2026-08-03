@@ -57,6 +57,33 @@ describe('JobTable (대량 이력 청크 렌더링)', () => {
   })
 })
 
+describe('JobTable (대상 컬럼)', () => {
+  it('로그를 열지 않아도 대상 파일·함수를 행에서 바로 확인할 수 있다', () => {
+    const jobs = [
+      makeJob(1, { file_list: ['src/parser.c'], function_name: 'parse_line' }),
+      makeJob(2, { file_list: ['src/math/vector2d.cpp'], function_name: null }),
+      makeJob(3, { file_list: ['src/main.c', 'src/a.c', 'src/b.c'], function_name: null }),
+      makeJob(4, { kind: 'auto_scan', file_list: [], function_name: null }),
+    ]
+    renderWithProviders(<JobTable jobs={jobs} showKind />)
+
+    expect(screen.getByRole('columnheader', { name: '대상' })).toBeInTheDocument()
+    // 함수 지정 job은 함수명까지, 파일 전체 job은 파일명만
+    expect(screen.getByText('parser.c :: parse_line')).toBeInTheDocument()
+    expect(screen.getByText('vector2d.cpp')).toBeInTheDocument()
+    expect(screen.getByText('main.c 외 2개')).toBeInTheDocument()
+    // 대상 파일이 없는 준비 job은 '-'
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0)
+  })
+
+  it('잘린 파일명의 전체 경로는 툴팁으로 남는다', () => {
+    renderWithProviders(
+      <JobTable jobs={[makeJob(5, { file_list: ['src/deep/nested/parser.c'], function_name: 'fn' })]} />,
+    )
+    expect(screen.getByText('parser.c :: fn')).toHaveAttribute('title', 'src/deep/nested/parser.c')
+  })
+})
+
 describe('JobTable (job 삭제)', () => {
   afterEach(() => vi.restoreAllMocks())
 

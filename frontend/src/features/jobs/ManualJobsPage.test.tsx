@@ -53,7 +53,7 @@ describe('ManualJobsPage', () => {
     // 고정 폭 테이블 + min-width: 좁은 화면에선 래퍼(overflow-x-auto)가 전체 좌우 스크롤을 준다.
     const table = resultCell.closest('table')
     expect(table?.className).toContain('table-fixed')
-    expect(table?.className).toContain('min-w-[1200px]')
+    expect(table?.className).toContain('min-w-[1440px]')
 
     // 행을 클릭하면 바로 그 행 아래에 로그 패널이 펼쳐진다(인라인)
     fireEvent.click(resultCell)

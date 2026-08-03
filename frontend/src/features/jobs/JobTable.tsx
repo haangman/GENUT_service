@@ -12,6 +12,7 @@ import {
   jobKindBadgeClass,
   jobKindLabel,
   jobResultLabel,
+  jobTargetLabel,
 } from './jobFormat'
 
 // 한 번에 렌더링하는 행 수. 수천 건 이력을 통째로 DOM에 올리면 로그 토글/폴링마다
@@ -50,6 +51,7 @@ const JobRow = memo(function JobRow({
 }) {
   void runningTick // 값은 리렌더 트리거로만 쓰인다
   const { t } = useLang()
+  const target = jobTargetLabel(job)
   return (
     <tr
       className={`group cursor-pointer border-t border-border transition hover:bg-surface-hover ${
@@ -73,6 +75,11 @@ const JobRow = memo(function JobRow({
       ) : null}
       <td className="px-3 py-2.5">
         <span className={jobBadgeClass(job.status)}>{job.status}</span>
+      </td>
+      {/* 대상 파일·함수 — 로그를 열지 않아도 무엇을 생성하는 job인지 알 수 있게 한다.
+          긴 경로는 잘라내고(truncate) 전체 경로는 툴팁으로 보여준다. */}
+      <td className="truncate px-3 py-2.5 text-muted" title={target.title || undefined}>
+        {t(target.text, target.params)}
       </td>
       <td className={cell}>{formatDateTime(job.submitted_at)}</td>
       <td className={cell}>{formatDateTime(job.started_at)}</td>
@@ -204,7 +211,7 @@ export function JobTable({
   if (jobs.length === 0 && emptyMessage) {
     return <p className="text-sm text-subtle">{emptyMessage}</p>
   }
-  const columnCount = 8 + (showProduct ? 1 : 0) + (showKind ? 1 : 0)
+  const columnCount = 9 + (showProduct ? 1 : 0) + (showKind ? 1 : 0)
   return (
     <div className="card overflow-x-auto">
       {/* table-fixed + 고정 폭(colgroup): 긴 로그가 열려도 데이터 컬럼이 안 밀린다.
@@ -212,13 +219,14 @@ export function JobTable({
           제품(이름+id) 컬럼이 있으면 폭이 컨테이너를 넘을 수 있는데, 액션 컬럼을 sticky로
           고정해 가로 스크롤이 생겨도 강제 종료 버튼은 항상 보인다. */}
       <table
-        className={`w-full ${showProduct ? 'min-w-[1200px]' : 'min-w-[1120px]'} table-fixed text-sm`}
+        className={`w-full ${showProduct ? 'min-w-[1440px]' : 'min-w-[1360px]'} table-fixed text-sm`}
       >
         <colgroup>
           <col className="w-[56px]" />
           {showProduct ? <col className="w-[150px]" /> : null}
           {showKind ? <col className="w-[100px]" /> : null}
           <col className="w-[96px]" />
+          <col className="w-[240px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
           <col className="w-[160px]" />
@@ -232,6 +240,7 @@ export function JobTable({
             {showProduct ? <th className="px-3 py-2.5">{t('제품')}</th> : null}
             {showKind ? <th className="px-3 py-2.5">{t('종류')}</th> : null}
             <th className="px-3 py-2.5">{t('상태')}</th>
+            <th className="px-3 py-2.5">{t('대상')}</th>
             <th className="px-3 py-2.5">{t('제출 시각')}</th>
             <th className="px-3 py-2.5">{t('시작 시간')}</th>
             <th className="px-3 py-2.5">{t('종료 시간')}</th>
